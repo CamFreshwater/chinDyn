@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1554760770623.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "F7DC0A62",
+    "lastKnownWriteTime" : 1554830276,
+    "last_content_update" : 1554830276774,
+    "path" : "C:/github/killerWhales/Rmd/powerAnalysis.Rmd",
+    "project_path" : "Rmd/powerAnalysis.Rmd",
+    "properties" : {
+        "cursorPosition" : "63,0",
+        "scrollLine" : "32",
+        "tempName" : "Untitled2"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

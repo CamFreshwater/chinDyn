@@ -1,0 +1,14 @@
+## Power analysis for tagging study
+# April 8, 2019
+# How many individuals necessary to estimate a) duration of residence and b)
+# stock composition?
+
+## Principle steps for power analysis
+#1. Level of precision desired
+
+#simulated data
+days <- rnorm(1000, mean = 10, sd = 1)
+daysLog <- rlnorm(10000, meanlog = log(10), sdlog = log(2))
+
+hist(log(daysLog))
+

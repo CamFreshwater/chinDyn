@@ -1,0 +1,14 @@
+---
+title: "Chinook Dynamic Factor Analysis"
+author: "Cam Freshwater"
+date: "April 24, 2019"
+output: html_document
+---
+
+Dynamic factor analysis is approximately equivalent to a PCA (i.e. identifies patterns of shared variability), but specifically tailored towards time series. Here we are using smolt-adult return rates to evaluate evidence for coherent trends in productivity among Chinook salmon stocks throughout the north Pacific.
+
+```{r loadData}
+require(MARSS); require(tidyverse); require(ggplot2)
+
+
+```

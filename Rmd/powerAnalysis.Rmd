@@ -13,7 +13,7 @@ Principle steps for power analysis
 
 ```{r estSampleSize1, echo=TRUE}
 require(here)
-soxDat <- read.csv(here("data/soxOtolithData.csv"), stringsAsFactors = FALSE) 
+soxDat <- read.csv(here("data/salmonData/soxOtolithData.csv"), stringsAsFactors = FALSE) 
 lowMigSD <- round(sd(soxDat$incrementCount), digits = 0)
 highMigSD <- 2 * lowMigSD
 lowPrec <- 5 #low absolute precision is 5 days

@@ -8,16 +8,19 @@
 # 3. CWT stock information from PST (copied from 
 #    SurvivalRateStats_AllCWTindicators_ERA2017 - Copy for Strahan.xlsx)
 # -----
+
+
 require(tidyverse); require(here)
-byDatWide <- read.csv(here("data/salmonData/cwtInd_age2SR_BY.csv"), 
+byDatWide <- read.csv(here("data/salmonData/rawData/cwtInd_age2SR_BY.csv"), 
                   stringsAsFactors = FALSE)
-eyDatWide <- read.csv(here("data/salmonData/cwtInd_age2SR_OEY.csv"), 
+eyDatWide <- read.csv(here("data/salmonData/rawData/cwtInd_age2SR_OEY.csv"), 
                   stringsAsFactors = FALSE)
-stockInfo <- read.csv(here("data/salmonData/pstID.csv"), 
+stockInfo <- read.csv(here("data/salmonData/rawData/pstID.csv"), 
                       stringsAsFactors = FALSE) %>% 
   #remove some extra columns to keep things clean
-  select(-jurisdiction, -oceanStartAge, -terminalNetAge, -maxAge, -smoltAgeCode,
+  select(-oceanStartAge, -terminalNetAge, -maxAge, -smoltAgeCode,
          -adultRunTimingCode, -country, -comments)
+
 
 #Lengthen each dataset
 byDat <- byDatWide %>% 
@@ -40,4 +43,20 @@ cleanPST <- function(dat, stockInfo) {
     filter(stock %in% longStks$stock)
 }
 byDat <- cleanPST(byDat, stockInfo)
+write.csv(byDat, here("data", "salmonData", "CLEANcwtInd_age2SR_BY.csv"), 
+          row.names = FALSE)
 eyDat <- cleanPST(eyDat, stockInfo)
+write.csv(eyDat, here("data", "salmonData", "CLEANcwtInd_age2SR_OEY.csv"), 
+          row.names = FALSE)
+
+#-----
+
+## Random exploration
+
+#How many stocks per region?
+byDat %>% 
+  group_by(region) %>% 
+  summarize(nStocks = length(unique(stock)))
+byDat %>% 
+  group_by(jurisdiction) %>% 
+  summarize(nStocks = length(unique(stock)))

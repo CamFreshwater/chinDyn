@@ -22,6 +22,7 @@ outputs/diagnostics
 outputs/simData
 data/workingFinalSimRun
 .Rproj.user/
+.Rproj.user
 scripts/lm-t-skew.rds
 scripts/lm-t.rds
 scripts/lm.rds
@@ -31,4 +32,3 @@ scripts/*cache*
 scripts/sync.rds
 *.o
 *.so
-

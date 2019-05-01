@@ -40,7 +40,7 @@ dfaTest <- MARSS(byMatZ, model = modelList, z.score = TRUE, form = "dfa",
 
 
 ## Function to fit DFA and save output data
-fitDFA <- function(mat, inR, inM, maxIteration = 500) {
+fitDFA <- function(mat, inR, inM, maxIteration = 500, subDirName) {
   cntrList <- list(minit = 100, maxit = maxIteration)
   dfaModel <- list(A = "zero", R = inR, m = inM)
   fitMod <- MARSS(byMatZ, model = dfaModel, control = cntrList,
@@ -52,7 +52,11 @@ fitDFA <- function(mat, inR, inM, maxIteration = 500) {
                     z.score  = TRUE, method = "BFGS-kf")
   }
   outName <- paste("fitMod", inM, rapportools::tocamel(inR), "rds", sep=".")
-  saveRDS(fitMod, here::here("data", "dfaFits", outName))
+  
+  #save data 
+  dir.create(here::here("data", "dfaFits", subDirName),
+             recursive = TRUE, showWarnings = FALSE)
+  saveRDS(fitMod, here::here("data", "dfaFits", subDirName, outName))
 }
 
 
@@ -60,24 +64,43 @@ fitDFA <- function(mat, inR, inM, maxIteration = 500) {
 inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov",
             "unconstrained")
 inMList <- list(2, 3, 4, 5, 6, 7)
-for (i in seq_along(inRSeq)) {
-  Ncores <- detectCores()
-  inRDum <- inRSeq[i]
-  cl <- makeCluster(Ncores - 2) #save two cores
-  registerDoParallel(cl)
-  clusterEvalQ(cl, c(library(MARSS), library(here), library(Rcpp), 
-                     library(RcppArmadillo)))
-  clusterExport(cl, c("byMatZ", "inRDum", "inMList", "fitDFA"), 
-                envir=environment())
-  tic("run in parallel")
-  parLapply(cl, inMList, function(x) {
-    fitDFA(byMatZ, inR = inRDum, inM = x, maxIteration = 1000)
-  })
-  stopCluster(cl) #end cluster
-  toc()
+subDir <- "salishSeaOnly"
+# for (i in seq_along(inRSeq)) {
+#   Ncores <- detectCores()
+#   inRDum <- inRSeq[i]
+#   cl <- makeCluster(Ncores - 2) #save two cores
+#   registerDoParallel(cl)
+#   clusterEvalQ(cl, c(library(MARSS), library(here), library(Rcpp), 
+#                      library(RcppArmadillo)))
+#   clusterExport(cl, c("byMatZ", "inRDum", "inMList", "fitDFA"), 
+#                 envir=environment())
+#   tic("run in parallel")
+#   parLapply(cl, inMList, function(x) {
+    # fitDFA(byMatZ, inR = inRDum, inM = x, maxIteration = 1000, 
+    #        subDirname = subDir)
+#   })
+#   stopCluster(cl) #end cluster
+#   toc()
+# }
+
+
+## Function to screen directory and pull files
+getDfaAic <- function(subDirName) {
+  dirPath <- here::here("data", "dfaFits", subDirName)
+  modOutNames <- list.files(dirPath, pattern="\\.rds$")
+  
+  modOut <- data.frame(model = rep(NA, times = length(modOutNames)),
+                       AICc = NA
+                       )
+  for(i in 1:length(modOutNames)){ #make list of lists!
+    dum <- readRDS(paste(dirPath, modOutNames[i], sep="/"))
+    modOut[i, "model"] <- modOutNames[i]
+    modOut[i, "AICc"] <- ifelse(is.null(dum$AICc), NA, dum$AICc)
+  }
+  modOut %>% 
+    arrange(AICc)
 }
 
-fitDFA(byMatZ, inR = "diagonal and equal", inM = 2, maxIteration = 500)
-
-
-tt <- readRDS(here("data", "dfaFits", outName))
+getDfaAic(subDir)
+## Strong support for using diagonal and unequal covariance matrix and 
+# intermediate number of trends

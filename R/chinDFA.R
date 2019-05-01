@@ -28,6 +28,7 @@ colnames(byMat) <- broodYrs
 
 nStks <- nrow(byMat)
 nYrs <- ncol(byMat)
+stkID <- rownames(byMat)
 
 #standardize
 byMatZ <- MARSS::zscore(byMat)
@@ -85,7 +86,7 @@ subDir <- "salishSeaOnly"
 
 
 ## Function to screen directory and pull files
-getDfaAic <- function(subDirName) {
+getTopDFA <- function(subDirName) {
   dirPath <- here::here("data", "dfaFits", subDirName)
   modOutNames <- list.files(dirPath, pattern="\\.rds$")
   
@@ -97,10 +98,66 @@ getDfaAic <- function(subDirName) {
     modOut[i, "model"] <- modOutNames[i]
     modOut[i, "AICc"] <- ifelse(is.null(dum$AICc), NA, dum$AICc)
   }
-  modOut %>% 
+  aicTable <- modOut %>% 
     arrange(AICc)
+  topModelName <- aicTable %>% 
+    filter(AICc == min(AICc, na.rm = TRUE)) %>% 
+    select(model) %>% 
+    as.character()
+  topModel <- readRDS(paste(dirPath, topModelName, sep = "/"))
+  return(list(topModel, aicTable))
 }
 
-getDfaAic(subDir)
+summ <- getTopDFA(subDir)
+summ[[2]]
 ## Strong support for using diagonal and unequal covariance matrix and 
 # intermediate number of trends
+
+## Explore fit of top model
+mod1 <- summ[[1]]
+
+estZ <- coef(mod1, type = "matrix")$Z
+#retrieve rotated matrix
+invH <- if (ncol(estZ) > 1) {
+  varimax(estZ)$rotmat
+} else if (ncol(estZ) == 1) {
+  1
+}
+#rotate factor loadings
+rotZ <- estZ %*% invH
+colnames(rotZ) <- rep()
+#rotate trends
+rotTrends <- solve(invH) %*% mod1$states
+
+
+### Generate some figures 
+require(samSim)
+ggplot(byDatTrim, aes(x = BY, y = surv, colour = stock)) +
+  geom_line() +
+  theme_sleekX() +
+  facet_wrap(~region)
+
+## Factor loadings
+dum <- cbind(stkID, rotZ)
+
+ggplot()
+
+
+
+
+#plot the factor loadings
+spp = rownames(dat.z)
+minZ = 0.05
+m=dim(trends.rot)[1]
+ylims = c(-1.1*max(abs(Z.rot)), 1.1*max(abs(Z.rot)))
+par(mfrow=c(ceiling(m/2),2), mar=c(3,4,1.5,0.5), oma=c(0.4,1,1,1))
+for(i in 1:m) {
+  plot(c(1:N.ts)[abs(Z.rot[,i])>minZ], as.vector(Z.rot[abs(Z.rot[,i])>minZ,i]),
+       type="h", lwd=2, xlab="", ylab="", xaxt="n", ylim=ylims, xlim=c(0,N.ts+1))
+  for(j in 1:N.ts) {
+    if(Z.rot[j,i] > minZ) {text(j, -0.05, spp[j], srt=90, adj=1, cex=0.9)}
+    if(Z.rot[j,i] < -minZ) {text(j, 0.05, spp[j], srt=90, adj=0, cex=0.9)}
+    abline(h=0, lwd=1, col="gray")
+  } # end j loop
+  mtext(paste("Factor loadings on trend",i,sep=" "),side=3,line=.5)
+} # end i loop

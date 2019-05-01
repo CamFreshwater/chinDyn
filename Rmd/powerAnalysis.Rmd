@@ -53,12 +53,13 @@ Unlikely that migration SD is substantially larger than what we observed in sock
 Next calculate minimum sample size that will allow you to detect difference of 3 days in migration timing between two populations.
 
 ```{r estSampleSize2, echo=TRUE}
-dif <- 3
-alpha <- 0.05 #default
-beta <- 0.05 #arbitrary
-
-relDiff <- 3 / lowMigSD
+dif <- 7
+pooledSD <- sqrt((lowMigSD^2 + lowMigSD^2)/2)
+	
+pwr::pwr.t.test(d=dif/pooledSD, power=.8, sig.level=.05, type="two.sample",
+                alternative="two.sided")
+pwr::pwr.t.test(d=dif/pooledSD, n = 20, sig.level=.05, type="two.sample",
+                alternative="two.sided")
 ```
 
-Based on t-table equals 106 fish *per population*.
 

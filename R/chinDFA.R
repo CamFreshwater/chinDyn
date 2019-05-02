@@ -123,11 +123,6 @@ invH <- if (ncol(estZ) > 1) {
 } else if (ncol(estZ) == 1) {
   1
 }
-#rotate factor loadings
-rotZ <- estZ %*% invH
-colnames(rotZ) <- rep()
-#rotate trends
-rotTrends <- solve(invH) %*% mod1$states
 
 
 ### Generate some figures 
@@ -138,26 +133,54 @@ ggplot(byDatTrim, aes(x = BY, y = surv, colour = stock)) +
   facet_wrap(~region)
 
 ## Factor loadings
-dum <- cbind(stkID, rotZ)
+#rotate factor loadings
+rotZ <- (estZ %*% invH) %>% 
+  as.data.frame() %>% 
+  mutate(stock = stkID) %>% 
+  inner_join(byDatTrim %>% select(stock, region), by = "stock") %>% 
+  gather(key = "trend", value = "loading", -stock, -region) %>% 
+  distinct() %>% 
+  arrange(region) %>% 
+  mutate(trend = fct_recode(as.factor(trend),
+                            trend1 = "V1",
+                            trend2 = "V2",
+                            trend3 = "V3",
+                            trend4 = "V4"),
+         stock = factor(stock, unique(stock)))
 
-ggplot()
+png(here("figs", "dfa", paste(subDir, ncol(estZ), "Trend", "_loadings.png", 
+                              sep = "")), height = 4, width = 5.5, units = "in",
+    res = 300)
+ggplot(rotZ, aes(x = stock, y = loading, fill = region)) +
+  geom_col() +
+  theme_sleekX(axisSize = 9, legendSize = 0.7) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~trend)
+dev.off()
 
 
+## Trends
+#rotate trends
+rotTrends <- (solve(invH) %*% mod1$states) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(year = broodYrs) %>% 
+  gather(key = "trend", value = "est", -year) %>% 
+  mutate(trend = fct_recode(as.factor(trend),
+                            trend1 = "V1",
+                            trend2 = "V2",
+                            trend3 = "V3",
+                            trend4 = "V4"))
 
+png(here("figs", "dfa", paste(subDir, ncol(estZ), "Trend", "_trends.png", 
+                              sep = "")), height = 4, width = 4, units = "in",
+    res = 300)
+ggplot(rotTrends, aes(x = year, y = est)) +
+  geom_line() +
+  theme_sleekX() +
+  geom_hline(yintercept = 0, colour = "red") +
+  facet_wrap(~trend)
+dev.off()
 
-#plot the factor loadings
-spp = rownames(dat.z)
-minZ = 0.05
-m=dim(trends.rot)[1]
-ylims = c(-1.1*max(abs(Z.rot)), 1.1*max(abs(Z.rot)))
-par(mfrow=c(ceiling(m/2),2), mar=c(3,4,1.5,0.5), oma=c(0.4,1,1,1))
-for(i in 1:m) {
-  plot(c(1:N.ts)[abs(Z.rot[,i])>minZ], as.vector(Z.rot[abs(Z.rot[,i])>minZ,i]),
-       type="h", lwd=2, xlab="", ylab="", xaxt="n", ylim=ylims, xlim=c(0,N.ts+1))
-  for(j in 1:N.ts) {
-    if(Z.rot[j,i] > minZ) {text(j, -0.05, spp[j], srt=90, adj=1, cex=0.9)}
-    if(Z.rot[j,i] < -minZ) {text(j, 0.05, spp[j], srt=90, adj=0, cex=0.9)}
-    abline(h=0, lwd=1, col="gray")
-  } # end j loop
-  mtext(paste("Factor loadings on trend",i,sep=" "),side=3,line=.5)
-} # end i loop
+residuals(mod1)
+broom::augment(residuals(mod1))

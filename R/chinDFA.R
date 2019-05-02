@@ -182,5 +182,86 @@ ggplot(rotTrends, aes(x = year, y = est)) +
   facet_wrap(~trend)
 dev.off()
 
-residuals(mod1)
-broom::augment(residuals(mod1))
+## Plot fitted estimates
+modOutCI <- broom::augment(mod1, interval = "confidence") %>% 
+  dplyr::rename(stock = .rownames) %>% 
+  inner_join(byDatTrim %>% select(stock, region), by = "stock") %>% 
+  distinct() %>% 
+  mutate(year = t + 1970, 
+         stock = as.factor(stock)) %>% 
+  arrange(region)
+  
+  
+
+ggplot(modOutCI) +
+  geom_line(aes(x = year, y = .fitted)) +
+  geom_point(aes(x = year, y = y, colour = region)) +
+  geom_ribbon(aes(x = year, ymin = .conf.low, ymax = .conf.up), linetype = 2, 
+              alpha = 0.2) +
+  facet_wrap(~stock)
+
+
+
+dum <- get_DFA_fits(mod1)
+namesIn <- names(dum)
+dum2 <- lapply(seq_along(dum), function (x) gatherList(dum[[x]], yrs = broodYrs, 
+                                                       stks = stkID, 
+                                                       names = namesIn[x])) 
+modOutCI2 <- do.call(rbind, dum2) %>% 
+  spread(key = estimate, value = value) %>% 
+  inner_join(byDatTrim %>% select(stock, region), by = "stock") %>% 
+  distinct() %>% 
+  mutate(stock = as.factor(stock)) %>% 
+  arrange(region)
+  
+ggplot(modOutCI2) +
+  geom_line(aes(x = year, y = ex)) +
+  geom_point(aes(x = modOutCI$year, y = modOutCI$y, colour = modOutCI$region)) +
+  geom_ribbon(aes(x = year, ymin = lo, ymax = up), linetype = 2, 
+              alpha = 0.2) +
+  facet_wrap(~stock)
+
+
+#Function to scrape data from get_DFA_fits
+gatherList <- function(x, yrs, stks, names) {
+  rownames(x) <- stks
+  tt <- x %>% 
+    t() %>% 
+    as.data.frame %>% 
+    mutate(year = yrs, 
+           estimate = names) %>% 
+    gather(key = "stock", value = "value", -year, -estimate)
+}
+
+
+get_DFA_fits <- function(MLEobj,alpha=0.05) {
+  ## empty list for results
+  fits <- list()
+  ## extra stuff for var() calcs
+  Ey <- MARSS:::MARSShatyt(MLEobj)
+  ## model params
+  mod_par <- coef(MLEobj, type="matrix")
+  ZZ <- mod_par$Z
+  ## number of obs ts
+  nn <- dim(Ey$ytT)[1]
+  ## number of time steps
+  TT <- dim(Ey$ytT)[2]
+  ## get the inverse of the rotation matrix
+  H_inv <- varimax(ZZ)$rotmat
+  ## model expectation
+  fits$ex <- ZZ %*% H_inv %*% MLEobj$states + matrix(mod_par$A,nn,TT)
+  ## Var in model fits
+  VtT <- MARSSkfss(MLEobj)$VtT
+  VV <- NULL
+  for(tt in 1:TT) {
+    RZVZ <- mod_par$R - ZZ%*%VtT[,,tt]%*%t(ZZ)
+    SS <- Ey$yxtT[,,tt] - Ey$ytT[,tt,drop=FALSE] %*% t(MLEobj$states[,tt,drop=FALSE])
+    VV <- cbind(VV,diag(RZVZ + SS%*%t(ZZ) + ZZ%*%t(SS)))    
+  }
+  SE <- sqrt(VV)
+  ## upper (1-alpha)% CI
+  fits$up <- qnorm(1-alpha/2)*SE + fits$ex    
+  ## lower (1-alpha)% CI
+  fits$lo <- qnorm(alpha/2)*SE + fits$ex
+  return(fits)
+}

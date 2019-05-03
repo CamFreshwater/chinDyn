@@ -14,24 +14,59 @@ eyDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"),
 
 #focus on subset of BC pops for initial analyses
 byDatTrim <- byDat %>% 
-  filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD"))
-  
+  filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD"))%>% 
+  group_by(stock) %>% 
+  mutate(survZ = as.numeric(scale(surv))) %>%
+  ungroup(stock) %>% 
+  arrange(region) %>% 
+  mutate(stock = factor(stock, unique(stock))) %>% 
+  select(-stockName, -jurisdiction, -lat, -long)
+
+## Initial time series plots
+require(samSim)
+
+png(here("figs", "standardizedSurvival_salishSeaOnly.png"), height = 7,
+    width = 7, units = "in", res = 300)
+ggplot(byDatTrim, aes(x = BY, y = survZ, colour = region)) +
+  geom_line() +
+  theme_sleekX() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~stock)
+dev.off()
+
+byDatLH <- byDatTrim %>% 
+  arrange(smoltType) %>% 
+  mutate(stock = factor(stock, unique(stock)))
+ggplot(byDatLH, aes(x = BY, y = survZ, colour = smoltType)) +
+  geom_line() +
+  theme_sleekX() +
+  facet_wrap(~stock)
+#no clear patterns by smolt type
+
+byDatRT <- byDatTrim %>% 
+  arrange(adultRunTiming) %>% 
+  mutate(stock = factor(stock, unique(stock)))
+ggplot(byDatRT, aes(x = BY, y = survZ, colour = adultRunTiming)) +
+  geom_line() +
+  theme_sleekX() +
+  facet_wrap(~stock)
+#no clear patterns by run timing
+
+
+### Fit DFA
 #Convert to matrices (necessary for DFA)
-byMat <- byDatTrim %>%
-  select(BY, stock, surv) %>% 
-  spread(key = stock, value = surv) %>% 
+byMatZ <- byDatTrim %>%
+  select(BY, stock, survZ) %>% 
+  spread(key = stock, value = survZ) %>% 
   select(-BY) %>% 
   as.matrix() %>% 
   t()
 broodYrs <- unique(byDatTrim$BY)
 colnames(byMat) <- broodYrs
 
-nStks <- nrow(byMat)
-nYrs <- ncol(byMat)
-stkID <- rownames(byMat)
-
-#standardize
-byMatZ <- MARSS::zscore(byMat)
+nStks <- nrow(byMatZ)
+nYrs <- ncol(byMatZ)
+stkID <- rownames(byMatZ)
 
 #preliminary model fit test
 modelList <- list(m = 2, R = "diagonal and equal")
@@ -124,14 +159,6 @@ invH <- if (ncol(estZ) > 1) {
   1
 }
 
-
-### Generate some figures 
-require(samSim)
-ggplot(byDatTrim, aes(x = BY, y = surv, colour = stock)) +
-  geom_line() +
-  theme_sleekX() +
-  facet_wrap(~region)
-
 ## Factor loadings
 #rotate factor loadings
 rotZ <- (estZ %*% invH) %>% 
@@ -189,9 +216,7 @@ modOutCI <- broom::augment(mod1, interval = "confidence") %>%
   distinct() %>% 
   mutate(year = t + 1970, 
          stock = as.factor(stock)) %>% 
-  arrange(region)
-  
-  
+  arrange(region) 
 
 ggplot(modOutCI) +
   geom_line(aes(x = year, y = .fitted)) +
@@ -212,7 +237,8 @@ modOutCI2 <- do.call(rbind, dum2) %>%
   inner_join(byDatTrim %>% select(stock, region), by = "stock") %>% 
   distinct() %>% 
   mutate(stock = as.factor(stock)) %>% 
-  arrange(region)
+  arrange(region) %>% 
+  filter(year > 1985)
   
 ggplot(modOutCI2) +
   geom_line(aes(x = year, y = ex)) +
@@ -220,7 +246,6 @@ ggplot(modOutCI2) +
   geom_ribbon(aes(x = year, ymin = lo, ymax = up), linetype = 2, 
               alpha = 0.2) +
   facet_wrap(~stock)
-
 
 #Function to scrape data from get_DFA_fits
 gatherList <- function(x, yrs, stks, names) {
@@ -233,7 +258,7 @@ gatherList <- function(x, yrs, stks, names) {
     gather(key = "stock", value = "value", -year, -estimate)
 }
 
-
+#Alternative function to broom to estimate uncertainty 
 get_DFA_fits <- function(MLEobj,alpha=0.05) {
   ## empty list for results
   fits <- list()

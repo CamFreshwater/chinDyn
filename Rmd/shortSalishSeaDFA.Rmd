@@ -1,0 +1,66 @@
+---
+title: "Short Salish Sea DFA"
+author: "Cam Freshwater"
+date: "May 3, 2019"
+output: html_document
+---
+
+After preliminary runs with chinook data noticed issues with estimating states for early portion of time series. Specifically the lack of data for certain time series mean that the estimated states were predicting (potnetially) unreasonably high historical survival (these data are saved in `data/dfaFits/salishSeaOnly`). 
+
+To explore impacts of gappy data try cropping at 1985, then refitting the DFA.
+
+```{r loadAndClean}
+listOfPackages <- c("here", "MARSS", "tidyverse", "ggplot2", "parallel", 
+                    "doParallel", "foreach", "tictoc", "samSim")
+lapply(listOfPackages, require, character.only = TRUE)
+
+source(here("R/functions/dfaFunctions.R"))
+
+byDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_BY.csv"), 
+                  stringsAsFactors = FALSE)
+
+#focus on subset of BC pops for initial analyses
+byDatTrim <- byDat %>% 
+  filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD"))%>% 
+  group_by(stock) %>% 
+  mutate(survZ = as.numeric(scale(surv))) %>%
+  ungroup(stock) %>% 
+  arrange(region) %>% 
+  mutate(stock = factor(stock, unique(stock))) %>% 
+  select(-stockName, -jurisdiction, -lat, -long) %>% 
+  filter(BY > 1984)
+
+byMatZ <- byDatTrim %>%
+  select(BY, stock, survZ) %>% 
+  spread(key = stock, value = survZ) %>% 
+  select(-BY) %>% 
+  as.matrix() %>% 
+  t()
+broodYrs <- unique(byDatTrim$BY)
+colnames(byMatZ) <- broodYrs
+
+nStks <- nrow(byMatZ)
+nYrs <- ncol(byMatZ)
+stkID <- rownames(byMatZ)
+```
+
+Now fit the DFA. Focus on diagonal and unequal observation variances only given evidence from initial AICc.
+
+```{r fitDFA}
+inMList <- list(2, 3, 4, 5, 6, 7)
+subDir <- "salishSeaOnly_short" #for data cropped at 1985
+
+Ncores <- detectCores()
+cl <- makeCluster(Ncores - 2) #save two cores
+registerDoParallel(cl)
+clusterEvalQ(cl, c(library(MARSS), library(here), library(Rcpp),
+                   library(RcppArmadillo)))
+clusterExport(cl, c("byMatZ", "inMList", "fitDFA"), envir=environment())
+tic("run in parallel")
+parLapply(cl, inMList, function(x) {
+  fitDFA(byMatZ, inR = "diagonal and unequal", inM = x, maxIteration = 1000, 
+         subDirName = subDir)
+})
+stopCluster(cl) #end cluster
+toc()
+```

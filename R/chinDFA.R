@@ -4,7 +4,7 @@
 # -----
 
 listOfPackages <- c("here", "MARSS", "tidyverse", "ggplot2", "parallel", 
-                    "doParallel", "foreach", "tictoc", "samSim")
+                    "doParallel", "foreach", "tictoc")
 lapply(listOfPackages, require, character.only = TRUE)
 
 byDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_BY.csv"), 
@@ -23,8 +23,6 @@ byDatTrim <- byDat %>%
   select(-stockName, -jurisdiction, -lat, -long)
 
 ## Initial time series plots
-require(samSim)
-
 png(here("figs", "standardizedSurvival_salishSeaOnly.png"), height = 7,
     width = 7, units = "in", res = 300)
 ggplot(byDatTrim, aes(x = BY, y = survZ, colour = region)) +
@@ -39,7 +37,7 @@ byDatLH <- byDatTrim %>%
   mutate(stock = factor(stock, unique(stock)))
 ggplot(byDatLH, aes(x = BY, y = survZ, colour = smoltType)) +
   geom_line() +
-  theme_sleekX() +
+  samSim::theme_sleekX() +
   facet_wrap(~stock)
 #no clear patterns by smolt type
 
@@ -48,7 +46,7 @@ byDatRT <- byDatTrim %>%
   mutate(stock = factor(stock, unique(stock)))
 ggplot(byDatRT, aes(x = BY, y = survZ, colour = adultRunTiming)) +
   geom_line() +
-  theme_sleekX() +
+  samSim::theme_sleekX() +
   facet_wrap(~stock)
 #no clear patterns by run timing
 
@@ -62,7 +60,7 @@ byMatZ <- byDatTrim %>%
   as.matrix() %>% 
   t()
 broodYrs <- unique(byDatTrim$BY)
-colnames(byMat) <- broodYrs
+colnames(byMatZ) <- broodYrs
 
 nStks <- nrow(byMatZ)
 nYrs <- ncol(byMatZ)
@@ -86,7 +84,7 @@ for (i in seq_along(inRSeq)) {
   registerDoParallel(cl)
   clusterEvalQ(cl, c(library(MARSS), library(here), library(Rcpp),
                      library(RcppArmadillo)))
-  clusterExport(cl, c("byMatZ", "inRDum", "inMList", "fitDFA"),
+  clusterExport(cl, c("byMatZ", "inRDum", "inMList", "fitDFA", "subDir"),
                 envir=environment())
   tic("run in parallel")
   parLapply(cl, inMList, function(x) {

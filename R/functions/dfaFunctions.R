@@ -48,6 +48,31 @@ getTopDFA <- function(subDirName) {
 }
 
 
+##Function to rotate factor loadings
+rotateLoadings <- function(zIn, H, stkNames = stkID, survDat) {
+  (zIn %*% H) %>% 
+    as.data.frame() %>% 
+    mutate(stock = stkNames) %>% 
+    inner_join(survDat %>% select(stock, region), by = "stock") %>% 
+    gather(key = "trend", value = "loading", -stock, -region) %>% 
+    distinct() %>% 
+    arrange(region) %>% 
+    mutate(trend = as.numeric(as.factor(trend)),
+           stock = factor(stock, unique(stock)))
+}
+
+
+##Function to rotate estimated trends
+rotateTrends <- function(modIn, H){
+  (solve(H) %*% modIn$states) %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    mutate(year = broodYrs) %>% 
+    gather(key = "trend", value = "est", -year) %>% 
+    mutate(trend = as.numeric(as.factor(trend)))
+}
+
+
 ##Alternative function to broom::augment() to estimate uncertainty 
 get_DFA_fits <- function(MLEobj,alpha=0.05) {
   ## empty list for results

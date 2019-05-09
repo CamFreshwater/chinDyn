@@ -18,17 +18,11 @@ knitr-cache
 .RHistory
 
 myNotes.*
-outputs/diagnostics
-outputs/simData
 data/workingFinalSimRun
+data/salmonData/rawData
 .Rproj.user/
 .Rproj.user
-scripts/lm-t-skew.rds
-scripts/lm-t.rds
-scripts/lm.rds
 *.html
 scripts/*cache*
-#*.png
-scripts/sync.rds
 *.o
 *.so

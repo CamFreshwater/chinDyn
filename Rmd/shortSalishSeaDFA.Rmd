@@ -22,14 +22,14 @@ byDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_BY.csv"),
 
 #focus on subset of BC pops for initial analyses
 byDatTrim <- byDat %>% 
-  filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD"))%>% 
+  filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD"),
+         BY > 1984) %>% 
   group_by(stock) %>% 
   mutate(survZ = as.numeric(scale(surv))) %>%
   ungroup(stock) %>% 
   arrange(region) %>% 
   mutate(stock = factor(stock, unique(stock))) %>% 
-  select(-stockName, -jurisdiction, -lat, -long) %>% 
-  filter(BY > 1984)
+  select(-stockName, -jurisdiction, -lat, -long)
 
 byMatZ <- byDatTrim %>%
   select(BY, stock, survZ) %>% 
@@ -47,9 +47,9 @@ stkID <- rownames(byMatZ)
 
 Now fit the DFA. Focus on diagonal and unequal observation variances only given evidence from initial AICc.
 
-```{r fitDFA, eval=FALSE, include=FALSE}
+```{r fitDFABY, eval=FALSE, include=FALSE}
 inMList <- list(1, 2, 3, 4, 5, 6, 7)
-subDir <- "salishSeaOnly_short" #for data cropped at 1985
+subDir <- "salishSeaOnly_short_BY" #for data cropped at 1985
 inRSeq <- c("diagonal and unequal", "equalvarcov")
 
 for (i in seq_along(inRSeq)) {
@@ -94,13 +94,23 @@ invH <- if (ncol(estZ) > 1) {
 ## Factor loadings
 #rotate factor loadings
 rotZ <- rotateLoadings(zIn = estZ, H = invH, stkNames = stkID, 
-                      survDat = byDatTrim)
+                      survDat = byDatTrim) %>% 
+  inner_join(byDatTrim %>% select(stock, smoltType, adultRunTiming), 
+             by = "stock") %>% 
+    distinct()
 
 ggplot(rotZ, aes(x = stock, y = loading, fill = region)) +
   geom_col() +
   theme_sleekX(axisSize = 9, legendSize = 0.7) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
   facet_wrap(~trend)
+
+#No coherent patterns associated with adult run timing
+# ggplot(rotZ, aes(x = stock, y = loading, fill = adultRunTiming)) +
+#   geom_col() +
+#   theme_sleekX(axisSize = 9, legendSize = 0.7) +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+#   facet_wrap(~trend)
 ```
 
 ```{r trends}
@@ -120,10 +130,10 @@ modOutCI <- broom::augment(mod1, interval = "confidence") %>%
   dplyr::rename(stock = .rownames) %>% 
   inner_join(byDatTrim %>% select(stock, region), by = "stock") %>% 
   distinct() %>% 
+  arrange(region) %>% 
   mutate(year = t + 1984, #add so that year is correct 
-         stock = as.factor(stock)) %>% 
-  arrange(region) 
-
+         stock = factor(stock, unique(stock)))
+  
 ggplot(modOutCI) +
   geom_line(aes(x = year, y = .fitted)) +
   geom_point(aes(x = year, y = y, colour = region)) +
@@ -143,16 +153,19 @@ dum2 <- lapply(seq_along(dum), function (x) gatherList(dum[[x]], yrs = broodYrs,
 modOutCI2 <- do.call(rbind, dum2) %>% 
   spread(key = estimate, value = value) %>% 
   inner_join(byDatTrim %>% select(stock, region), by = "stock") %>% 
+  inner_join(modOutCI %>% select(y, stock, year), by = c("stock", "year")) %>% 
   distinct() %>% 
-  mutate(stock = as.factor(stock)) %>% 
   arrange(region) %>% 
-  filter(year > 1985)
+  mutate(stock = factor(stock, unique(stock))) %>% 
+  filter(year > 1984)
   
 ggplot(modOutCI2) +
   geom_line(aes(x = year, y = ex)) +
-  geom_point(aes(x = modOutCI$year, y = modOutCI$y, 
-                 colour = modOutCI$region)) +
+  geom_point(aes(x = year, y = y, colour = region)) +
   geom_ribbon(aes(x = year, ymin = lo, ymax = up), linetype = 2, 
               alpha = 0.2) +
   facet_wrap(~stock)
 ```
+
+
+Fitting equivalent models by ocean entry year, rather than brood year, resulted in nearly identical model fits. 

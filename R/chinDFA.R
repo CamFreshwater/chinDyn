@@ -75,8 +75,8 @@ dfaTest <- MARSS(byMatZ, model = modelList, z.score = TRUE, form = "dfa",
 
 ## Fit models in parallel using multiple cores
 inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov")
-inMList <- list(2, 3, 4, 5, 6, 7)
-subDir <- "salishSeaOnly"
+inMList <- list(1, 2, 3, 4, 5, 6, 7)
+subDir <- "salishSeaOnly_BY"
 for (i in seq_along(inRSeq)) {
   Ncores <- detectCores()
   inRDum <- inRSeq[i]
@@ -89,7 +89,7 @@ for (i in seq_along(inRSeq)) {
   tic("run in parallel")
   parLapply(cl, inMList, function(x) {
     fitDFA(byMatZ, inR = inRDum, inM = x, maxIteration = 1000, 
-           subDirname = subDir)
+           subDirName = subDir)
   })
   stopCluster(cl) #end cluster
   toc()

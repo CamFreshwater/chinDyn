@@ -70,7 +70,7 @@ stkID <- rownames(byMatZ)
 modelList <- list(m = 2, R = "diagonal and equal")
 cntrList <- list(maxit = 200)
 dfaTest <- MARSS(byMatZ, model = modelList, z.score = TRUE, form = "dfa", 
-                 control = cntrList, method = "BFGS-kf")
+                 control = cntrList, method = "kem")
 
 
 ## Fit models in parallel using multiple cores
@@ -133,7 +133,7 @@ png(here("figs", "dfa", paste(subDir, ncol(estZ), "Trend", "_loadings.png",
     res = 300)
 ggplot(rotZ, aes(x = stock, y = loading, fill = region)) +
   geom_col() +
-  theme_sleekX(axisSize = 9, legendSize = 0.7) +
+  samSim::theme_sleekX(axisSize = 9, legendSize = 0.7) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   facet_wrap(~trend)
 dev.off()
@@ -157,7 +157,7 @@ png(here("figs", "dfa", paste(subDir, ncol(estZ), "Trend", "_trends.png",
     res = 300)
 ggplot(rotTrends, aes(x = year, y = est)) +
   geom_line() +
-  theme_sleekX() +
+  samSim::theme_sleekX() +
   geom_hline(yintercept = 0, colour = "red") +
   facet_wrap(~trend)
 dev.off()

@@ -15,7 +15,7 @@
 *.synctex.gz*
 knitr-cache
 .RData
-.Rhistory/
+.Rhistory
 
 myNotes.*
 data/workingFinalSimRun

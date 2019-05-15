@@ -14,7 +14,7 @@ First analysis will focus, as before, on Salish Sea only stocks so that these re
 ```{r loadAndClean}
 listOfPackages <- c("here", "bayesdfa", "tidyverse", "ggplot2", "parallel", 
                     "doParallel", "foreach", "tictoc")
-lapply(listOfPackages, require, character.only = TRUE)
+lapply(listOfPackages, library, character.only = TRUE)
 
 #helper functions to fit and post-process DFA
 source(here("R/functions/dfaFunctions.R"))
@@ -39,54 +39,124 @@ eyMat <- eyDatTrim %>%
   as.matrix() %>% 
   t()
 entryYrs <- unique(eyDatTrim$OEY)
-colnames(eyMatZ) <- entryYrs
+colnames(eyMat) <- entryYrs
 
-nStks <- nrow(eyMatZ)
-nYrs <- ncol(eyMatZ)
-stkID <- rownames(eyMatZ)
+nStks <- nrow(eyMat)
+nYrs <- ncol(eyMat)
+stkID <- rownames(eyMat)
 ```
 
 Example below shows a 2 trend model (arbitrarily chosen) with loadings and trends. Notice that the uncertainty estimates are much larger at the beginning of the time series.
 
 ```{r bayesDFATestRun}
-f1 <- fit_dfa(y = eyMat, num_trends = 2, zscore = TRUE, iter = 1000, chains = 4,
-              thin = 1)
+options(mc.cores = parallel::detectCores())
+
+tic()
+f1 <- fit_dfa(y = eyMat, num_trends = 5, zscore = TRUE, iter = 3000, chains = 4,
+              thin = 1, control = list(adapt_delta = 0.9, max_treedepth = 20))
+toc()
 is_converged(f1, threshold = 1.05)
+shinystan::launch_shinystan(f1$model)
+
 r1 <- rotate_trends(f1)
 plot_trends(r1)
 plot_fitted(f1)
-plot_loadings(r1)
+plot_loadings(r1) +
+  ylim(-3, 3)
 ```
 
-Run model selection with up to 6 trends, both normal and student-t process variance, and independent or correlated observation error.
+Initially ran model selection with up to 4 trends, both normal and student-t process variance, and independent or equal observation error. Some convergence issues, but strong support for independent error structures and at least 4 trends. Likely little utility in running with a larger number.
 
-```{r bayesDFATestRun}
-ttt <- eyMat[1:8, ]
-ranges <- data.frame(min = c(1, 4),
-                     max = c(3, 6)) %>% 
-  split(., seq(nrow(.)))
+```{r modelComp}
+# tic()
+# fitModels <- find_dfa_trends(y = eyMat, iter = 3000, kmin = 1, kmax = 4, 
+#                              chains = 4, compare_normal = TRUE, zscore = TRUE,
+#                              variance =  c("equal", "unequal"),
+#                              control = list(adapt_delta = 0.9, 
+#                                             max_treedepth = 20))
+# toc()
+# saveRDS(fitModels, here::here("data", "dfaBayesFits",
+#                               "salSeaOnly_findTrends.rds"))
 
-# for (i in seq_along(inRSeq)) {
-  Ncores <- detectCores()
-  cl <- makeCluster(Ncores - 2) #save two cores
-  registerDoParallel(cl)
-  clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
-                     library(RcppArmadillo)))
-  clusterExport(cl, c("ttt", "find_dfa_trends", "ranges"),
-                envir=environment())
-  tic("run in parallel")
-  dum <- parLapply(cl, ranges, function(x) {
-    find_dfa_trends(y = ttt, iter = 250, kmin = x$min, kmax = x$max, 
-                    chains = 1, compare_normal = FALSE, zscore = TRUE,
-                    variance = c("equal", "unequal"))
-  })
-  stopCluster(cl) #end cluster
-  toc()
-# }
+fitModels$summary
+f4 <- fitModels$best_model
 
-  tic("run in parallel")
-  find_dfa_trends(y = ttt, iter = 250, kmin = 1, kmax = 6, 
-                    chains = 1, compare_normal = FALSE, zscore = TRUE,
-                    variance = c("equal", "unequal"))
-  toc()
+```
+
+In actuality 4 trends seems excessive. Two are quite similar and looic seems higher than estimates for three trend models.
+
+```{r evalTopModel}
+tic()
+f4 <- fit_dfa(y = eyMat, num_trends = 4, zscore = TRUE, iter = 3000, chains = 4,
+              thin = 1, estimate_nu = TRUE, 
+              control = list(adapt_delta = 0.95, max_treedepth = 20))
+toc()
+
+shinystan::launch_shinystan(f4$model)
+is_converged(f4, threshold = 1.05)
+
+r4 <- rotate_trends(f4)
+plot_trends(r4)
+plot_fitted(f4)
+plot_loadings(r4) +
+  ylim(-3, 3)
+```
+
+Run preliminary global evaluation fitting up to 4 trends to larger full dataset (include both student-t and standard).
+
+```{r fitModelAcrossRegions}
+#focus on subset of BC pops for initial analyses
+eyDatFull <- eyDat %>% 
+  # filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD", "WCVI",
+  #                      "CBC", "JFUCA", "WACST", "HOODC")) %>%
+  filter(!region %in% c("LCOLR", "MCOLR", "UCOLR", "SEAK", "TBR", "NBC", 
+                        "ORCST")) %>%
+  arrange(region) %>% 
+  mutate(stock = factor(stock, unique(stock))) %>% 
+  select(-stockName, -jurisdiction, -lat, -long)
+
+eyMatFull <- eyDatFull %>%
+  select(OEY, stock, surv) %>%
+  spread(key = stock, value = surv) %>%
+  select(-OEY) %>% 
+  as.matrix() %>% 
+  t()
+entryYrs <- unique(eyDatTrim$OEY)
+colnames(eyMatFull) <- entryYrs
+
+nStks <- nrow(eyMatFull)
+nYrs <- ncol(eyMatFull)
+stkID <- rownames(eyMatFull)
+
+tic()
+fitModelsAll <- find_dfa_trends(y = eyMatFull, iter = 3500, kmin = 1, kmax = 4,
+                             chains = 4, compare_normal = TRUE, zscore = TRUE,
+                             variance =  "unequal",
+                             control = list(adapt_delta = 0.95,
+                                            max_treedepth = 20))
+toc()
+saveRDS(fitModelsAll, here::here("data", "dfaBayesFits",
+                              "fullBasin_findTrends.rds"))
+
+#set up trend inputs to allow for parallel processing
+# ranges <- data.frame(min = c(5, 7),
+#                      max = c(6, 8)) %>%
+#   split(., seq(nrow(.)))
+# 
+# Ncores <- detectCores()
+# cl <- makeCluster(Ncores) #save two cores
+# registerDoParallel(cl)
+# clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
+#                    library(RcppArmadillo)))
+# clusterExport(cl, c("eyMat", "find_dfa_trends", "ranges"),
+#               envir=environment())
+# tic("run in parallel")
+# dum <- parLapply(cl, ranges, function(x) {
+#   find_dfa_trends(y = eyMat, iter = 3000, kmin = x$min, kmax = x$max,
+#                   chains = 4, compare_normal = TRUE, zscore = TRUE,
+#                   variance =  "unequal",  
+#                   control = list(adapt_delta = 0.95, max_treedepth = 20))
+# })
+# stopCluster(cl) #end cluster
+# toc()
 ```

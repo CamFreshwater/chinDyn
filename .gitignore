@@ -15,11 +15,15 @@
 *.synctex.gz*
 knitr-cache
 .RData
+
+# History files
 .Rhistory
+.Rapp.history
 
 myNotes.*
 data/workingFinalSimRun
 data/salmonData/rawData
+data/dfaBayesFits/
 .Rproj.user/
 .Rproj.user
 *.html

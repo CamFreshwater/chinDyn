@@ -7,11 +7,11 @@
 fitDFA <- function(mat, inR, inM, maxIteration = 500, subDirName) {
   cntrList <- list(minit = 100, maxit = maxIteration)
   dfaModel <- list(A = "zero", R = inR, m = inM)
-  fitMod <- MARSS(byMatZ, model = dfaModel, control = cntrList,
+  fitMod <- MARSS(mat, model = dfaModel, control = cntrList,
                   form = "dfa", z.score  = TRUE)
   #If faster algorithm fails to converge use alternative
   while(fitMod$convergence != 0) {
-    fitMod <- MARSS(byMatZ, model = dfaModel, control = list(maxit = 4000),
+    fitMod <- MARSS(mat, model = dfaModel, control = list(maxit = 4000),
                     inits = as.matrix(coef(fitMod)[1]), form = "dfa", 
                     z.score  = TRUE, method = "BFGS-kf")
   }

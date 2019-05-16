@@ -65,44 +65,71 @@ plot_loadings(r1) +
   ylim(-3, 3)
 ```
 
-Initially ran model selection with up to 4 trends, both normal and student-t process variance, and independent or equal observation error. Some convergence issues, but strong support for independent error structures and at least 4 trends. Likely little utility in running with a larger number.
+Strong support for independent covariance structures, three trends and student-t 
+distribution. However fitting the independent covariance structures takes a very long time (~20 hrs for 3 models). Compare results (fit and loadings) to see if additional computational cost is justified.
 
 ```{r modelComp}
-# tic()
-# fitModels <- find_dfa_trends(y = eyMat, iter = 3000, kmin = 1, kmax = 4, 
-#                              chains = 4, compare_normal = TRUE, zscore = TRUE,
-#                              variance =  c("equal", "unequal"),
-#                              control = list(adapt_delta = 0.9, 
-#                                             max_treedepth = 20))
+datIn <- data.frame(normal = c(FALSE, TRUE), 
+                     var = c("unequal", "equal")) %>%
+  split(., seq(nrow(.)))
+
+# Ncores <- detectCores()
+# cl <- makeCluster(Ncores) #save two cores
+# registerDoParallel(cl)
+# clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
+#                    library(RcppArmadillo)))
+# clusterExport(cl, c("eyMat", "find_dfa_trends", "datIn"),
+#               envir=environment())
+# tic("run in parallel")
+# dum <- parLapply(cl, datIn, function(x) {
+#   find_dfa_trends(y = eyMat, iter = 3500, kmin = 1, kmax = 3,
+#                   chains = 4, compare_normal = x$normal, zscore = TRUE,
+#                   variance =  x$var,
+#                   control = list(adapt_delta = 0.96, max_treedepth = 20))
+# })
+# stopCluster(cl) #end cluster
 # toc()
-# saveRDS(fitModels, here::here("data", "dfaBayesFits",
-#                               "salSeaOnly_findTrends.rds"))
 
-fitModels$summary
-f4 <- fitModels$best_model
+rbind(dum[[1]]$summary, dum[[2]]$summary) %>% 
+  arrange(looic)
 
+saveRDS(dum, here::here("data", "dfaBayesFits",
+                        "salishSea_diffCorStructures_findTrends.rds"))
 ```
 
-In actuality 4 trends seems excessive. Two are quite similar and looic seems higher than estimates for three trend models.
+The independent variance structure does provide much less uncertainty on the trend estimates and the loadings estimates are much more robust, presumably by accounting for differences among time series in how gappy they are. However the over fit on individual trends is fairly similar. 
 
-```{r evalTopModel}
-tic()
-f4 <- fit_dfa(y = eyMat, num_trends = 4, zscore = TRUE, iter = 3000, chains = 4,
-              thin = 1, estimate_nu = TRUE, 
-              control = list(adapt_delta = 0.95, max_treedepth = 20))
-toc()
+```{r trendsAndLoadingsCov}
+indMod <- dum[[1]]$best_model
+equalMod <- dum[[2]]$best_model
 
-shinystan::launch_shinystan(f4$model)
-is_converged(f4, threshold = 1.05)
+shinystan::launch_shinystan(equalMod$model)
+is_converged(indMod, threshold = 1.05)
 
-r4 <- rotate_trends(f4)
-plot_trends(r4)
-plot_fitted(f4)
-plot_loadings(r4) +
-  ylim(-3, 3)
+indR <- rotate_trends(indMod)
+indTrends <- plot_trends(indTrends)
+equalR <- rotate_trends(equalMod)
+equalTrends <- plot_trends(equalTrends)
+ggpubr::ggarrange(indTrends, equalTrends, ncol = 1, nrow = 2)
+
+indLoadings <- plot_loadings(indR) +
+  ylim(-2, 2)
+equalLoadings <- plot_loadings(equalR) +
+  ylim(-2, 2)
+ggpubr::ggarrange(indLoadings, equalLoadings, ncol = 1, nrow = 2)
+
+png(here("figs", "dfa", "salishSea_3trend_indCor_fits.png"), height = 5, 
+    width = 6, units = "in", res = 300)
+plot_fitted(indMod)
+dev.off()
+
+png(here("figs", "dfa", "salishSea_3trend_eqCor_fits.png"), height = 5, 
+    width = 6, units = "in", res = 300)
+plot_fitted(equalMod)
+dev.off()
 ```
 
-Run preliminary global evaluation fitting up to 4 trends to larger full dataset (include both student-t and standard).
+For now it's probably best to just fit equal observation variance models and up to three trends per group, including both student-t and normal distributions.
 
 ```{r fitModelAcrossRegions}
 #focus on subset of BC pops for initial analyses
@@ -137,6 +164,8 @@ fitModelsAll <- find_dfa_trends(y = eyMatFull, iter = 3500, kmin = 1, kmax = 4,
 toc()
 saveRDS(fitModelsAll, here::here("data", "dfaBayesFits",
                               "fullBasin_findTrends.rds"))
+fitModelsAll$summary
+fullMod <- 
 
 #set up trend inputs to allow for parallel processing
 # ranges <- data.frame(min = c(5, 7),

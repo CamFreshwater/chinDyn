@@ -90,11 +90,14 @@ datIn <- data.frame(normal = c(FALSE, TRUE),
 # stopCluster(cl) #end cluster
 # toc()
 
+# saveRDS(dum, here::here("data", "dfaBayesFits",
+#                         "salishSea_diffCorStructures_findTrends.rds"))
+
+dum <- readRDS(here::here("data", "dfaBayesFits",
+                        "salishSea_diffCorStructures_findTrends.rds"))
 rbind(dum[[1]]$summary, dum[[2]]$summary) %>% 
   arrange(looic)
 
-saveRDS(dum, here::here("data", "dfaBayesFits",
-                        "salishSea_diffCorStructures_findTrends.rds"))
 ```
 
 The independent variance structure does provide much less uncertainty on the trend estimates and the loadings estimates are much more robust, presumably by accounting for differences among time series in how gappy they are. However the over fit on individual trends is fairly similar. 
@@ -132,60 +135,63 @@ dev.off()
 For now it's probably best to just fit equal observation variance models and up to three trends per group, including both student-t and normal distributions.
 
 ```{r fitModelAcrossRegions}
-#focus on subset of BC pops for initial analyses
+#focus split eyDat to run each group separately
 eyDatFull <- eyDat %>% 
-  # filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD", "WCVI",
-  #                      "CBC", "JFUCA", "WACST", "HOODC")) %>%
-  filter(!region %in% c("LCOLR", "MCOLR", "UCOLR", "SEAK", "TBR", "NBC", 
-                        "ORCST")) %>%
-  arrange(region) %>% 
+  mutate(lat = as.numeric(lat),
+         long = as.numeric(long),
+         aggReg = case_when(
+           (is.na(lat)) ~ "north",
+           (lat > 52 & !region == "UFR") ~ "north",
+           (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
+                          "WCVI")) ~ "south",
+           TRUE ~ "SS"
+         )) %>% 
+  mutate(grp = paste(smoltType, aggReg, sep = "_")) %>% 
+  arrange(grp) %>% 
   mutate(stock = factor(stock, unique(stock))) %>% 
+  filter(!grp %in% c("oceantype_north", "streamtype_south")) %>% 
   select(-stockName, -jurisdiction, -lat, -long)
 
-eyMatFull <- eyDatFull %>%
-  select(OEY, stock, surv) %>%
-  spread(key = stock, value = surv) %>%
-  select(-OEY) %>% 
-  as.matrix() %>% 
-  t()
-entryYrs <- unique(eyDatTrim$OEY)
-colnames(eyMatFull) <- entryYrs
+#split into lists 
+survList <- split(eyDatFull, eyDatFull$grp)
 
-nStks <- nrow(eyMatFull)
-nYrs <- ncol(eyMatFull)
-stkID <- rownames(eyMatFull)
-
-tic()
-fitModelsAll <- find_dfa_trends(y = eyMatFull, iter = 3500, kmin = 1, kmax = 4,
-                             chains = 4, compare_normal = TRUE, zscore = TRUE,
-                             variance =  "unequal",
-                             control = list(adapt_delta = 0.95,
-                                            max_treedepth = 20))
-toc()
-saveRDS(fitModelsAll, here::here("data", "dfaBayesFits",
-                              "fullBasin_findTrends.rds"))
-fitModelsAll$summary
-fullMod <- 
+# eyMatFull <- eyDatFull %>%
+#   select(OEY, stock, surv) %>%
+#   spread(key = stock, value = surv) %>%
+#   select(-OEY) %>% 
+#   as.matrix() %>% 
+#   t()
+# entryYrs <- unique(eyDatTrim$OEY)
+# colnames(eyMatFull) <- entryYrs
+# 
+# nStks <- nrow(eyMatFull)
+# nYrs <- ncol(eyMatFull)
+# stkID <- rownames(eyMatFull)
 
 #set up trend inputs to allow for parallel processing
-# ranges <- data.frame(min = c(5, 7),
-#                      max = c(6, 8)) %>%
-#   split(., seq(nrow(.)))
-# 
-# Ncores <- detectCores()
-# cl <- makeCluster(Ncores) #save two cores
-# registerDoParallel(cl)
-# clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
-#                    library(RcppArmadillo)))
-# clusterExport(cl, c("eyMat", "find_dfa_trends", "ranges"),
-#               envir=environment())
-# tic("run in parallel")
-# dum <- parLapply(cl, ranges, function(x) {
-#   find_dfa_trends(y = eyMat, iter = 3000, kmin = x$min, kmax = x$max,
-#                   chains = 4, compare_normal = TRUE, zscore = TRUE,
-#                   variance =  "unequal",  
-#                   control = list(adapt_delta = 0.95, max_treedepth = 20))
-# })
-# stopCluster(cl) #end cluster
-# toc()
+Ncores <- detectCores()
+cl <- makeCluster(Ncores - 4) #save two cores
+registerDoParallel(cl)
+clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
+                   library(RcppArmadillo)))
+clusterExport(cl, c("eyMat", "find_dfa_trends", "survList"),
+              envir=environment())
+tic("run in parallel")
+dum <- parLapply(cl, survList, function(x) {
+  matIn <- x %>%
+    select(OEY, stock, surv) %>%
+    spread(key = stock, value = surv) %>%
+    select(-OEY) %>% 
+    as.matrix() %>% 
+    t()
+  maxTrends <- min(nrow(matIn) - 1, 3)
+  find_dfa_trends(y = matIn, iter = 4000, kmin = 1, kmax = maxTrends,
+                  chains = 4, compare_normal = TRUE, zscore = TRUE,
+                  variance =  "equal",
+                  control = list(adapt_delta = 0.97, 
+                                 max_treedepth = 20))
+})
+stopCluster(cl) #end cluster
+toc()
+
 ```

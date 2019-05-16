@@ -18,9 +18,12 @@ fitDFA <- function(mat, inR, inM, maxIteration = 500, subDirName) {
   outName <- paste("fitMod", inM, rapportools::tocamel(inR), "rds", sep=".")
   
   #save data 
-  dir.create(here::here("data", "dfaFits", subDirName),
-             recursive = TRUE, showWarnings = FALSE)
-  saveRDS(fitMod, here::here("data", "dfaFits", subDirName, outName))
+  dirPath <- paste("C:/github/chinDyn/data/dfaFits/", subDirName, sep = "")
+  dir.create(dirPath, recursive = TRUE, showWarnings = FALSE)
+  saveRDS(fitMod, paste(dirPath, outName, sep = "/"))
+  # dir.create(here::here("data", "dfaFits", subDirName),
+  #            recursive = TRUE, showWarnings = FALSE)
+  # saveRDS(fitMod, here::here("data", "dfaFits", subDirName, outName))
 }
 
 

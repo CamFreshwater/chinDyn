@@ -71,27 +71,26 @@ dfaTest <- MARSS(eyMatZ, model = modelList, z.score = TRUE, form = "dfa",
 
 
 ## Fit models in parallel using multiple cores
-# inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov")
+inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov")
 inMList <- list(1, 2, 3, 4, 5)
 subDir <- "full_OEY"
-# for (i in seq_along(inRSeq)) {
+for (i in seq_along(inRSeq)) {
   Ncores <- detectCores()
-  # inRDum <- inRSeq[i]
+  inRDum <- inRSeq[i]
   cl <- makeCluster(Ncores - 4) #save two cores
   registerDoParallel(cl)
   clusterEvalQ(cl, c(library(MARSS), library(here), library(Rcpp),
                      library(RcppArmadillo)))
-  clusterExport(cl, c("eyMatZ", "inMList", "fitDFA", "subDir"),
+  clusterExport(cl, c("eyMatZ", "inRDum", "inMList", "fitDFA", "subDir"),
                 envir=environment())
   tic("run in parallel")
   parLapply(cl, inMList, function(x) {
-    fitDFA(eyMatZ, inR = "diagonal and unequal", inM = x, maxIteration = 2000, 
+    fitDFA(eyMatZ, inR = inRDum, inM = x, maxIteration = 2000, 
            subDirName = subDir)
   })
   stopCluster(cl) #end cluster
   toc()
-# }
-
+}
 
 summ <- getTopDFA(subDir)
 summ[[2]]

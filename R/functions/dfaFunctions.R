@@ -11,19 +11,19 @@ fitDFA <- function(mat, inR, inM, maxIteration = 500, subDirName) {
                   form = "dfa", z.score  = TRUE)
   #If faster algorithm fails to converge use alternative
   while(fitMod$convergence != 0) {
-    fitMod <- MARSS(mat, model = dfaModel, control = list(maxit = 4000),
+    fitMod <- MARSS(mat, model = dfaModel, control = list(maxit = 8000),
                     inits = as.matrix(coef(fitMod)[1]), form = "dfa", 
                     z.score  = TRUE, method = "BFGS-kf")
   }
   outName <- paste("fitMod", inM, rapportools::tocamel(inR), "rds", sep=".")
   
   #save data 
-  dirPath <- paste("C:/github/chinDyn/data/dfaFits/", subDirName, sep = "")
-  dir.create(dirPath, recursive = TRUE, showWarnings = FALSE)
-  saveRDS(fitMod, paste(dirPath, outName, sep = "/"))
-  # dir.create(here::here("data", "dfaFits", subDirName),
-  #            recursive = TRUE, showWarnings = FALSE)
-  # saveRDS(fitMod, here::here("data", "dfaFits", subDirName, outName))
+  # dirPath <- paste("C:/github/chinDyn/data/dfaFits/", subDirName, sep = "")
+  # dir.create(dirPath, recursive = TRUE, showWarnings = FALSE)
+  # saveRDS(fitMod, paste(dirPath, outName, sep = "/"))
+  dir.create(here::here("data", "dfaFits", subDirName),
+             recursive = TRUE, showWarnings = FALSE)
+  saveRDS(fitMod, here::here("data", "dfaFits", subDirName, outName))
 }
 
 
@@ -70,7 +70,7 @@ rotateTrends <- function(modIn, H){
   (solve(H) %*% modIn$states) %>% 
     t() %>% 
     as.data.frame() %>% 
-    mutate(year = broodYrs) %>% 
+    mutate(year = entryYrs) %>% 
     gather(key = "trend", value = "est", -year) %>% 
     mutate(trend = as.numeric(as.factor(trend)))
 }

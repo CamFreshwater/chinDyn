@@ -110,9 +110,9 @@ shinystan::launch_shinystan(equalMod$model)
 is_converged(indMod, threshold = 1.05)
 
 indR <- rotate_trends(indMod)
-indTrends <- plot_trends(indTrends)
+indTrends <- plot_trends(indR)
 equalR <- rotate_trends(equalMod)
-equalTrends <- plot_trends(equalTrends)
+equalTrends <- plot_trends(equalR)
 ggpubr::ggarrange(indTrends, equalTrends, ncol = 1, nrow = 2)
 
 indLoadings <- plot_loadings(indR) +
@@ -164,6 +164,13 @@ convMat <- function(mat) {
 survList <- split(eyDatFull, eyDatFull$grp) %>% 
  lapply(., convMat)
 
+listStkNames <- lapply(survList, function(x) {
+  name <- rownames(x)
+  numSeq <- seq(1, length(name), by = 1)
+  out <- vector(mode = "character", length = length(numSeq))
+  setNames(name, numSeq)
+})
+
 #set up trend inputs to allow for parallel processing
 # Ncores <- detectCores()
 # cl <- makeCluster(Ncores - 4) #save two cores
@@ -183,15 +190,13 @@ survList <- split(eyDatFull, eyDatFull$grp) %>%
 # stopCluster(cl) #end cluster
 # toc()
 
-# saveRDS(dum, here::here("data", "dfaBayesFits",
-#                         "coastWide_diffCorStructures_findTrends.rds"))
+# saveRDS(dum, here::here("data", "dfaBayesFits", "coastWide_findTrends.rds"))
 ```
 
-Oddly all groups favor relatively complex models with at least 3 trends. Student-t models typically do approximately as well, suggesting there is little support for fitting more complex heavy-tailed variance structures.
+Oddly all groups favor relatively complex models with at least 3 trends. Student-t models typically do approximately as well, suggesting there is little support for fitting more complex heavy-tailed variance structures. 
 
 ```{r groupModSel}
-dum <- readRDS(here::here("data", "dfaBayesFits",
-                        "coastWide_diffCorStructures_findTrends.rds"))
+dum <- readRDS(here::here("data", "dfaBayesFits", "coastWide_findTrends.rds"))
 lapply(seq_along(survList), function(x) 
   dum[[x]]$summary %>% 
     arrange(looic) %>% 
@@ -200,22 +205,64 @@ lapply(seq_along(survList), function(x)
   do.call(rbind, .)
 ```
 
+Trends vary by group. For example, ocean types in both the south and the north are characterized by a steep decline in productivity through the 70s, then relatively stable dynamics. Stream-type Salish Sea show a relatively weak trend, while stream type north were fairly stable until recently. 
+
 ```{r groupTrends}
 trendsByGroups <- function(x) {
   mod <- x$best_model
   plot_trends(mod)
 }
-trendList <- lapply(seq_along(dum), function(x) {
+rotList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]$best_model
-  rotTrends <- rotate_trends(mod)
-  p <- plot_trends(rotTrends)
-  return(p)
+  rotate_trends(mod)
   })
-for (i in seq_along(trendList)) {
-  p <- trendList[[i]] +
-    ggtitle(names(survList)[i])
-  print(p)
+trendList <- lapply(seq_along(rotList), function(x) {
+  p <- plot_trends(rotList[[x]]) +
+    ggtitle(names(survList)[x])
+  return(p)
+})
+saveRDS(rotList, here::here("data", "dfaBayesFits",
+                        "coastWide_estTrends_topModels.rds"))
+png(here("figs", "dfa", "coastTrends.png"), height = 8, 
+    width = 6, units = "in", res = 300)
+ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], 
+                  trendList[[4]],  ncol = 1, nrow = 4)
+dev.off()
+```
+
+Loadings within a group are reasonable, though no stocks load with any certainty on the third trend. Additionally the strongest response is typically driven by a subset of populations with longest time series.
+
+```{r groupLoadings}
+loadList <- lapply(seq_along(rotList), function(x) {
+  p <- plot_loadings(rotList[[x]]) +
+    ggtitle(names(survList)[x]) +
+    ylim(-2, 2)
+  return(p)
+})
+
+png(here("figs", "dfa", "coastLoadings.png"), height = 9, 
+    width = 6, units = "in", res = 300)
+ggpubr::ggarrange(loadList[[1]], loadList[[2]], loadList[[3]], 
+                  loadList[[4]],  ncol = 1, nrow = 4, common.legend = TRUE)
+dev.off()
+```
+
+Generally fits seem to be quite robust.
+
+```{r groupFits}
+fitList <- lapply(seq_along(dum), function(x) {
+    mod <- dum[[x]]$best_model
+    p <- plot_fitted(mod) +
+      ggtitle(names(survList)[x]) +
+      facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]), 
+                 scales = "free_y")
+    return(p)
+})
+for(x in seq_along(fitList)) {
+  fileName <- paste(names(survList)[x], "3TrendFits.png", sep = "_")
+  png(here("figs", "dfa", fileName), height = 5, 
+    width = 6, units = "in", res = 300)
+  plot(fitList[[x]])
+  dev.off()
 }
-ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], trendList[[2]],
-                  ncol = 1, nrow = 4)
 ```

@@ -153,45 +153,69 @@ eyDatFull <- eyDat %>%
   select(-stockName, -jurisdiction, -lat, -long)
 
 #split into lists 
-survList <- split(eyDatFull, eyDatFull$grp)
-
-# eyMatFull <- eyDatFull %>%
-#   select(OEY, stock, surv) %>%
-#   spread(key = stock, value = surv) %>%
-#   select(-OEY) %>% 
-#   as.matrix() %>% 
-#   t()
-# entryYrs <- unique(eyDatTrim$OEY)
-# colnames(eyMatFull) <- entryYrs
-# 
-# nStks <- nrow(eyMatFull)
-# nYrs <- ncol(eyMatFull)
-# stkID <- rownames(eyMatFull)
-
-#set up trend inputs to allow for parallel processing
-Ncores <- detectCores()
-cl <- makeCluster(Ncores - 4) #save two cores
-registerDoParallel(cl)
-clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
-                   library(RcppArmadillo)))
-clusterExport(cl, c("eyMat", "find_dfa_trends", "survList"),
-              envir=environment())
-tic("run in parallel")
-dum <- parLapply(cl, survList, function(x) {
-  matIn <- x %>%
+convMat <- function(mat) {
+  mat %>% 
     select(OEY, stock, surv) %>%
     spread(key = stock, value = surv) %>%
     select(-OEY) %>% 
     as.matrix() %>% 
     t()
-  maxTrends <- min(nrow(matIn) - 1, 3)
-  find_dfa_trends(y = matIn, iter = 4000, kmin = 1, kmax = maxTrends,
-                  chains = 4, compare_normal = TRUE, zscore = TRUE,
-                  variance =  "equal",
-                  control = list(adapt_delta = 0.97, 
-                                 max_treedepth = 20))
-})
-stopCluster(cl) #end cluster
-toc()
+}
+survList <- split(eyDatFull, eyDatFull$grp) %>% 
+ lapply(., convMat)
 
+#set up trend inputs to allow for parallel processing
+# Ncores <- detectCores()
+# cl <- makeCluster(Ncores - 4) #save two cores
+# registerDoParallel(cl)
+# clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
+#                    library(RcppArmadillo), library(dplyr)))
+# clusterExport(cl, c("find_dfa_trends", "survList"), envir=environment())
+# tic("run in parallel")
+# dum <- parLapply(cl, survList, function(x) {
+#   maxTrends <- min(nrow(x) - 1, 3)
+#   find_dfa_trends(y = x, iter = 4000, kmin = 1, kmax = maxTrends,
+#                   chains = 4, compare_normal = TRUE, zscore = TRUE,
+#                   variance =  "equal",
+#                   control = list(adapt_delta = 0.97, 
+#                                  max_treedepth = 20))
+# })
+# stopCluster(cl) #end cluster
+# toc()
+
+# saveRDS(dum, here::here("data", "dfaBayesFits",
+#                         "coastWide_diffCorStructures_findTrends.rds"))
+```
+
+Oddly all groups favor relatively complex models with at least 3 trends. Student-t models typically do approximately as well, suggesting there is little support for fitting more complex heavy-tailed variance structures.
+
+```{r groupModSel}
+dum <- readRDS(here::here("data", "dfaBayesFits",
+                        "coastWide_diffCorStructures_findTrends.rds"))
+lapply(seq_along(survList), function(x) 
+  dum[[x]]$summary %>% 
+    arrange(looic) %>% 
+    mutate(group = names(survList)[x])
+  ) %>% 
+  do.call(rbind, .)
+```
+
+```{r groupTrends}
+trendsByGroups <- function(x) {
+  mod <- x$best_model
+  plot_trends(mod)
+}
+trendList <- lapply(seq_along(dum), function(x) {
+  mod <- dum[[x]]$best_model
+  rotTrends <- rotate_trends(mod)
+  p <- plot_trends(rotTrends)
+  return(p)
+  })
+for (i in seq_along(trendList)) {
+  p <- trendList[[i]] +
+    ggtitle(names(survList)[i])
+  print(p)
+}
+ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], trendList[[2]],
+                  ncol = 1, nrow = 4)
 ```

@@ -3,19 +3,16 @@
 # Script to fit DFAs by region; output visualized in chinDFAOutput.Rmd
 # -----
 
-listOfPackages <- c("here", "MARSS", "tidyverse", "ggplot2", "parallel",
+listOfPackages <- c("here", "MARSS", "tidyverse", "ggplot2", "parallel", 
                     "doParallel", "foreach", "tictoc")
-lapply(listOfPackages, require, character.only = TRUE)
+lapply(listOfPackages, library, character.only = TRUE)
 
-# byDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_BY.csv"), 
-#                   stringsAsFactors = FALSE)
-eyDatF <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"),
+eyDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
                   stringsAsFactors = FALSE)
-# eyDat <- read.csv("C:/github/chinDyn/data/salmonData/CLEANcwtInd_age2SR_OEY.csv", 
-#                   stringsAsFactors = FALSE)
-source("C:/github/chinDyn/R/functions/dfaFunctions.R")
 
-eyDat <- eyDatF %>% 
+source(here("R/functions/dfaFunctions.R"))
+
+eyDatFull <- eyDat %>% 
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          aggReg = case_when(
@@ -26,11 +23,9 @@ eyDat <- eyDatF %>%
            TRUE ~ "SS"
          )) %>% 
   mutate(grp = paste(smoltType, aggReg, sep = "_")) %>% 
-  group_by(stock) %>% 
-  mutate(survZ = as.numeric(scale(surv))) %>%
-  ungroup(stock) %>% 
   arrange(grp) %>% 
   mutate(stock = factor(stock, unique(stock))) %>% 
+  filter(!grp %in% c("oceantype_north", "streamtype_south")) %>% 
   select(-stockName, -jurisdiction, -lat, -long)
 
 
@@ -51,42 +46,42 @@ sapply(grpSeq, function(x) plotSurvZ(x))
 
 ### Fit DFA
 #Convert to matrices (necessary for DFA)
-eyMatZ <- eyDat %>%
-  select(OEY, stock, survZ) %>% 
-  spread(key = stock, value = survZ) %>% 
+eyMat <- eyDatFull %>%
+  select(OEY, stock, surv) %>% 
+  spread(key = stock, value = surv) %>% 
   select(-OEY) %>% 
   as.matrix() %>% 
   t()
 entryYrs <- unique(eyDat$OEY)
-colnames(eyMatZ) <- entryYrs
+colnames(eyMat) <- entryYrs
 
-nStks <- nrow(eyMatZ)
-nYrs <- ncol(eyMatZ)
-stkID <- rownames(eyMatZ)
+nStks <- nrow(eyMat)
+nYrs <- ncol(eyMat)
+stkID <- rownames(eyMat)
 
 #preliminary model fit test
 modelList <- list(m = 2, R = "diagonal and equal")
 cntrList <- list(maxit = 200)
-dfaTest <- MARSS(eyMatZ, model = modelList, z.score = TRUE, form = "dfa", 
+dfaTest <- MARSS(eyMat, model = modelList, z.score = TRUE, form = "dfa", 
                  control = cntrList, method = "kem")
 
 
 ## Fit models in parallel using multiple cores
 inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov")
-inMList <- list(1, 2, 3, 4, 5)
+inMList <- list(2, 3, 4, 5)
 subDir <- "full_OEY"
-for (i in seq_along(inRSeq)) {
+# for (i in seq_along(inRSeq)) {
   Ncores <- detectCores()
-  inRDum <- inRSeq[i]
+  inRDum <- "diagonal and unequal"#inRSeq[i]
   cl <- makeCluster(Ncores - 4) #save two cores
   registerDoParallel(cl)
   clusterEvalQ(cl, c(library(MARSS), library(here), library(Rcpp),
                      library(RcppArmadillo)))
-  clusterExport(cl, c("eyMatZ", "inRDum", "inMList", "fitDFA", "subDir"),
+  clusterExport(cl, c("eyMat", "inRDum", "inMList", "fitDFA", "subDir"),
                 envir=environment())
   tic("run in parallel")
   parLapply(cl, inMList, function(x) {
-    fitDFA(eyMatZ, inR = inRDum, inM = x, maxIteration = 2000, 
+    fitDFA(eyMat, inR = inRDum, inM = x, maxIteration = 3000, 
            subDirName = subDir)
   })
   stopCluster(cl) #end cluster

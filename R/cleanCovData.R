@@ -43,38 +43,30 @@ trimDiet <- diet %>%
   select(year, fishDietAnom) 
 
 ## ZP data
-scale_this <- function(x){
-  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
-}
 trimNewport <- newportCope %>% 
   filter(Month %in% seq(5, 9, by = 1)) %>% 
   group_by(Year) %>% 
   mutate(meanCCI = mean(CCI)) %>% 
-  select(Year, meanCCI) %>% 
-  distinct()
-
-trimNewport %>% 
-  mutate(zMeanCCI = scale_this(meanCCI))
-
-
-ggplot(trimNewport, aes(x = Year, y = meanCCI)) +
-  geom_line() +
-  # scale_colour_viridis_d() +
-  samSim::theme_sleekX()
+  ungroup() %>% 
+  select(year = Year, meanCCI) %>% 
+  distinct() %>% 
+  mutate(cciAnom = scale(meanCCI)[,1])
 
 trimSoG <- sogZP %>% 
   mutate(zpEnvAnom = scale(TotalZooplBiomAnom),
          fishEnvAnom = scale(TotalFishBiomAnom)) %>% 
   select(year = Year, zpEnvAnom, fishEnvAnom)
+
 trimEnv <- viZP %>% 
   mutate(borealAnom = scale(boreal)) %>% 
   select(year = Year, borealAnom) %>% 
-  left_join(trimSoG, by = "year")
+  full_join(trimSoG, by = "year") %>% 
+  full_join(trimNewport %>% select(-meanCCI), by = "year")
 
 plotEnv <- trimEnv %>% 
-  gather(key = "var", value = "anomaly", -Year)
+  gather(key = "var", value = "anomaly", -year)
 
-ggplot(plotEnv, aes(x = Year, y = anomaly, colour = var)) +
+ggplot(plotEnv, aes(x = year, y = anomaly, colour = var)) +
   geom_line() +
   scale_colour_viridis_d() +
   samSim::theme_sleekX()
@@ -93,8 +85,8 @@ trimSeal <- seals %>%
   select(year, sealAnom)
 
 ## consolidate all
-covOut <- trimDiet %>% 
-  left_join(trimEnv, by = "year") %>% 
-  left_join(trimSeal, by = "year")
+covOut <- trimSeal %>% 
+  full_join(trimDiet, by = "year") %>% 
+  full_join(trimEnv, by = "year")
 
 write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)

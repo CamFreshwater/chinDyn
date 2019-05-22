@@ -216,14 +216,17 @@ rotList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]$best_model
   rotate_trends(mod)
   })
+
+names(rotList) <- names(survList)
+saveRDS(rotList, here::here("data", "dfaBayesFits",
+                        "coastWide_estTrends_topModels.rds"))
+
 trendList <- lapply(seq_along(rotList), function(x) {
   p <- plot_trends(rotList[[x]]) +
     ggtitle(names(survList)[x])
   return(p)
 })
-saveRDS(rotList, here::here("data", "dfaBayesFits",
-                        "coastWide_estTrends_topModels.rds"))
-png(here("figs", "dfa", "coastTrends.png"), height = 8, 
+png(here("figs", "dfa", "rangeWideBayes", "coastTrends.png"), height = 8, 
     width = 6, units = "in", res = 300)
 ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], 
                   trendList[[4]],  ncol = 1, nrow = 4)
@@ -240,7 +243,7 @@ loadList <- lapply(seq_along(rotList), function(x) {
   return(p)
 })
 
-png(here("figs", "dfa", "coastLoadings.png"), height = 9, 
+png(here("figs", "dfa", "rangeWideBayes", "coastLoadings.png"), height = 9, 
     width = 6, units = "in", res = 300)
 ggpubr::ggarrange(loadList[[1]], loadList[[2]], loadList[[3]], 
                   loadList[[4]],  ncol = 1, nrow = 4, common.legend = TRUE)
@@ -260,7 +263,7 @@ fitList <- lapply(seq_along(dum), function(x) {
 })
 for(x in seq_along(fitList)) {
   fileName <- paste(names(survList)[x], "3TrendFits.png", sep = "_")
-  png(here("figs", "dfa", fileName), height = 5, 
+  png(here("figs", "dfa", "rangeWideBayes", fileName), height = 5, 
     width = 6, units = "in", res = 300)
   plot(fitList[[x]])
   dev.off()

@@ -4,7 +4,8 @@
 # 1. Harbor seal population abundance from Strahan Tucker (rawData/sealdata); 
 # input data are estimated abundances from population growth models using the 
 # "standard" correction factor
-# 2. Zooplankton data from Ian Perry (rawData/zpData)
+# 2. Zooplankton data from Ian Perry (IOS) and Cheryl Morgan (NOAA Newport) 
+# (rawData/zpData)
 # 3. Juvenile stomach contents data
 # -----
 
@@ -17,6 +18,8 @@ sogZP <- read.csv(here("data/salmonData/totalPreyAnomalies_SOG.csv"),
                   stringsAsFactors = FALSE)
 viZP <- read.csv(here("data/salmonData/totalPreyAnomalies_sVI.csv"),
                  stringsAsFactors = FALSE)
+newportCope <- read.csv(here("data/salmonData/copeIndices_newport.csv"),
+                        stringsAsFactors = FALSE)
 diet <- read.csv(here("data/salmonData/ckSummerDiet.csv"), 
                  stringsAsFactors = FALSE)
 #-----
@@ -37,9 +40,28 @@ ggplot(plotDiet, aes(x = year, y = ppn, fill = group)) +
 
 trimDiet <- diet %>% 
   mutate(fishDietAnom = scale(teleostei)) %>% 
-  select(year, fishDietAnom)
-  
+  select(year, fishDietAnom) 
+
 ## ZP data
+scale_this <- function(x){
+  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
+}
+trimNewport <- newportCope %>% 
+  filter(Month %in% seq(5, 9, by = 1)) %>% 
+  group_by(Year) %>% 
+  mutate(meanCCI = mean(CCI)) %>% 
+  select(Year, meanCCI) %>% 
+  distinct()
+
+trimNewport %>% 
+  mutate(zMeanCCI = scale_this(meanCCI))
+
+
+ggplot(trimNewport, aes(x = Year, y = meanCCI)) +
+  geom_line() +
+  # scale_colour_viridis_d() +
+  samSim::theme_sleekX()
+
 trimSoG <- sogZP %>% 
   mutate(zpEnvAnom = scale(TotalZooplBiomAnom),
          fishEnvAnom = scale(TotalFishBiomAnom)) %>% 

@@ -174,4 +174,48 @@ sapply(seq_along(grps), function(x) {
 })
 
 
+### Repeat above but with seals as a covariate
+sealDat <- read.csv(here("data/salmonData/survCovariateAnom.csv"), 
+                stringsAsFactors = FALSE) %>% 
+  select(OEY = year, sealAnom)
 
+ssDat <- eyDat %>%
+  filter(grp %in% c("oceantype_SS", "streamtype_SS")) %>% 
+  full_join(sealDat, by = "OEY") %>% 
+  filter(!is.na(sealAnom),
+         !OEY < 1972) %>% 
+  arrange(OEY)
+ssMat <- ssDat %>% 
+  select(OEY, stock, surv) %>% 
+  spread(key = stock, value = surv) %>% 
+  select(-OEY) %>% 
+  as.matrix() %>% 
+  t()
+entryYrs <- unique(ssDat$OEY)
+colnames(ssMat) <- entryYrs
+
+nStks <- nrow(ssMat)
+nYrs <- ncol(ssMat)
+stkID <- rownames(ssMat)
+
+sealMat <- ssDat %>%
+  filter(stock == "SPS") %>% 
+  select(sealAnom) %>% 
+  as.matrix() %>%
+  t()
+colnames(sealMat) <- entryYrs
+  
+
+#preliminary model fit test
+modelList <- list(m = 3, R = "diagonal and equal")
+cntrList <- list(maxit = 2500)
+fitMod <- MARSS(ssMat, model = modelList, z.score = TRUE, form = "dfa", 
+                 control = cntrList, method = "kem", covariates = sealMat)
+while(fitMod$convergence != 0) {
+  fitMod <- MARSS(ssMat, model = modelList, z.score = TRUE,
+                  control = list(maxit = 8000),
+                  inits = as.matrix(coef(fitMod)[1]), form = "dfa", 
+                  z.score  = TRUE, method = "BFGS-kf", covariates = sealMat)
+}
+
+saveRDS(fitMod, here::here("data", "dfaFits", "twoTrend_seal_fits.Rds"))

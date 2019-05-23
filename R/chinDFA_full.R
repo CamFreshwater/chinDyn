@@ -7,12 +7,12 @@ listOfPackages <- c("here", "MARSS", "tidyverse", "ggplot2", "parallel",
                     "doParallel", "foreach", "tictoc")
 lapply(listOfPackages, library, character.only = TRUE)
 
-eyDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
+eyDatFull <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
                   stringsAsFactors = FALSE)
 
 source(here("R/functions/dfaFunctions.R"))
 
-eyDatFull <- eyDat %>% 
+eyDat <- eyDatFull %>% 
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          aggReg = case_when(
@@ -46,7 +46,7 @@ sapply(grpSeq, function(x) plotSurvZ(x))
 
 ### Fit DFA
 #Convert to matrices (necessary for DFA)
-eyMat <- eyDatFull %>%
+eyMat <- eyDat %>%
   select(OEY, stock, surv) %>% 
   spread(key = stock, value = surv) %>% 
   select(-OEY) %>% 
@@ -67,7 +67,7 @@ dfaTest <- MARSS(eyMat, model = modelList, z.score = TRUE, form = "dfa",
 
 
 ## Fit models in parallel using multiple cores
-inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov")
+# inRSeq <- c("diagonal and equal", "diagonal and unequal", "equalvarcov")
 inMList <- list(2, 3, 4, 5)
 subDir <- "full_OEY"
 # for (i in seq_along(inRSeq)) {
@@ -90,13 +90,12 @@ subDir <- "full_OEY"
 
 summ <- getTopDFA(subDir)
 summ[[2]]
-### Difficulty getting even low trend models to converge but explore anyways
 
 ## Explore fit of top model
-# mod1 <- summ[[1]]
+mod1 <- summ[[1]]
 
 mod1 <- readRDS(here::here("data", "dfaFits", subDir, 
-                           "fitMod.2.equalvarcov.rds"))
+                           "fitMod.4.diagonalAndUnequal.rds"))
 
 estZ <- coef(mod1, type = "matrix")$Z
 #retrieve rotated matrix
@@ -106,40 +105,73 @@ invH <- if (ncol(estZ) > 1) {
   1
 }
 
+# Loadings
 rotZ <- rotateLoadings(zIn = estZ, H = invH, stkNames = stkID, 
                        survDat = eyDat) %>% 
   inner_join(eyDat %>% select(stock, grp), 
              by = "stock") %>% 
   distinct() %>% 
-  arrange(grp) %>% 
-  mutate(stock = factor(stock, unique(stock)))
+  arrange(grp, stock) %>% 
+  mutate(stock = factor(stock, unique(stock)),
+         #invert T1 and T2 to make more intuitive
+         loadingT = case_when(
+           trend %in% c("1", "2", "4") ~ (loading * -1), 
+           TRUE ~ loading
+         ))
 
-ggplot(rotZ, aes(x = stock, y = loading, fill = grp)) +
+png(here("figs", "dfa", "globalMARSS", "4Trends_loadings.png"), height = 5.5, 
+    width = 9.5, units = "in", res = 300)
+ggplot(rotZ, aes(x = stock, y = loadingT, fill = grp)) +
   geom_col() +
   samSim::theme_sleekX(axisSize = 9, legendSize = 0.7) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
   facet_wrap(~trend)
+dev.off()
 
-rotTrends <- rotateTrends(modIn = mod1, H = invH)
-ggplot(rotTrends, aes(x = year, y = est)) +
+# Trends
+rotTrends <- rotateTrends(modIn = mod1, H = invH) %>% 
+  mutate(estT = case_when(
+    trend %in% c("1", "2", "4") ~ (est * -1), 
+    TRUE ~ est
+  ))
+  
+png(here("figs", "dfa", "globalMARSS", "est4Trends.png"), height = 6, 
+    width = 6, units = "in", res = 300)
+ggplot(rotTrends, aes(x = year, y = estT)) +
   geom_line() +
   samSim::theme_sleekX() +
   geom_hline(yintercept = 0, colour = "red") +
   facet_wrap(~trend)
+dev.off()
 
+#Fits
 modOutCI <- broom::augment(mod1, interval = "confidence") %>% 
   dplyr::rename(stock = .rownames) %>% 
   inner_join(eyDat %>% select(stock, region, grp), by = "stock") %>% 
   distinct() %>% 
-  arrange(grp) %>% 
+  arrange(grp, stock) %>% 
   mutate(year = t + 1984, #add so that year is correct 
          stock = factor(stock, unique(stock)))
 
-ggplot(modOutCI) +
-  geom_line(aes(x = year, y = .fitted)) +
-  geom_point(aes(x = year, y = y, colour = grp)) +
-  geom_ribbon(aes(x = year, ymin = .conf.low, ymax = .conf.up), linetype = 2, 
-              alpha = 0.2) +
-  facet_wrap(~stock)
+grps <- unique(modOutCI$grp)
+sapply(seq_along(grps), function(x) {
+  dum <- modOutCI %>% 
+    filter(grp == grps[x])
+  p <- ggplot(dum) +
+    geom_line(aes(x = year, y = .fitted)) +
+    geom_point(aes(x = year, y = y)) +
+    geom_ribbon(aes(x = year, ymin = .conf.low, ymax = .conf.up), linetype = 2, 
+                alpha = 0.2) +
+    ggtitle(grps[x]) +
+    samSim::theme_sleekX() +
+    facet_wrap(~stock)
+  
+  fileName <- paste(grps[x], "4trends_fits.png", sep = "_")
+  png(here("figs", "dfa", "globalMARSS", fileName), height = 5, 
+      width = 6, units = "in", res = 300)
+  print(p)
+  dev.off()
+})
+
 
 

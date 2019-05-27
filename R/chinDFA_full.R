@@ -217,8 +217,11 @@ while(fitMod$convergence != 0) {
                   z.score  = TRUE, method = "BFGS-kf", covariates = sealMat)
 }
 
-saveRDS(fitMod2, here::here("data", "dfaFits", "twoTrend_seal_fits.Rds"))
+# saveRDS(fitMod2, here::here("data", "dfaFits", "twoTrend_seal_fits.Rds"))
 
+# fitMod3 <- readRDS(here::here("data", "dfaFits", "threeTrend_seal_fits.Rds"))
+fitMod <- readRDS(here::here("data", "dfaFits", "twoTrend_seal_fits.Rds"))
+#two trend model favored by AIC
 
 estZ <- coef(fitMod, type = "matrix")$Z
 #retrieve rotated matrix

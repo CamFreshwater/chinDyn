@@ -1,6 +1,6 @@
 ## chinDFA.R
 # May 22, 2019
-# Script to fit two trend Bayesian DFAs to each stock group based on model 
+# Script to fit three trend Bayesian DFAs to each stock group based on model 
 # selection results in chinBayesDFA.Rmd
 # -----
 
@@ -59,7 +59,7 @@ listStkNames <- lapply(survList, function(x) {
 # clusterExport(cl, c("fit_dfa", "survList"), envir=environment())
 # tic("run in parallel")
 # dum <- parLapply(cl, survList, function(x) {
-#   find_dfa_trends(y = x, kmin = 2, kmax = 2, zscore = TRUE, iter = 4000,
+#   find_dfa_trends(y = x, kmin = 3, kmax = 3, zscore = TRUE, iter = 4000,
 #                   chains = 4, control = list(adapt_delta = 0.97, 
 #                                              max_treedepth = 20),
 #                   compare_normal = TRUE, variance =  c("equal", "unequal"))
@@ -75,7 +75,7 @@ dum <- readRDS(here::here("data", "dfaBayesFits", "coastWide_fitTwoTrends.rds"))
 
 # Check model fits
 lapply(seq_along(survList), function(x) 
-  dum[[x]]$summary %>% 
+  fitMod[[x]]$summary %>% 
     arrange(looic) %>% 
     mutate(group = names(survList)[x])
 ) %>% 

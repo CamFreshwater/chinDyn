@@ -120,3 +120,44 @@ gatherList <- function(x, yrs, stks, names) {
            estimate = names) %>% 
     gather(key = "stock", value = "value", -year, -estimate)
 }
+
+
+##Modifications to plot trends
+plot_trendsX <- function(rotated_modelfit, years = NULL, 
+                          highlight_outliers = FALSE, threshold = 0.01,
+                          oneTrend = FALSE, startYr = 1972) {
+  rotated <- rotated_modelfit
+  n_ts <- dim(rotated$Z_rot)[2]
+  n_trends <- dim(rotated$Z_rot)[3]
+  n_years <- dim(rotated$trends_mean)[2]
+  if (is.null(years)) 
+    years <- seq_len(n_years)
+  df <- data.frame(x = c(t(rotated$trends_mean)), 
+                   lo = c(t(rotated$trends_lower)), 
+                   hi = c(t(rotated$trends_upper)), 
+                   trend = paste0("Trend ", 
+                                  sort(rep(seq_len(n_trends), n_years))), 
+                   time = rep(years, n_trends))
+  if (oneTrend == TRUE) {
+    dum <- df %>% 
+      dplyr::filter(trend == "Trend 1") %>% 
+      dplyr::mutate(timeT = (startYr - 1 + time))
+    p1 <- ggplot(dum, 
+                 aes_string(x = "timeT", y = "x")) + 
+      geom_ribbon(aes_string(ymin = "lo", ymax = "hi"), alpha = 0.4) + 
+      geom_line() + 
+      xlab("Year") + ylab("")
+  } else {
+    p1 <- ggplot(df, aes_string(x = "time", y = "x")) + 
+      geom_ribbon(aes_string(ymin = "lo", ymax = "hi"), 
+                  alpha = 0.4) + geom_line() + facet_wrap("trend") + 
+      xlab("Time") + ylab("")
+  }                                                                                                                   
+  if (highlight_outliers) {
+    swans <- find_swans(rotated, threshold = threshold)
+    df$outliers <- swans$below_threshold
+    p1 <- p1 + geom_point(data = df[which(df$outliers), ], 
+                          color = "red")
+  }
+  p1
+}

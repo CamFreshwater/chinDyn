@@ -96,11 +96,12 @@ escDat <- escDatWide %>%
                       "Nooksack.Spr", "Lake.Washington")) %>% 
   mutate(year = as.numeric(
     case_when(
-      Year > 74 & Year < 99 ~ paste("19", Year, sep = ""),
+      Year > 74 & Year < 100 ~ paste("19", Year, sep = ""),
       Year < 10 ~ paste("200", Year, sep =  ""),
       TRUE ~ paste("20", Year, sep = ""))
     )
-  )
+  ) %>% 
+  select(year, stock, esc)
 
 write.csv(escDat, here::here("data", "salmonData", "CLEANsalishSea_escData.csv"),
           row.names = FALSE)

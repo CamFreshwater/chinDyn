@@ -147,10 +147,15 @@ eyDatFull <- eyDat %>%
            TRUE ~ "SS"
          )) %>% 
   mutate(grp = paste(smoltType, aggReg, sep = "_")) %>% 
-  arrange(grp) %>% 
-  mutate(stock = factor(stock, unique(stock))) %>% 
   filter(!grp %in% c("oceantype_north", "streamtype_south")) %>% 
-  select(-stockName, -jurisdiction, -lat, -long)
+  arrange(desc(lat)) %>% 
+  mutate(stock = factor(stock, unique(stock)),
+         grp = factor(grp, unique(grp))) %>% 
+  select(-stockName, -jurisdiction, -lat, -long)  %>% 
+  mutate(grp = fct_recode(grp, "Yearling\nNorth" = "streamtype_north", 
+                          "Yearling\nSalish Sea" = "streamtype_SS", 
+                          "Subyearling\nSalish Sea" = "oceantype_SS",
+                          "Subyearling\nSouth" = "oceantype_south"))
 
 #split into lists 
 convMat <- function(mat) {
@@ -208,10 +213,6 @@ lapply(seq_along(survList), function(x)
 Trends vary by group. For example, ocean types in both the south and the north are characterized by a steep decline in productivity through the 70s, then relatively stable dynamics. Stream-type Salish Sea show a relatively weak trend, while stream type north were fairly stable until recently. 
 
 ```{r groupTrends}
-trendsByGroups <- function(x) {
-  mod <- x$best_model
-  plot_trends(mod)
-}
 rotList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]$best_model
   rotate_trends(mod)
@@ -222,15 +223,17 @@ saveRDS(rotList, here::here("data", "dfaBayesFits",
                         "coastWide_estTrends_topModels.rds"))
 
 trendList <- lapply(seq_along(rotList), function(x) {
-  p <- plot_trends(rotList[[x]]) +
-    ggtitle(names(survList)[x])
+  p <- plot_trendsX(rotList[[x]], oneTrend = TRUE, startYr = 1972) +
+    labs(title = names(survList)[x], x = "Ocean Entry Year", 
+          y = "Survival Anomaly") +
+    samSim::theme_sleekX()
   return(p)
 })
 png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov",
-         "coastTrends.png"), height = 8, 
+         "dominantCoastTrends.png"), height = 6, 
     width = 6, units = "in", res = 300)
 ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], 
-                  trendList[[4]],  ncol = 1, nrow = 4)
+                  trendList[[4]],  ncol = 2, nrow = 2)
 dev.off()
 ```
 
@@ -255,17 +258,25 @@ dev.off()
 Generally fits seem to be quite robust.
 
 ```{r groupFits}
+## shuffle order of dum list to match re-arranged grouping
+shuffSurv <- list(survList[4], survList[3], survList[1], survList[2])
+names(shuffSurv) <- c("Subyearling\nSouth", "Subyearling\nSalish Sea",
+                      "Yearling\nNorth", "Yearling\nSalish Sea" )
+
 fitList <- lapply(seq_along(dum), function(x) {
     mod <- dum[[x]]$best_model
     p <- plot_fitted(mod) +
-      ggtitle(names(survList)[x]) +
+      ggtitle(names(shuffSurv)[x]) +
       facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]), 
-                 scales = "free_y")
+                 scales = "free_y") +
+      samSim::theme_sleekX()
     return(p)
 })
 for(x in seq_along(fitList)) {
-  fileName <- paste(names(survList)[x], "3TrendFits.png", sep = "_")
-  png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov", fileName), height = 5, 
+  fileName <- paste(abbreviate(names(shuffSurv)[x], 6), "3TrendFits.png", 
+                    sep = "_")
+  png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov", fileName), 
+      height = 5, 
     width = 6, units = "in", res = 300)
   plot(fitList[[x]])
   dev.off()

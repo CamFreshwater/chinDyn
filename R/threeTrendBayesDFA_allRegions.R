@@ -34,6 +34,12 @@ eyDatFull <- eyDat %>%
                           "Subyearling\nSalish Sea" = "oceantype_SS",
                           "Subyearling\nSouth" = "oceantype_south"))
 
+eyDatFull %>% 
+  filter(aggReg == "SS") %>% 
+  select(stock, stockName, smoltType) %>% 
+  arrange(smoltType) %>% 
+  distinct()
+
 #split into lists 
 convMat <- function(mat) {
   mat %>% 

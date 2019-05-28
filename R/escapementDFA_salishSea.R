@@ -156,4 +156,57 @@ stopCluster(cl) #end cluster
 toc()
 
 saveRDS(dum, here::here("data", "dfaBayesFits",
-                        "salishSea_diffCorStructures_findTrends.rds"))
+                        "salishSeaEscapement_diffCorStructures_findTrends.rds"))
+
+lapply(dum, function(x) x$summary) %>% 
+  do.call(rbind, .) %>% 
+  arrange(looic)
+
+modOut <- dum[[1]]$best_model
+
+r1 <- rotate_trends(modOut)
+plot_trends(r1)
+plot_fitted(modOut)
+plot_loadings(r1) +
+  ylim(-3, 3)
+
+
+## Hacky version to alter plot_loadings
+# plot_fitted <- function (modelfit, names = NULL) 
+# {
+stkData <- data.frame(ID = c("Cowichan", "Fr. Spr. 1.2", "Fr. Spr. 1.3", 
+                "Fr. Summ. 0.3", "Fr. Summ. 1.3.", "Green", 
+                "Harrison", "L. Shuswap", "Lake Wash.", "Nanaimo",
+                "Nicola Spr. 1.2", "Nooksack Spr.", "Skagit Spr.", 
+                "Skagit Summ.", "Snohomish", "Stillaguamish", "Upp. SoG")) %>% 
+  mutate(lifeHistory = case_when(
+    ID %in% c("Fr. Spr. 1.2", "Fr. Spr. 1.3", "Fr. Summ. 1.3.",
+                   "Nicola Spr. 1.2", "Nooksack Spr.") ~ "yearling",
+    TRUE ~ "subyearling/mixed"
+  ))
+  
+n_ts <- dim(modOut$data)[1]
+# n_years <- dim(modOut$data)[2]
+pred <- predicted(modOut)
+df <- data.frame(ID = rep(stkData$ID, n_years), 
+                 Time = sort(rep(seq(1975, 2018, by = 1), n_ts)), 
+                 mean = c(t(apply(pred, c(3, 4), mean))), 
+                 lo = c(t(apply(pred, c(3, 4), quantile, 0.025))), 
+                 hi = c(t(apply(pred, c(3, 4), quantile, 0.975))), 
+                 y = c(modOut$data)) %>% 
+  full_join(stkData, by = "ID") %>% 
+  arrange(lifeHistory) %>% 
+  # mutate(ID = as.factor(ID)) %>% 
+  mutate(ID = factor(ID, unique(ID)))
+
+png(here("figs", "dfa", "salishSeaEsc.png"), height = 5.25, 
+    width = 8.5, units = "in", res = 300)
+ggplot(df, aes_string(x = "Time", y = "mean")) + 
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi"), alpha = 0.4) + 
+  geom_line() + 
+  geom_point(aes_string(x = "Time", y = "y", col = "lifeHistory"), 
+             size = 1, alpha = 0.6) + 
+  facet_wrap("ID", scales = "free_y") +
+  labs(x = "Return Year", y = "Survival Anomaly", col = "Life History") +
+  samSim::theme_sleekX(axisSize = 8, legendSize = 0.85)
+dev.off()

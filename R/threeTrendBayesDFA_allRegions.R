@@ -28,7 +28,7 @@ eyDatFull <- eyDat %>%
   arrange(desc(lat)) %>% 
   mutate(stock = factor(stock, unique(stock)),
          grp = factor(grp, unique(grp))) %>% 
-  select(-stockName, -jurisdiction, -lat, -long)  %>% 
+  select(-jurisdiction, -lat, -long)  %>% 
   mutate(grp = fct_recode(grp, "Yearling\nNorth" = "streamtype_north", 
                           "Yearling\nSalish Sea" = "streamtype_SS", 
                           "Subyearling\nSalish Sea" = "oceantype_SS",
@@ -45,6 +45,8 @@ convMat <- function(mat) {
 }
 survList <- split(eyDatFull, eyDatFull$grp) %>% 
   lapply(., convMat)
+
+
 
 listStkNames <- lapply(survList, function(x) {
   name <- rownames(x)
@@ -89,7 +91,7 @@ names(rotList) <- names(survList)
 trendList <- lapply(seq_along(rotList), function(x) {
   p <- plot_trendsX(rotList[[x]], oneTrend = TRUE, startYr = 1972) +
     labs(title = names(survList)[x], x = "Ocean Entry Year", 
-         y = "Survival Anomaly") +
+         y = "Survival Trend") +
     samSim::theme_sleekX()
   return(p)
 })
@@ -100,21 +102,23 @@ ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]],
                   trendList[[4]],  ncol = 2, nrow = 2)
 dev.off()
 
+
 fitList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]
   p <- plot_fittedX(mod, startYr = 1972) +
     ggtitle(names(survList)[x]) +
     facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]), 
                scales = "free_y") +
-    samSim::theme_sleekX()
+    samSim::theme_sleekX(axisSize = 9)
   return(p)
 })
 for(x in seq_along(fitList)) {
   fileName <- paste(abbreviate(names(survList)[x], 6), "3TrendFits.png", 
                     sep = "_")
   png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov", fileName), 
-      height = 5, 
-      width = 6, units = "in", res = 300)
+      height = 5.25, 
+      width = 6.5, units = "in", res = 300)
   plot(fitList[[x]])
   dev.off()
 }
+

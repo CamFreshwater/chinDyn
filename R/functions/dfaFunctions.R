@@ -161,3 +161,28 @@ plot_trendsX <- function(rotated_modelfit, years = NULL,
   }
   p1
 }
+
+
+plot_fittedX <- function (modelfit, names = NULL, startYr = 1972) 
+{
+  n_ts <- dim(modelfit$data)[1]
+  n_years <- dim(modelfit$data)[2]
+  pred <- predicted(modelfit)
+  df <- data.frame(ID = rep(seq_len(n_ts), n_years), 
+                   Time = sort(rep(seq_len(n_years), n_ts)), 
+                   mean = c(t(apply(pred, c(3, 4), mean))), 
+                   lo = c(t(apply(pred, c(3, 4), quantile, 0.025))), 
+                   hi = c(t(apply(pred, c(3,  4), quantile, 0.975))), 
+                   y = c(modelfit$data)) %>% 
+    dplyr::mutate(timeT = (startYr - 1 + Time))
+  if (!is.null(names)) {
+    df$ID <- names[df$ID]
+  }
+  p1 <- ggplot(df, aes_string(x = "timeT", y = "mean")) + 
+    geom_ribbon(aes_string(ymin = "lo",  ymax = "hi"), alpha = 0.4) + 
+    geom_line() + geom_point(aes_string(x = "timeT", y = "y"), col = "red", 
+                             size = 0.5, alpha = 0.4) + 
+    facet_wrap("ID",  scales = "free_y") + xlab("Ocean Entry Year") + 
+    ylab("Survival Anomaly")
+  p1
+}

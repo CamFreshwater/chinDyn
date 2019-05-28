@@ -15,10 +15,13 @@ First analysis will focus, as before, on Salish Sea only stocks so that these re
 listOfPackages <- c("here", "bayesdfa", "tidyverse", "ggplot2", "parallel", 
                     "doParallel", "foreach", "tictoc")
 lapply(listOfPackages, library, character.only = TRUE)
+
 #helper functions to fit and post-process DFA
 source(here("R/functions/dfaFunctions.R"))
+
 eyDat <- read.csv(here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
                   stringsAsFactors = FALSE)
+
 #focus on subset of BC pops for initial analyses
 eyDatTrim <- eyDat %>% 
   filter(region %in% c("LFR", "MFR", "UFR", "ECVI", "SPGSD", "NPGSD")) %>% 
@@ -28,6 +31,7 @@ eyDatTrim <- eyDat %>%
   arrange(region) %>% 
   mutate(stock = factor(stock, unique(stock))) %>% 
   select(-stockName, -jurisdiction, -lat, -long)
+
 eyMat <- eyDatTrim %>%
   select(OEY, stock, surv) %>%
   spread(key = stock, value = surv) %>%
@@ -36,6 +40,7 @@ eyMat <- eyDatTrim %>%
   t()
 entryYrs <- unique(eyDatTrim$OEY)
 colnames(eyMat) <- entryYrs
+
 nStks <- nrow(eyMat)
 nYrs <- ncol(eyMat)
 stkID <- rownames(eyMat)
@@ -45,12 +50,14 @@ Example below shows a 2 trend model (arbitrarily chosen) with loadings and trend
 
 ```{r bayesDFATestRun}
 options(mc.cores = parallel::detectCores())
+
 tic()
 f1 <- fit_dfa(y = eyMat, num_trends = 5, zscore = TRUE, iter = 3000, chains = 4,
               thin = 1, control = list(adapt_delta = 0.9, max_treedepth = 20))
 toc()
 is_converged(f1, threshold = 1.05)
 shinystan::launch_shinystan(f1$model)
+
 r1 <- rotate_trends(f1)
 plot_trends(r1)
 plot_fitted(f1)
@@ -65,6 +72,7 @@ distribution. However fitting the independent covariance structures takes a very
 datIn <- data.frame(normal = c(FALSE, TRUE), 
                      var = c("unequal", "equal")) %>%
   split(., seq(nrow(.)))
+
 # Ncores <- detectCores()
 # cl <- makeCluster(Ncores) #save two cores
 # registerDoParallel(cl)
@@ -81,12 +89,15 @@ datIn <- data.frame(normal = c(FALSE, TRUE),
 # })
 # stopCluster(cl) #end cluster
 # toc()
+
 # saveRDS(dum, here::here("data", "dfaBayesFits",
 #                         "salishSea_diffCorStructures_findTrends.rds"))
+
 dum <- readRDS(here::here("data", "dfaBayesFits",
                         "salishSea_diffCorStructures_findTrends.rds"))
 rbind(dum[[1]]$summary, dum[[2]]$summary) %>% 
   arrange(looic)
+
 ```
 
 The independent variance structure does provide much less uncertainty on the trend estimates and the loadings estimates are much more robust, presumably by accounting for differences among time series in how gappy they are. However the over fit on individual trends is fairly similar. 
@@ -94,22 +105,27 @@ The independent variance structure does provide much less uncertainty on the tre
 ```{r trendsAndLoadingsCov}
 indMod <- dum[[1]]$best_model
 equalMod <- dum[[2]]$best_model
+
 shinystan::launch_shinystan(equalMod$model)
 is_converged(indMod, threshold = 1.05)
+
 indR <- rotate_trends(indMod)
 indTrends <- plot_trends(indR)
 equalR <- rotate_trends(equalMod)
 equalTrends <- plot_trends(equalR)
 ggpubr::ggarrange(indTrends, equalTrends, ncol = 1, nrow = 2)
+
 indLoadings <- plot_loadings(indR) +
   ylim(-2, 2)
 equalLoadings <- plot_loadings(equalR) +
   ylim(-2, 2)
 ggpubr::ggarrange(indLoadings, equalLoadings, ncol = 1, nrow = 2)
+
 png(here("figs", "dfa", "salishSea_3trend_indCor_fits.png"), height = 5, 
     width = 6, units = "in", res = 300)
 plot_fitted(indMod)
 dev.off()
+
 png(here("figs", "dfa", "salishSea_3trend_eqCor_fits.png"), height = 5, 
     width = 6, units = "in", res = 300)
 plot_fitted(equalMod)
@@ -131,10 +147,16 @@ eyDatFull <- eyDat %>%
            TRUE ~ "SS"
          )) %>% 
   mutate(grp = paste(smoltType, aggReg, sep = "_")) %>% 
-  arrange(grp) %>% 
-  mutate(stock = factor(stock, unique(stock))) %>% 
   filter(!grp %in% c("oceantype_north", "streamtype_south")) %>% 
-  select(-stockName, -jurisdiction, -lat, -long)
+  arrange(desc(lat)) %>% 
+  mutate(stock = factor(stock, unique(stock)),
+         grp = factor(grp, unique(grp))) %>% 
+  select(-stockName, -jurisdiction, -lat, -long)  %>% 
+  mutate(grp = fct_recode(grp, "Yearling\nNorth" = "streamtype_north", 
+                          "Yearling\nSalish Sea" = "streamtype_SS", 
+                          "Subyearling\nSalish Sea" = "oceantype_SS",
+                          "Subyearling\nSouth" = "oceantype_south"))
+
 #split into lists 
 convMat <- function(mat) {
   mat %>% 
@@ -146,12 +168,14 @@ convMat <- function(mat) {
 }
 survList <- split(eyDatFull, eyDatFull$grp) %>% 
  lapply(., convMat)
+
 listStkNames <- lapply(survList, function(x) {
   name <- rownames(x)
   numSeq <- seq(1, length(name), by = 1)
   out <- vector(mode = "character", length = length(numSeq))
   setNames(name, numSeq)
 })
+
 #set up trend inputs to allow for parallel processing
 # Ncores <- detectCores()
 # cl <- makeCluster(Ncores - 4) #save two cores
@@ -170,6 +194,7 @@ listStkNames <- lapply(survList, function(x) {
 # })
 # stopCluster(cl) #end cluster
 # toc()
+
 # saveRDS(dum, here::here("data", "dfaBayesFits", "coastWide_findTrends.rds"))
 ```
 
@@ -188,26 +213,27 @@ lapply(seq_along(survList), function(x)
 Trends vary by group. For example, ocean types in both the south and the north are characterized by a steep decline in productivity through the 70s, then relatively stable dynamics. Stream-type Salish Sea show a relatively weak trend, while stream type north were fairly stable until recently. 
 
 ```{r groupTrends}
-trendsByGroups <- function(x) {
-  mod <- x$best_model
-  plot_trends(mod)
-}
 rotList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]$best_model
   rotate_trends(mod)
   })
+
 names(rotList) <- names(survList)
 saveRDS(rotList, here::here("data", "dfaBayesFits",
                         "coastWide_estTrends_topModels.rds"))
+
 trendList <- lapply(seq_along(rotList), function(x) {
-  p <- plot_trends(rotList[[x]]) +
-    ggtitle(names(survList)[x])
+  p <- plot_trendsX(rotList[[x]], oneTrend = TRUE, startYr = 1972) +
+    labs(title = names(survList)[x], x = "Ocean Entry Year", 
+          y = "Survival Anomaly") +
+    samSim::theme_sleekX()
   return(p)
 })
-png(here("figs", "dfa", "rangeWideBayes", "coastTrends.png"), height = 8, 
+png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov",
+         "dominantCoastTrends.png"), height = 6, 
     width = 6, units = "in", res = 300)
 ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], 
-                  trendList[[4]],  ncol = 1, nrow = 4)
+                  trendList[[4]],  ncol = 2, nrow = 2)
 dev.off()
 ```
 
@@ -220,7 +246,9 @@ loadList <- lapply(seq_along(rotList), function(x) {
     ylim(-2, 2)
   return(p)
 })
-png(here("figs", "dfa", "rangeWideBayes", "coastLoadings.png"), height = 9, 
+
+png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov",
+         "coastLoadings.png"), height = 9, 
     width = 6, units = "in", res = 300)
 ggpubr::ggarrange(loadList[[1]], loadList[[2]], loadList[[3]], 
                   loadList[[4]],  ncol = 1, nrow = 4, common.legend = TRUE)
@@ -230,17 +258,25 @@ dev.off()
 Generally fits seem to be quite robust.
 
 ```{r groupFits}
+## shuffle order of dum list to match re-arranged grouping
+shuffSurv <- list(survList[4], survList[3], survList[1], survList[2])
+names(shuffSurv) <- c("Subyearling\nSouth", "Subyearling\nSalish Sea",
+                      "Yearling\nNorth", "Yearling\nSalish Sea" )
+
 fitList <- lapply(seq_along(dum), function(x) {
     mod <- dum[[x]]$best_model
     p <- plot_fitted(mod) +
-      ggtitle(names(survList)[x]) +
+      ggtitle(names(shuffSurv)[x]) +
       facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]), 
-                 scales = "free_y")
+                 scales = "free_y") +
+      samSim::theme_sleekX()
     return(p)
 })
 for(x in seq_along(fitList)) {
-  fileName <- paste(names(survList)[x], "3TrendFits.png", sep = "_")
-  png(here("figs", "dfa", "rangeWideBayes", fileName), height = 5, 
+  fileName <- paste(abbreviate(names(shuffSurv)[x], 6), "3TrendFits.png", 
+                    sep = "_")
+  png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov", fileName), 
+      height = 5, 
     width = 6, units = "in", res = 300)
   plot(fitList[[x]])
   dev.off()

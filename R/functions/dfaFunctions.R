@@ -163,7 +163,8 @@ plot_trendsX <- function(rotated_modelfit, years = NULL,
 }
 
 
-plot_fittedX <- function (modelfit, names = NULL, startYr = 1972) {
+plot_fittedX <- function (modelfit, names = NULL, startYr = 1972, 
+                          dotCol = "red") {
   n_ts <- dim(modelfit$data)[1]
   n_years <- dim(modelfit$data)[2]
   pred <- predicted(modelfit)
@@ -179,8 +180,8 @@ plot_fittedX <- function (modelfit, names = NULL, startYr = 1972) {
   }
   p1 <- ggplot(df, aes_string(x = "timeT", y = "mean")) + 
     geom_ribbon(aes_string(ymin = "lo",  ymax = "hi"), alpha = 0.4) + 
-    geom_line() + geom_point(aes_string(x = "timeT", y = "y"), col = "red", 
-                             size = 0.5, alpha = 0.4) + 
+    geom_line() + geom_point(aes_string(x = "timeT", y = "y"), col = dotCol, 
+                             size = 0.9, alpha = 0.5) + 
     facet_wrap("ID",  scales = "free_y") +
     xlab("Ocean Entry Year") + 
     ylab("Survival Anomaly")

@@ -108,12 +108,23 @@ ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]],
                   trendList[[4]],  ncol = 2, nrow = 2)
 dev.off()
 
+eyDatFull %>% 
+  filter(aggReg == "SS") %>% 
+  select(stock, stockName, aggReg, smoltType) %>% 
+  arrange(smoltType) %>% 
+  distinct()
+ 
 
 fitList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]
-  p <- plot_fittedX(mod, startYr = 1972) +
+  p <- if (x == 2) {
+    plot_fittedX(mod, startYr = 1972, dotCol = "#00BFC4") 
+  } else {
+    plot_fittedX(mod, startYr = 1972) 
+  }
+  p <- p +
     ggtitle(names(survList)[x]) +
-    facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]), 
+    facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]),
                scales = "free_y") +
     samSim::theme_sleekX(axisSize = 9)
   return(p)
@@ -128,3 +139,8 @@ for(x in seq_along(fitList)) {
   dev.off()
 }
 
+eyDatFull %>% 
+  filter(stock %in% c("SHU", "QUI", "NIS"),
+         !is.na(surv)) %>% 
+  group_by(stock) %>% 
+  summarize(min(OEY))

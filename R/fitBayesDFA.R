@@ -1,6 +1,6 @@
 ## chinDFA.R
 # May 22, 2019
-# Script to fit three trend Bayesian DFAs to each stock group based on model 
+# Script to fit two trend Bayesian DFAs to each stock group based on model 
 # selection results in chinBayesDFA.Rmd
 # -----
 
@@ -27,6 +27,13 @@ eyDatFull <- eyDat %>%
   filter(!grp %in% c("oceantype_north", "streamtype_south")) %>% 
   select(-stockName, -jurisdiction, -lat, -long)
 
+## Time series of survival
+ggplot(eyDatFull, aes(x = OEY, y = surv, col = grp)) +
+  geom_line() +
+  samSim::theme_sleekX() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(~stock)
+
 #Split groupe data into lists of matrices
 convMat <- function(mat) {
   mat %>% 
@@ -48,26 +55,27 @@ listStkNames <- lapply(survList, function(x) {
   setNames(name, numSeq)
 })
 
+
 #Fit models
 #set up trend inputs to allow for parallel processing
-# options(mc.cores = parallel::detectCores())
-# Ncores <- detectCores()
-# cl <- makeCluster(Ncores - 4) #save four cores
-# registerDoParallel(cl)
-# clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
-#                    library(RcppArmadillo), library(dplyr)))
-# clusterExport(cl, c("fit_dfa", "survList"), envir=environment())
-# tic("run in parallel")
-# dum <- parLapply(cl, survList, function(x) {
-#   find_dfa_trends(y = x, kmin = 3, kmax = 3, zscore = TRUE, iter = 4000,
-#                   chains = 4, control = list(adapt_delta = 0.97, 
-#                                              max_treedepth = 20),
-#                   compare_normal = TRUE, variance =  c("equal", "unequal"))
-# })
-# stopCluster(cl) #end cluster
-# toc()
-# 
-# saveRDS(dum, here::here("data", "dfaBayesFits", "coastWide_fitTwoTrends.rds"))
+options(mc.cores = parallel::detectCores())
+Ncores <- detectCores()
+cl <- makeCluster(Ncores - 4) #save four cores
+registerDoParallel(cl)
+clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
+                   library(RcppArmadillo), library(dplyr)))
+clusterExport(cl, c("fit_dfa", "survList"), envir=environment())
+tic("run in parallel")
+dum <- parLapply(cl, survList, function(x) {
+  find_dfa_trends(y = x, kmin = 2, kmax = 2, zscore = TRUE, iter = 4000,
+                  chains = 4, control = list(adapt_delta = 0.9,
+                                             max_treedepth = 20),
+                  compare_normal = TRUE, variance =  c("equal", "unequal"))
+})
+stopCluster(cl) #end cluster
+toc()
+
+saveRDS(dum, here::here("data", "dfaBayesFits", "coastWide_fitTwoTrends.rds"))
 
 
 dum <- readRDS(here::here("data", "dfaBayesFits", "coastWide_fitTwoTrends.rds"))

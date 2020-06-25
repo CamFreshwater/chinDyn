@@ -90,3 +90,42 @@ covOut <- trimSeal %>%
   full_join(trimEnv, by = "year")
 
 write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
+
+
+# ------------------------------------------------------------------------------
+
+# raw comparison of seal abundance data with survival
+
+eyDat <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
+                  stringsAsFactors = FALSE)
+
+dat1 <- eyDat %>% 
+  mutate(lat = as.numeric(lat),
+         long = as.numeric(long),
+         aggReg = case_when(
+           (is.na(lat)) ~ "north",
+           (lat > 52 & !region == "UFR") ~ "north",
+           (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
+                          "WCVI")) ~ "south",
+           TRUE ~ "SS"
+         ),
+         group = paste(aggReg, smoltType, sep = "_")) %>% 
+  rename(year = OEY) %>% 
+  left_join(., 
+            seals %>% 
+              filter(reg == "SOG") %>% 
+              select(mean, year),
+            by = "year") %>% 
+  filter(!is.na(mean),
+         !is.na(surv))
+
+seal_plot <- dat1 %>% 
+  filter(aggReg == "SS") %>% 
+  ggplot() +
+  geom_point(aes(x = mean, y = surv, fill = group), shape = 21) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~stock)
+
+pdf(here::here("figs", "seal_corr.pdf"), height = 7, width = 8)
+seal_plot
+dev.off()

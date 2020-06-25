@@ -82,12 +82,16 @@ dum <- readRDS(here::here("data", "dfaBayesFits", "coastWide_fitTwoTrends.rds"))
 
 
 # Check model fits
-lapply(seq_along(survList), function(x) 
-  fitMod[[x]]$summary %>% 
-    arrange(looic) %>% 
-    mutate(group = names(survList)[x])
+dat <- tibble(
+  stock_group = names(survList),
+  mods = dum
 ) %>% 
-  do.call(rbind, .)
+  mutate(
+    model_rank = map(mods, function(x) {
+      x$summary %>% 
+        arrange(looic)
+      })
+  )
 
 
 # Check trends

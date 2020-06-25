@@ -53,7 +53,6 @@ survList <- split(eyDatFull, eyDatFull$grp) %>%
   lapply(., convMat)
 
 
-
 listStkNames <- lapply(survList, function(x) {
   name <- rownames(x)
   numSeq <- seq(1, length(name), by = 1)
@@ -69,8 +68,8 @@ clusterEvalQ(cl, c(library(bayesdfa), library(here), library(Rcpp),
                    library(RcppArmadillo), library(dplyr)))
 clusterExport(cl, c("fit_dfa", "survList"), envir=environment())
 tic("run in parallel")
-dum <- parLapply(cl, survList, function(x) {
-  fit_dfa(y = x, num_trends = 3, zscore = TRUE, iter = 4000, chains = 4, 
+two_trend_list <- parLapply(cl, survList, function(x) {
+  fit_dfa(y = x, num_trends = 2, zscore = TRUE, iter = 4000, chains = 4, 
           thin = 1, control = list(adapt_delta = 0.97, max_treedepth = 20),
           estimate_nu = TRUE)
   # find_dfa_trends(y = x, kmin = 3, kmax = 3, zscore = TRUE, iter = 4000,
@@ -81,18 +80,19 @@ dum <- parLapply(cl, survList, function(x) {
 stopCluster(cl) #end cluster
 toc()
 
-saveRDS(dum, here::here("data", "dfaBayesFits", "coastWide_fitThreeTrends.rds"))
+saveRDS(two_trend_list, here::here("data", "dfaBayesFits", 
+                                   "coastWide_fitTwoTrends.rds"))
 
+two_trend_list <- readRDS(here::here("data", "dfaBayesFits", 
+                          "coastWide_fitTwoTrends.rds"))
 
 ## Group trends
-rotList <- lapply(dum, function(x) {
-  # mod <- dum[[x]]$best_model
+rotList <- lapply(two_trend_list, function(x) {
   rotate_trends(x)
 })
-
 names(rotList) <- names(survList)
-# saveRDS(rotList, here::here("data", "dfaBayesFits",
-#                             "coastWide_estTrends_topModels.rds"))
+saveRDS(rotList, here::here("data", "dfaBayesFits",
+                            "coastWide_estTrends_topModels.rds"))
 
 trendList <- lapply(seq_along(rotList), function(x) {
   p <- plot_trendsX(rotList[[x]], oneTrend = TRUE, startYr = 1972) +
@@ -108,12 +108,6 @@ ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]],
                   trendList[[4]],  ncol = 2, nrow = 2)
 dev.off()
 
-eyDatFull %>% 
-  filter(aggReg == "SS") %>% 
-  select(stock, stockName, aggReg, smoltType) %>% 
-  arrange(smoltType) %>% 
-  distinct()
- 
 
 fitList <- lapply(seq_along(dum), function(x) {
   mod <- dum[[x]]
@@ -130,9 +124,9 @@ fitList <- lapply(seq_along(dum), function(x) {
   return(p)
 })
 for(x in seq_along(fitList)) {
-  fileName <- paste(abbreviate(names(survList)[x], 6), "3TrendFits.png", 
+  fileName <- paste(abbreviate(names(survList)[x], 6), "2TrendFits.png", 
                     sep = "_")
-  png(here("figs", "dfa", "rangeWideBayes", "3Trends_EqualCov", fileName), 
+  png(here("figs", "dfa", "rangeWideBayes", "2Trends_EqualCov", fileName), 
       height = 5.25, 
       width = 6.5, units = "in", res = 300)
   plot(fitList[[x]])

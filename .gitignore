@@ -5,7 +5,7 @@
 *.dvi
 *.log
 *.lot
-*.pdf
+#*.pdf
 *.ps
 *.toc
 # *.txt

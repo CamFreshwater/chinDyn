@@ -1,0 +1,172 @@
+---
+title: "Bayesian Chinook DFA"
+author: "Cam Freshwater"
+date: "July 20, 2019"
+output: html_document
+---
+
+Adaptiation of chinBayesDFA.Rmd but with more structure. Here we use a Bayesian DFA to estimate uncertainty in gappy Chinook marine survival time series, as an alternative to using likelihood-based approaches (e.g. MARSS) that lead to unrealistically high estimates of early marine surviva. Additonally the Bayesian DFA models can account for student-t process variance distributions and explicit tests for different regimes (e.g. 1970s vs. now).
+
+Objectives:
+1. Fit model to all data with one model and relatively large number of trends to evaluate whether there is evidence of regional coherence based on loadings.
+2. If supported, fit model to each region/life history independently to better isolate trends.
+3. Consider including covariates or leaving for another analysis.
+
+
+
+```{r loadAndClean}
+library("tidyverse")
+
+# plots 
+ggplot(surv %>% filter(!is.na(M))) +
+  geom_point(aes(x = year, y = Mz, fill = group), shape = 21) + 
+  facet_wrap(~stock) +
+  theme(legend.position = "top") +
+  labs(y = "Scaled M")
+ggplot(surv %>% filter(!is.na(M))) +
+  geom_histogram(aes(x = M, fill = group)) + 
+  facet_wrap(~stock) +
+  theme(legend.position = "top")
+```
+
+Example below shows a 2 trend model (arbitrarily chosen) with loadings and trends. Notice that the uncertainty estimates are much larger at the beginning of the time series.
+
+```{r bayesDFATestRun}
+surv <- readRDS(here::here("data", "salmonData", "clean_dfa_inputs.rds"))
+surv_trim <- surv %>%
+  filter(agg_reg == "SS")
+
+m_mat_t <- make_mat(surv_trim)
+f1 <- fit_dfa(y = m_mat_t, num_trends = 2, zscore = FALSE, iter = 3000, 
+              chains = 3, thin = 1, 
+              control = list(adapt_delta = 0.95, max_treedepth = 20))
+is_converged(f1, threshold = 1.05)
+# shinystan::launch_shinystan(f1$model)
+r1 <- rotate_trends(f1)
+plot_trends(r1)
+plot_fitted(f1)
+plot_loadings(r1) +
+  ylim(-3, 3)
+```
+
+Loadings from global fitting six trends (number of distinct groups). 
+
+```{r bayesDFAGlobal}
+global_fit6 <- readRDS(here::here("data", "dfaBayesFits", "global_six.rds"))
+r_global <- rotate_trends(global_fit6)
+plot_trends(r_global)
+plot_fitted(global_fit6)
+plot_loadings(r_global) +
+  ylim(-3, 3)
+```
+
+Six trends is obviously too much, however not sure if there's benefit in identifying the "global" model. Instead fit a DFA to each with one-three trends.
+
+
+```{r fitModelAcrossRegions}
+#remove rare groupings and make table list
+surv_trim2 <- surv %>%
+  filter(!group %in% c("north_oceantype", "south_streamtype")) 
+surv_tbl <- tibble(group = unique(surv_trim2$group)) %>% 
+  mutate(
+    m_mat = surv_trim2 %>% 
+      group_split(group) %>% 
+      map(., make_mat)
+  )
+
+library(furrr)
+plan(multiprocess)
+surv_tbl$trend_select_list <- map(surv_tbl$m_mat, function(x) {
+ find_dfa_trends(x, iter = 2500, kmin = 1, kmax = 3, chains = 3,
+                 variance =  "equal",
+                 control = list(adapt_delta = 0.95, max_treedepth = 20))
+})
+
+tt <- find_dfa_trends(surv_tbl$m_mat[[1]], iter = 2500, kmin = 1, kmax = 2, 
+                      chains = 3,
+                 variance =  "equal",
+                 control = list(adapt_delta = 0.95, max_treedepth = 20))
+
+```
+
+Oddly all groups favor relatively complex models with at least 3 trends. Student-t models typically do approximately as well, suggesting there is little support for fitting more complex heavy-tailed variance structures. 
+
+```{r groupModSel}
+dum <- readRDS(here::here("data", "dfaBayesFits", "coastWide_findTrends.rds"))
+lapply(seq_along(survList), function(x) 
+  dum[[x]]$summary %>% 
+    arrange(looic) %>% 
+    mutate(group = names(survList)[x])
+  ) %>% 
+  do.call(rbind, .)
+```
+
+
+
+OLD
+
+
+
+
+
+Trends vary by group. For example, ocean types in both the south and the north are characterized by a steep decline in productivity through the 70s, then relatively stable dynamics. Stream-type Salish Sea show a relatively weak trend, while stream type north were fairly stable until recently. 
+
+```{r groupTrends}
+trendsByGroups <- function(x) {
+  mod <- x$best_model
+  plot_trends(mod)
+}
+rotList <- lapply(seq_along(dum), function(x) {
+  mod <- dum[[x]]$best_model
+  rotate_trends(mod)
+  })
+names(rotList) <- names(survList)
+saveRDS(rotList, here::here("data", "dfaBayesFits",
+                        "coastWide_estTrends_topModels.rds"))
+trendList <- lapply(seq_along(rotList), function(x) {
+  p <- plot_trends(rotList[[x]]) +
+    ggtitle(names(survList)[x])
+  return(p)
+})
+png(here("figs", "dfa", "rangeWideBayes", "coastTrends.png"), height = 8, 
+    width = 6, units = "in", res = 300)
+ggpubr::ggarrange(trendList[[1]], trendList[[2]], trendList[[3]], 
+                  trendList[[4]],  ncol = 1, nrow = 4)
+dev.off()
+```
+
+Loadings within a group are reasonable, though no stocks load with any certainty on the third trend. Additionally the strongest response is typically driven by a subset of populations with longest time series.
+
+```{r groupLoadings}
+loadList <- lapply(seq_along(rotList), function(x) {
+  p <- plot_loadings(rotList[[x]]) +
+    ggtitle(names(survList)[x]) +
+    ylim(-2, 2)
+  return(p)
+})
+png(here("figs", "dfa", "rangeWideBayes", "coastLoadings.png"), height = 9, 
+    width = 6, units = "in", res = 300)
+ggpubr::ggarrange(loadList[[1]], loadList[[2]], loadList[[3]], 
+                  loadList[[4]],  ncol = 1, nrow = 4, common.legend = TRUE)
+dev.off()
+```
+
+Generally fits seem to be quite robust.
+
+```{r groupFits}
+fitList <- lapply(seq_along(dum), function(x) {
+    mod <- dum[[x]]$best_model
+    p <- plot_fitted(mod) +
+      ggtitle(names(survList)[x]) +
+      facet_wrap("ID", labeller = as_labeller(listStkNames[[x]]), 
+                 scales = "free_y")
+    return(p)
+})
+for(x in seq_along(fitList)) {
+  fileName <- paste(names(survList)[x], "3TrendFits.png", sep = "_")
+  png(here("figs", "dfa", "rangeWideBayes", fileName), height = 5, 
+    width = 6, units = "in", res = 300)
+  plot(fitList[[x]])
+  dev.off()
+}
+```

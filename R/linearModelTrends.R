@@ -65,3 +65,4 @@ sapply(pullTrends, function(x) {
   print(p2)
   dev.off()
 })
+

@@ -21,7 +21,6 @@ knitr-cache
 .Rapp.history
 
 myNotes.*
-data/workingFinalSimRun
 data/salmonData/rawData
 data/dfaBayesFits/
 .Rproj.user/

@@ -157,8 +157,29 @@ covOut <- phys_ocean_anom %>%
   full_join(trimSeal, by = "year") %>% 
   full_join(bi_index %>% select(year, bi_anom = bi_stnd), by = "year") %>% 
   full_join(trimDiet, by = "year") %>% 
-  full_join(trimEnv, by = "year") 
-
+  full_join(trimEnv, by = "year") %>%  
+  pivot_longer(cols = 2:ncol(.), names_to = "metric", values_to = "anomaly") %>%
+  mutate(
+    time_step = case_when(
+      grepl("prime", metric) ~ "seasonal",
+      metric == "cci_anom" ~ "seasonal",
+      TRUE ~ "annual"
+    ),
+    class = case_when(
+      grepl("annual", metric) ~ "physical",
+      grepl("prime", metric) ~ "physical",
+      metric == "bi_anom" ~ "physical",
+      grepl("seal", metric) ~ "predator",
+      TRUE ~ "diet"
+    ),
+    region = case_when(
+      class == "physical" ~ "basin",
+      metric == "cci_anom" ~ "ca_current",
+      metric %in% c("zp_env_anom", "fish_env_anom", "seal_anom") ~ "sog",
+      metric %in% c("boreal_anom", "south_anom", "fish_diet_anom") ~ "wcvi"
+    )
+  )
+  
 write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
 
 

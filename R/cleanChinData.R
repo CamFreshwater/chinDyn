@@ -16,9 +16,6 @@
 require(tidyverse); require(here)
 
 
-# import old survival data to add some features
-old_surv <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
-                     stringsAsFactors = FALSE)
 # new survival data
 by_raw <- read.csv(here("data","salmonData","rawData",
                            "cwt_indicator_surv_sep2020.csv"), 
@@ -33,8 +30,12 @@ by_dat1 <- by_raw[-1, ] %>%
   left_join(., stock_key, by = "stock") %>% 
   mutate(survival = as.numeric(survival)) %>% 
   select(year = X, stock, stock_name, survival) %>% 
-  arrange(stock)
+  arrange(stock) %>% 
+  filter(!stock %in% c("TST", "AKS"))
 
+# import old survival data to add some features
+# old_surv <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
+#                      stringsAsFactors = FALSE)
 # export temporary .csv to fill in metadata
 # temp_out <- by_dat1 %>%
 #   left_join(., old_surv %>% select(stock, jurisdiction:long) %>% distinct(), 
@@ -56,7 +57,7 @@ by_dat <- by_dat1 %>%
            (is.na(lat)) ~ "north",
            (lat > 52 & !region == "UFR") ~ "north",
            (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
-                          "WCVI")) ~ "south",
+                          "WCVI", "SBC")) ~ "south",
            TRUE ~ "SS"
          ),
          run = tolower(adultRunTiming),
@@ -64,7 +65,8 @@ by_dat <- by_dat1 %>%
   select(year:stock_name, smolt = smoltType, run, 
          region:long, agg_reg, group, survival, M)
 
-write.csv(by_dat, here("data", "salmonData", "cwt_indicator_surv_clean.csv"))
+write.csv(by_dat, here("data", "salmonData", "cwt_indicator_surv_clean.csv"),
+          row.names = FALSE)
 
 
 #How many stocks per region?

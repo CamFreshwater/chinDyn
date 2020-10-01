@@ -1,6 +1,5 @@
 ,stock_name,jurisdiction,smoltType,adultRunTiming,region,lat,long
 1,Alaska Hatchery Springs - Behm Canal,AK,streamtype,Spring,SEAK,55.962925,-131.219612
-2,Alaska Spring,AK,streamtype,Spring,SEAK,na,na
 3,Atnarko River,BC,oceantype,Summer,CBC,52.376631,-126.093529
 4,Atnarko Yearling,BC,streamtype,Spring,CBC,52.376631,-126.093529
 5,Big Qualicum River Fall,BC,oceantype,Fall,ECVI,49.39884,-124.609144
@@ -27,8 +26,8 @@
 26,Nisqually Fall Fingerling,WA,oceantype,Fall,SPGSD,47.0857,-122.7073
 27,Nooksack Spring Yearling,WA,streamtype,Spring,NPGSD,48.7841,-122.5883
 28,NE Alaska Spring,AK,streamtype,Spring,SEAK,61.381706,-149.778542
-29,Nooksack Spring Fingerling,WA,streamtype,Spring,NPGSD,48.7841,-122.5883
-30,Phillips River Fall,BC,streamtype,Fall,SBC,50556483,-125.36941
+29,Nooksack Spring Fingerling,WA,oceantype,Spring,NPGSD,48.7841,-122.5883
+30,Phillips River Fall,BC,oceantype,Fall,SBC,50.556483,-125.36941
 31,Puntledge River Summer,BC,oceantype,Summer,ECVI,49.696529,-124.995198
 32,Queets Fall Fingerling,WA,oceantype,Fall,WACST,47.5425,-124.3539
 33,Quinsam River Fall,BC,oceantype,Fall,ECVI,50.037646,-125.29471
@@ -44,13 +43,12 @@
 43,South Puget Sound Fall Yearling,WA,streamtype,Fall,SPGSD,47.5676,-122.3486
 44,Squaxin Pens Fall Yearling,WA,streamtype,Fall,SPGSD,47.134101,-123.081839
 45,Salmon River,OR,oceantype,Fall,ORCST,45.0478,-124.0061
-46,SE Alaska Spring,AK,streamtype,Spring,SEAK,NA,NA
+46,SE Alaska Spring,AK,streamtype,Spring,SEAK,58.115577,-134.9623
 47,Skagit Summer Fingerling,WA,oceantype,Summer,NPGSD,48.3873,-122.3686
 48,Stikine River,AK,streamtype,Spring,TBR,56.691,-132.213
 49,Stillaguamish Fall Fingerling,WA,oceantype,Summer,NPGSD,48.2381,-122.3767
 50,Columbia River Summer,CR,oceantype,Summer,UCOLR,46.215,-123.862
 51,Taku River,AK,streamtype,Spring,TBR,58.4199,-133.9971
-52,Transboundary Rivers,AK,streamtype,Spring,TBR,NA,NA
 53,Unuk River,AK,streamtype,Spring,SEAK,56.0772,-131.0753
 54,Columbia River Upriver Bright,CR,oceantype,Fall,UCOLR,46.215,-123.862
 55,University of Washington Accelerated,WA,oceantype,Fall,SPGSD,47.647441,-122.306637

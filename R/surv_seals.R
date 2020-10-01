@@ -23,25 +23,16 @@ seals <- read.csv(here::here("data/salmonData/sealPopEst.csv"),
   mutate(mean = mean / 1000) %>% 
   filter(reg == "SOG")
 
-eyDat <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
-                  stringsAsFactors = FALSE) 
+# eyDat <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
+#                   stringsAsFactors = FALSE) 
+surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
+                 stringsAsFactors = FALSE)
 
 
 # CLEAN DATA -------------------------------------------------------------------
 
-ss <- eyDat %>% 
-  mutate(
-    M = -log(surv),
-    agg_reg = case_when(
-      (is.na(lat)) ~ "north",
-      (lat > 52 & !region == "UFR") ~ "north",
-      (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
-                     "WCVI")) ~ "south",
-      TRUE ~ "SS"
-    )
-  ) %>% 
+ss <- surv %>% 
   filter(agg_reg == "SS") %>% 
-  rename(year = OEY) %>% 
   left_join(., 
             seals %>% 
               select(year, mean_seal = mean),
@@ -52,6 +43,7 @@ avg <- ss %>%
   group_by(year) %>% 
   summarize(mean_M = mean(M, na.rm = T),
             mean_seal = mean(mean_seal)) 
+
 ggplot(avg) +
   geom_point(aes(x = mean_seal, y = mean_M))
 
@@ -64,13 +56,13 @@ ggplot(ss) +
 
 # models with varying intercepts or slopes
 ss1 <- brm(M ~ mean_seal + (1 | stock), data = ss,
-           warmup = 500, iter = 1000, 
+           warmup = 500, iter = 1500, 
            cores = 4, chains = 4, 
            seed = 123)
 ss2 <- brm(M ~ mean_seal + (1 + mean_seal | stock), data = ss,
-           warmup = 500, iter = 1000, 
+           warmup = 500, iter = 1500, 
            cores = 4, chains = 4, 
-           seed = 456)
+           seed = 123)
 
 mod_list <- list(ss1, ss2)
 
@@ -84,7 +76,7 @@ map(mod_list, function(x) {
                y   = value, 
                col = as.factor(Chain)))+
     geom_line() +
-    geom_vline(xintercept = 750)+
+    geom_vline(xintercept = 500)+
     facet_grid(Parameter ~ . ,
                scale  = 'free_y',
                switch = 'y')
@@ -96,9 +88,11 @@ map(mod_list, function(x) {
 post_pred <- ss %>% 
   group_by(stock) %>% 
   data_grid(mean_seal = seq_range(mean_seal, n = 101)) %>% 
-  add_fitted_draws(ss2, n = 100)
+  add_fitted_draws(ss2, n = 100) %>% 
+  left_join(., ss %>% select(stock, smolt) %>% distinct(),
+            by = "stock") 
 
-stock_spec <- ggplot(data = post_pred, aes(x = mean_seal, y = M, color = stock)) +
+stock_spec <- ggplot(data = post_pred, aes(x = mean_seal, y = M, color = smolt)) +
   geom_line(aes(y = .value, group = paste(stock, .draw)), alpha = 0.1) +
   geom_point(data = ss) + 
   labs(x = "Seal Abundance") +

@@ -182,6 +182,18 @@ covOut <- phys_ocean_anom %>%
   
 write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
 
+## Looks at covariates
+cov_ts <- covOut %>% 
+  ggplot(.) +
+  geom_line(aes(x = year, y = anomaly, colour = class)) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~metric)
+
+png(here::here("figs", "dfa", "covEffects", "cov_anomalies.png"), height = 5,
+    width = 7, units = "in", res = 300)
+cov_ts
+dev.off()
+
 
 # ------------------------------------------------------------------------------
 

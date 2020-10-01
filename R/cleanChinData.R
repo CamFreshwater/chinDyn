@@ -17,8 +17,7 @@ require(tidyverse); require(here)
 
 
 # new survival data
-by_raw <- read.csv(here("data","salmonData","rawData",
-                           "cwt_indicator_surv_sep2020.csv"), 
+by_raw <- read.csv(here("data","salmonData", "cwt_indicator_surv_sep2020.csv"), 
                       stringsAsFactors = FALSE)
 stock_key <- data.frame(
   stock = colnames(by_raw)[2:58],

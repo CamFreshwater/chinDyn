@@ -130,32 +130,32 @@ surv_trim3 <- surv %>%
   filter(agg_reg == "SS",
          !year > 2014) %>% 
   droplevels()
-ss_surv_tbl <- tibble(group = levels(surv_trim3$group)) %>% 
-  mutate(
-    m_mat = surv_trim3 %>% 
-      group_split(group) %>% 
-      map(., make_mat),
-    # reformat seal covariate to match bayes dfa input
-    seal_cov = map(m_mat, function (x) {
-      expand.grid("time" = seq(1, ncol(x)),
-                  "timeseries" = seq(1, nrow(x)),
-                  "covariate" = 1) %>%
-        mutate(value = rep(seals$z_mean, times = nrow(x)))
-    })
-  )
-ss_surv_tbl$fit1 <- map(ss_surv_tbl$m_mat, function (x) {
-  fit_dfa(y = x, num_trends = 2, iter = 3500,  chains = 4, thin = 1, 
-          zscore = TRUE, control = list(adapt_delta = 0.97, max_treedepth = 20))
-})
-ss_surv_tbl$fit2 <- map2(ss_surv_tbl$m_mat, ss_surv_tbl$seal_cov, function (x, y) {
-  fit_dfa(y = x, obs_covar = y, num_trends = 2, iter = 3500, 
-          chains = 4, thin = 1, zscore = TRUE,
-          control = list(adapt_delta = 0.97, max_treedepth = 20))
-})
+# ss_surv_tbl <- tibble(group = levels(surv_trim3$group)) %>% 
+#   mutate(
+#     m_mat = surv_trim3 %>% 
+#       group_split(group) %>% 
+#       map(., make_mat),
+#     # reformat seal covariate to match bayes dfa input
+#     seal_cov = map(m_mat, function (x) {
+#       expand.grid("time" = seq(1, ncol(x)),
+#                   "timeseries" = seq(1, nrow(x)),
+#                   "covariate" = 1) %>%
+#         mutate(value = rep(seals$z_mean, times = nrow(x)))
+#     })
+#   )
+# ss_surv_tbl$fit1 <- map(ss_surv_tbl$m_mat, function (x) {
+#   fit_dfa(y = x, num_trends = 2, iter = 3500,  chains = 4, thin = 1, 
+#           zscore = TRUE, control = list(adapt_delta = 0.97, max_treedepth = 20))
+# })
+# ss_surv_tbl$fit2 <- map2(ss_surv_tbl$m_mat, ss_surv_tbl$seal_cov, function (x, y) {
+#   fit_dfa(y = x, obs_covar = y, num_trends = 2, iter = 3500, 
+#           chains = 4, thin = 1, zscore = TRUE,
+#           control = list(adapt_delta = 0.97, max_treedepth = 20))
+# })
 
-saveRDS(ss_surv_tbl, here::here("data", "dfaBayesFits", "ss_seal_models.rds"))
-# ss_surv_tbl <- readRDS(here::here("data", "dfaBayesFits", "ss_seal_models.rds"))
+# saveRDS(ss_surv_tbl, here::here("data", "dfaBayesFits", "ss_seal_models.rds"))
 
+ss_surv_tbl <- readRDS(here::here("data", "dfaBayesFits", "ss_seal_models.rds"))
 
 pmap(list(ss_surv_tbl$group, ss_surv_tbl$fit1, ss_surv_tbl$fit2),
      function (group_name, x, x2) {

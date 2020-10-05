@@ -30,6 +30,7 @@ by_dat1 <- by_raw[-1, ] %>%
   mutate(survival = as.numeric(survival)) %>% 
   select(year = X, stock, stock_name, survival) %>% 
   arrange(stock) %>% 
+  #remove stocks that are aggregates of others on CP's advice
   filter(!stock %in% c("TST", "AKS"))
 
 # import old survival data to add some features

@@ -23,6 +23,7 @@ knitr-cache
 myNotes.*
 data/salmonData/rawData
 data/dfaBayesFits/
+data/gamFits/
 .Rproj.user/
 .Rproj.user
 *.html

@@ -1,0 +1,34 @@
+---
+title: "Chinook Survival Dynamics"
+output: html_document
+---
+
+Analysis of survival to age 2 of Chinook CWT indicator stocks. Includes DFA of instantaneous mortality (-log(survival)) and hierarchical GAMs testing impacts of various covariates on survival (beta link; details below). As before, stocks are grouped by ocean entry location (north, south, or Salish Sea) and freshwater life hsitory. Changes from prior presentation's data include the addition of a few stocks and a wider range of environmental covariates included.
+
+```{r input, message=TRUE, include=FALSE}
+library(tidyverse)
+
+surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
+                 stringsAsFactors = FALSE) %>% 
+  mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
+  mutate(group = as.factor(group),
+         stock = fct_reorder(stock, as.numeric(group)))
+```
+
+```{r survplot, echo=FALSE, message=TRUE, fig.cap="Observed instantaneous mortality rate.", height = 6, width = 7}
+surv %>%
+  filter(!is.na(M)) %>%
+  ggplot(.) +
+  geom_point(aes(x = year, y = M, fill = group), shape = 21) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(group))) +
+  scale_x_continuous(breaks = c(1975, 1990, 2005)) +
+  scale_fill_discrete(name = "Region/ \nLife History") +
+  labs(y = "M") +
+  ggsidekick::theme_sleek() +
+  theme(legend.position = "top")
+```
+
+
+### Bayesian DFA ### 
+
+

@@ -93,9 +93,7 @@ surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
 #                   control = list(adapt_delta = 0.95, max_treedepth = 20))
 # })
 # 
-# 
-# # best models are 3 trends, but some 2 trends are close
-# # note that probably worth refitting with normal distribution
+
 # map(trend_select_list, ~.$summary)
 # surv_tbl$top_dfa <- map(trend_select_list, ~.$best_model)
 # saveRDS(surv_tbl, here::here("data", "dfaBayesFits", "group_top_models.rds"))
@@ -112,6 +110,33 @@ map2(surv_tbl$group, surv_tbl$top_dfa, function (group_name, x) {
     ylim(-2, 2))
   dev.off()
 })
+
+
+## FIT TWO TREND MODELS --------------------------------------------------------
+
+# fit models to each region, then export to Rmd
+dfa_list <- map(surv_tbl$m_mat, function(x) {
+  fit_dfa(y = x, num_trends = 2, zscore = TRUE, iter = 8000, chains = 1, 
+          thin = 1, control = list(adapt_delta = 0.95, max_treedepth = 20))
+})
+surv_tbl$dfa_two_trend <- dfa_list
+
+saveRDS(surv_tbl, here::here("data", "dfaBayesFits", "two-trend-fits.rds"))
+
+# save figs
+pmap(list(surv_tbl$group, surv_tbl$dfa_two_trend),
+     function (group_name, x) {
+       file_name <- paste(group_name, "2trend_fit.pdf", sep = "_")
+
+       rot_dum <- rotate_trends(x)
+       pdf(here::here("figs", "dfa", "bayes", file_name))
+       print(plot_fitted(x))
+       print(plot_trends(rot_dum))
+       print(plot_loadings(rot_dum) +
+               ylim(-2, 2))
+       dev.off()
+      }
+)
 
 
 ## FIT SALISH SEA MODEL --------------------------------------------------------

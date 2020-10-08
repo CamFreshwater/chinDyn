@@ -9,18 +9,24 @@ library(tidyverse)
 
 cov <- read.csv(here::here("data/salmonData/survCovariateAnom.csv"), 
                 stringsAsFactors = F)
-surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
-                 stringsAsFactors = FALSE) %>% 
+surv_raw <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
+                 stringsAsFactors = FALSE) 
+surv <- surv_raw %>% 
   filter(agg_reg == "SS",
          !is.na(M)) %>% 
   select(year, stock, smolt, survival, M) %>% 
   mutate(smolt = as.factor(smolt),
          stock = as.factor(stock))
 
+stock_key <- surv_raw %>% 
+  filter(agg_reg == "SS") %>% 
+  select(stock, stock_name, region, smolt) %>% 
+  distinct()
+
 # # raw plot 
 plot_dat <- surv %>%
   left_join(., cov, by = "year")
-# 
+
 plot_dat %>%
   filter(smolt == "streamtype") %>%
   ggplot(., aes(x = anomaly, y = M)) +
@@ -125,6 +131,8 @@ dev.off()
 # ------------------------------------------------------------------------------
 
 # merge covariate data then fit two GAMs (random intercepts and random splines)
+dat <- readRDS(here::here("data", "gamFits", "salish_beta_gam.RDS"))
+
 dat <- cov %>% 
   select(year, metric, env_anomaly = anomaly) %>% 
   nest(data = c(year, env_anomaly)) %>% 
@@ -173,12 +181,15 @@ dat$fixed_preds <- map2(dat$data, dat$gam1, function(dat_in, gam_in) {
                   length.out = 100)
   new_dat <- expand.grid(env_anomaly = pred_seq, smolt = unique(dat_in$smolt))
   preds <- predict(gam_in, new_dat, se.fit = TRUE, exclude="s(stock)",
-                   newdata.guaranteed=TRUE, type = "response")
+                   newdata.guaranteed=TRUE, type = "link")
   new_dat %>%
-    mutate(fit = as.numeric(preds$fit),
-           up = as.numeric(fit + (1.96 * preds$se.fit)),
-           low = as.numeric(fit - (1.96 * preds$se.fit))
-           )
+    mutate(fit = boot::inv.logit(preds$fit),
+           up = boot::inv.logit(preds$fit + (qnorm(0.975) * preds$se.fit)),
+           low = boot::inv.logit(preds$fit + (qnorm(0.025) * preds$se.fit)),
+           logit_fit = preds$fit,
+           logit_up = preds$fit + (qnorm(0.975) * preds$se.fit),
+           logit_low = preds$fit + (qnorm(0.025) * preds$se.fit)
+    )
 })
 
 pdf(here::here("figs", "gam", "fixed_effect_splines.pdf"), 
@@ -188,11 +199,26 @@ dat %>%
   unnest(fixed_preds) %>% 
   ggplot(.) +
   geom_line(aes(x = env_anomaly, y = fit, color = smolt)) +
-  geom_ribbon(aes(x = env_anomaly, ymin = low, ymax = up, 
-                                   fill = smolt), alpha = 0.3) +
+  geom_ribbon(aes(x = env_anomaly, ymin = low, ymax = up, fill = smolt), 
+              alpha = 0.3) +
   facet_wrap(~metric, scales = "free_x") +
   ggsidekick::theme_sleek()
 dev.off()
+
+# FE predictions (as above) but in link space
+pdf(here::here("figs", "gam", "fixed_effect_splines_link.pdf"), 
+    height = 5, width = 7)
+dat %>% 
+  select(metric, fixed_preds) %>% 
+  unnest(fixed_preds) %>% 
+  ggplot(.) +
+  geom_line(aes(x = env_anomaly, y = logit_fit, color = smolt)) +
+  geom_ribbon(aes(x = env_anomaly, ymin = logit_low, ymax = logit_up, 
+                  fill = smolt), alpha = 0.3) +
+  facet_wrap(~metric, scales = "free_x") +
+  ggsidekick::theme_sleek()
+dev.off()
+
 
 # generate stock-specific predictions from more complicated model
 # observed data for plotting
@@ -204,11 +230,15 @@ dat$ss_preds <- map2(dat$data, dat$gam2, function(dat_in, gam_in) {
                          stock = unique(dat_in$stock)) %>% 
     left_join(., dat_in %>% select(stock, smolt) %>% distinct(), by = "stock")
   
-  preds <- predict(gam_in, new_dat, se.fit = TRUE, type = "response")
+  preds <- predict(gam_in, new_dat, se.fit = TRUE, type = "link")
   new_dat %>%
-    mutate(fit = as.numeric(preds$fit),
-           up = as.numeric(fit + (1.96 * preds$se.fit)),
-           low = pmax(0, as.numeric(fit - (1.96 * preds$se.fit)))
+    mutate(
+      stock = fct_reorder(stock, as.numeric(smolt)),
+      fit = as.numeric(boot::inv.logit(preds$fit)),
+      up = as.numeric(boot::inv.logit(preds$fit + 
+                                        (qnorm(0.975) * preds$se.fit))),
+      low = as.numeric(boot::inv.logit(preds$fit + 
+                                         (qnorm(0.025) * preds$se.fit)))
     )
 })
 
@@ -220,9 +250,9 @@ pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, titl
     geom_ribbon(data = pred_dat, aes(x = env_anomaly, ymin = low, ymax = up, 
                                      fill = smolt), 
                 alpha = 0.3) +
-    geom_point(data = obs_dat, aes(x = env_anomaly, y = survival, fill = smolt), 
+    geom_point(data = obs_dat, aes(x = env_anomaly, y = survival, fill = smolt),
                shape = 21) +
-    facet_wrap(~fct_reorder(stock, as.numeric(smolt)))  +
+    facet_wrap(~stock)  +
     ggsidekick::theme_sleek() +
     labs(title = title)
 })

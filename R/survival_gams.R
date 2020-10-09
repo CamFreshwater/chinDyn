@@ -14,6 +14,9 @@ surv_raw <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"),
 surv <- surv_raw %>% 
   filter(agg_reg == "SS",
          !is.na(M)) %>% 
+  #add ocean entry year to match covariates based on life history
+  mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
+                       brood_year + 1)) %>% 
   select(year, stock, smolt, survival, M) %>% 
   mutate(smolt = as.factor(smolt),
          stock = as.factor(stock))
@@ -167,13 +170,6 @@ dat <- cov %>%
   )
 saveRDS(dat, here::here("data", "gamFits", "salish_beta_gam.RDS"))
 
-# check AIC scores
-dat %>% 
-  select(metric, aic) %>% 
-  unnest(aic) %>% 
-  arrange(aic) %>% 
-  print(n = Inf)
-
 # generate fixed effects predictions from simpler model
 dat$fixed_preds <- map2(dat$data, dat$gam1, function(dat_in, gam_in) {
   pred_seq <- seq(min(dat_in$env_anomaly, na.rm = T),
@@ -192,18 +188,26 @@ dat$fixed_preds <- map2(dat$data, dat$gam1, function(dat_in, gam_in) {
     )
 })
 
-pdf(here::here("figs", "gam", "fixed_effect_splines.pdf"), 
-    height = 5, width = 7)
-dat %>% 
+fe_splines <- dat %>% 
   select(metric, fixed_preds) %>% 
   unnest(fixed_preds) %>% 
+  left_join(., cov %>% select(metric, class), by = "metric") %>%
+  # glimpse()
   ggplot(.) +
   geom_line(aes(x = env_anomaly, y = fit, color = smolt)) +
   geom_ribbon(aes(x = env_anomaly, ymin = low, ymax = up, fill = smolt), 
               alpha = 0.3) +
-  facet_wrap(~metric, scales = "free_x") +
-  ggsidekick::theme_sleek()
+  facet_wrap(~fct_reorder(metric, as.numeric(as.factor(class))), 
+             scales = "free_x") +
+  ggsidekick::theme_sleek() +
+  labs(x = "Environmental Anomaly", y = "Predicted Survival")
+
+pdf(here::here("figs", "gam", "fixed_effect_splines.pdf"), 
+    height = 5, width = 7)
+fe_splines
 dev.off()
+
+saveRDS(fe_splines, here::here("data", "gamFits", "fe_splines.rds"))
 
 # FE predictions (as above) but in link space
 pdf(here::here("figs", "gam", "fixed_effect_splines_link.pdf"), 
@@ -211,11 +215,13 @@ pdf(here::here("figs", "gam", "fixed_effect_splines_link.pdf"),
 dat %>% 
   select(metric, fixed_preds) %>% 
   unnest(fixed_preds) %>% 
+  left_join(., cov %>% select(metric, class), by = "metric") %>%
   ggplot(.) +
   geom_line(aes(x = env_anomaly, y = logit_fit, color = smolt)) +
   geom_ribbon(aes(x = env_anomaly, ymin = logit_low, ymax = logit_up, 
                   fill = smolt), alpha = 0.3) +
-  facet_wrap(~metric, scales = "free_x") +
+  facet_wrap(~fct_reorder(metric, as.numeric(as.factor(class))), 
+             scales = "free_x") +
   ggsidekick::theme_sleek()
 dev.off()
 
@@ -238,7 +244,10 @@ dat$ss_preds <- map2(dat$data, dat$gam2, function(dat_in, gam_in) {
       up = as.numeric(boot::inv.logit(preds$fit + 
                                         (qnorm(0.975) * preds$se.fit))),
       low = as.numeric(boot::inv.logit(preds$fit + 
-                                         (qnorm(0.025) * preds$se.fit)))
+                                         (qnorm(0.025) * preds$se.fit))),
+      logit_fit = preds$fit,
+      logit_up = preds$fit + (qnorm(0.975) * preds$se.fit),
+      logit_low = preds$fit + (qnorm(0.025) * preds$se.fit)
     )
 })
 
@@ -251,6 +260,24 @@ pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, titl
                                      fill = smolt), 
                 alpha = 0.3) +
     geom_point(data = obs_dat, aes(x = env_anomaly, y = survival, fill = smolt),
+               shape = 21) +
+    facet_wrap(~stock)  +
+    ggsidekick::theme_sleek() +
+    labs(title = title)
+})
+dev.off()
+
+pdf(here::here("figs", "gam", "stock_specific_splines_link.pdf"), 
+    height = 5, width = 7)
+pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, title) {
+  ggplot() +
+    geom_line(data = pred_dat, aes(x = env_anomaly, y = logit_fit, 
+                                   color = smolt)) +
+    geom_ribbon(data = pred_dat, aes(x = env_anomaly, ymin = logit_low, 
+                                     ymax = logit_up, fill = smolt), 
+                alpha = 0.3) +
+    geom_point(data = obs_dat, aes(x = env_anomaly, y = boot::logit(survival),
+                                   fill = smolt),
                shape = 21) +
     facet_wrap(~stock)  +
     ggsidekick::theme_sleek() +

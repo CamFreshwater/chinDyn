@@ -3,19 +3,30 @@ title: "Chinook Survival Dynamics"
 output: html_document
 ---
 
-Analysis of survival to age 2 of Chinook CWT indicator stocks. Includes DFA of instantaneous mortality (-log(survival)) and hierarchical GAMs testing impacts of various covariates on survival (beta link; details below). As before, stocks are grouped by ocean entry location (north, south, or Salish Sea) and freshwater life hsitory. Changes from prior presentation's data include the addition of a few stocks and a wider range of environmental covariates included.
+Analysis of survival to age 2 of Chinook CWT indicator stocks. Includes DFA of instantaneous mortality (-log(survival)) and hierarchical GAMs testing impacts of various covariates on survival (beta link; details below). As before, stocks are grouped by ocean entry location (north, south, or Salish Sea) and freshwater life history. 
 
 ```{r input, message=TRUE, include=FALSE}
 library(tidyverse)
+library(bayesdfa)
 
 surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
                  stringsAsFactors = FALSE) %>% 
+  filter(!group %in% c("north_oceantype", "south_streamtype"),) %>% 
   mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
-  mutate(group = as.factor(group),
+  mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
+                       brood_year + 1),
+         group = as.factor(group),
          stock = fct_reorder(stock, as.numeric(group)))
+
+year_tbl <- surv %>% 
+  filter(!is.na(M)) %>% 
+  select(group, year) %>% 
+  arrange(group, year) %>% 
+  distinct() %>% 
+  nest(years = c(year))
 ```
 
-```{r survplot, echo=FALSE, message=TRUE, fig.cap="Observed instantaneous mortality rate.", height = 6, width = 7}
+```{r survplot, echo=FALSE, message=TRUE, fig.cap="Figure 1. Observed instantaneous mortality rate. Stocks colored by region and life history type.", fig.height = 8, fig.width = 8}
 surv %>%
   filter(!is.na(M)) %>%
   ggplot(.) +
@@ -23,7 +34,7 @@ surv %>%
   facet_wrap(~ fct_reorder(stock, as.numeric(group))) +
   scale_x_continuous(breaks = c(1975, 1990, 2005)) +
   scale_fill_discrete(name = "Region/ \nLife History") +
-  labs(y = "M") +
+  labs(y = "M", x = "Ocean Entry Year") +
   ggsidekick::theme_sleek() +
   theme(legend.position = "top")
 ```
@@ -31,4 +42,56 @@ surv %>%
 
 ### Bayesian DFA ### 
 
+The Bayesian DFA trends are similar to those that were presented earlier, but were estimated using the full range of stocks and using instantaneous mortality rate, rather than survival anomalies, as the response. I only show the top two trends for each region-life history grouping here, but provide model fits and trend loadings as a separate attachment. Note that I inverted all groups' trend 2 here relative to the attached, to ease interpretation, since loadings were typically negative (negative loadings on a positive trend are equivalent to positive loadings on a negative trend; confusing so please ask for clarification).
 
+The dominant trend (i.e. trend 1) for northern streamtype stocks is relatively low instantaneous mortality at the beginning of the time series (i.e. high survival), several decades of stability, followed by a sharp increase in mortality recently. While Salish Sea oceantypes also show temporal variation, it's predominantly characterized by very low instantaneous mortality rates early in the time series, and basically stable dynamics afterwards. Southern oceantypes show multiple survival regimes, with mortality rates peaking in the 90s, early 2000s and again now. Salish Sea ocean types show a decline in mortality early in the time series, followed by a lack of trend. Salish Sea stream types are ambiguous.
+
+Generally trend 2 is more stable for all region-life history combinations. This trend also typically has weaker loadings that are more variable among stocks within a grouping. However several of the second trends show a spike in mortality between 1990 and 2000 that then dissipates. 
+
+```{r plot_trends, echo=FALSE, fig.cap="Figure 2. Estimated DFA trends for life history-region combinations. Note differences in y-axis scale among groups.", message=FALSE, warning=FALSE, fig.height=6, fig.width=8}
+surv_tbl <- readRDS(here::here("data", "dfaBayesFits", 
+                               "two-trend-fits.rds")) %>% 
+  mutate(rot_trends = map(dfa_two_trend, rotate_trends)) %>% 
+  left_join(., year_tbl, by = "group")
+
+#invert trends with predominantly negative loadings
+surv_tbl$rot_trends_adj = map(surv_tbl$rot_trends, function (x) {
+  x$trends_mean[2, ] = -1 * x$trends_mean[2, ] 
+  x$trends_median[2, ] = -1 * x$trends_median[2, ] 
+  x$trends_lower[2, ] = -1 * x$trends_lower[2, ] 
+  x$trends_upper[2, ] = -1 * x$trends_upper[2, ]
+  return(x)
+})
+
+trend_list <- purrr::pmap(list(surv_tbl$rot_trends_adj, surv_tbl$group, 
+                               surv_tbl$years), function (x, name, years) {
+  plot_trends(x, years = years$year) + 
+    labs(title = name, x = "", y = "") +
+    ggsidekick::theme_sleek() +
+    geom_hline(aes(yintercept = 0), color = "red") +
+    theme(axis.title = element_blank()) +
+    lims(x = c(1970, 2020))
+})
+
+trend_panels <- cowplot::plot_grid(trend_list[[1]], trend_list[[2]],
+                                   trend_list[[3]], trend_list[[4]])
+ggpubr::annotate_figure(trend_panels, bottom = "Time",
+                        left = "Unitless Survival \nCoefficient")
+```
+
+### Hierarchical GAM ###
+
+To explore relationships between various environmental variables and Chinook salmon survival I fit generalized additive models (GAMs), which allow for non-linear relationships between response and explanatory variables. I fit life history- and stock-specific relationships so that stocks with a common freshwater life history had a single response to a given driver, but each stock deviated from that relationship depending on the available data. Finally, I fit the models using untransformed survival and a beta-link function, which is appropriate for data that are bound between 0 and 1, such as proportion data. Note that this analysis is constrained to only those stocks that enter the Salish Sea because several covariates are not applicable to California Current (southern) or Gulf of Alaska (northern) stocks (i.e. SoG pinniped abundance and zooplankton indices).
+
+The covariates considered here include a range of physical and biological variables spanning local to basin-scale processes that were lagged by one or two years (relative to brood year) depending on life history. Physical oceanographic variables included the PDO, NPGO, SST arc (reflects SST anomalies along the continental shelf associated with sea level pressure anomalies (Johnstone and Mantua 2014 for details)), and the North Pacific Current bifurcation index. Each of these included both an annual mean, as well as a mean during a 4 month "priming" period overlapping ocean entry (April-July; except for the bifurcation index which is strictly annual). Biological variables included Bill Peterson's Newport Line index (CCI), zooplankton and larval fish anomalies in the Strait of Georgia (zp_env and fish_env), boreal and southern copepod anomalies from WCVI (boreal and south), the proportion of fish in the diet from WCVI juvenile salmon surveys (fish_diet), and harbor seal abundance throughout the Strait of Georgia (seal). All explanatory variables were centered and scaled to generate anomalies with mean 0 and SD 1. 
+
+Note that because the length of each of the explanatory time series is quite variable, I didn't quantitatively compare the performance of different models. Rather I fit each explanatory variable within a separate model, using all the data available, and generated predictions. If we decide to write a paper on this we'll need to decide whether this is the best approach or if we should truncate all the explanatory variables to the same timespan and compare model performance using an information theoretic approach or LOO criteria.
+
+I've generated two sets of model predictions. The first shows fixed effects, which are life history specific and reflect the "average" relationship for those stocks, but excludes among stock variation. As you can see, many of the indicators have negligible effects and can be excluded from subsequent analyses. Some of the diet variables trend in the right direction, but their overall effect on survival is minimal (e.g. boreal copepod index, fish diet). This could reflect relatively short time series and limits our ability to evaluate alternative hypotheses to changes in seal abundance or the well established basin-scale oceanographic indices. The only oceanographic index that is probably worth considering is the SST arc. I'm not sure why the responses are opposite for stream and ocean-type stocks, but this isn't necessarily unexpected given their presumed differences in distribution. Note that the effect of seals is also different among life histories.
+
+The second set of predictions reflects differences among stocks in their relationship to different environmental drivers. Due to the number of figures, I've attached these separately and don't want to focus on them too heavily for now. Basically it's helpful to see how variable survival has been across stocks, particularly for ocean-type fish. As a result even variables with apparently strong mean fixed effects (e.g. SST arc, seals) often don't appear to be strong drivers of a given stock's survival.
+
+```{r fe_splines, echo=FALSE, message=TRUE, fig.cap="Figure 3. Fixed effect predictions from single variable GAMs. Ribbons represent 95% confidence intervals. Note stock-specific random effects excluded.", fig.height = 6, fig.width = 8}
+fe_splines <- readRDS(here::here("data", "gamFits", "fe_splines.rds"))
+fe_splines
+```

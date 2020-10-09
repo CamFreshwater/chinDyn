@@ -1,4 +1,4 @@
-"year","stock","stock_name","smolt","run","region","lat","long","agg_reg","group","survival","M"
+"brood_year","stock","stock_name","smolt","run","region","lat","long","agg_reg","group","survival","M"
 "1971","AKB","Alaska Hatchery Springs - Behm Canal","streamtype","spring","SEAK",55.962925,-131.219612,"north","north_streamtype",NA,NA
 "1972","AKB","Alaska Hatchery Springs - Behm Canal","streamtype","spring","SEAK",55.962925,-131.219612,"north","north_streamtype",NA,NA
 "1973","AKB","Alaska Hatchery Springs - Behm Canal","streamtype","spring","SEAK",55.962925,-131.219612,"north","north_streamtype",NA,NA

@@ -17,8 +17,9 @@ require(tidyverse); require(here)
 
 
 # new survival data
-by_raw <- read.csv(here("data","salmonData", "cwt_indicator_surv_sep2020.csv"), 
+by_raw <- read.csv(here::here("data","salmonData", "cwt_indicator_surv_sep2020.csv"), 
                       stringsAsFactors = FALSE)
+colnames(by_raw)[1] <- "year"
 stock_key <- data.frame(
   stock = colnames(by_raw)[2:58],
   stock_name = t(by_raw[1, 2:58])
@@ -28,7 +29,7 @@ by_dat1 <- by_raw[-1, ] %>%
   pivot_longer(., 2:ncol(.), names_to = "stock", values_to = "survival") %>% 
   left_join(., stock_key, by = "stock") %>% 
   mutate(survival = as.numeric(survival)) %>% 
-  select(year = X, stock, stock_name, survival) %>% 
+  select(brood_year = year, stock, stock_name, survival) %>% 
   arrange(stock) %>% 
   #remove stocks that are aggregates of others on CP's advice
   filter(!stock %in% c("TST", "AKS"))
@@ -45,7 +46,7 @@ by_dat1 <- by_raw[-1, ] %>%
 #   distinct()
 # write.csv(temp_out, here::here("data", "salmonData", "metadata.csv"))
 
-metadata <- read.csv(here("data", "salmonData", "metadata_clean.csv")) %>% 
+metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) %>% 
   select(-X)
 
 by_dat <- by_dat1 %>% 
@@ -62,10 +63,11 @@ by_dat <- by_dat1 %>%
          ),
          run = tolower(adultRunTiming),
          group = paste(agg_reg, smoltType, sep = "_")) %>% 
-  select(year:stock_name, smolt = smoltType, run, 
+  select(brood_year:stock_name, smolt = smoltType, run, 
          region:long, agg_reg, group, survival, M)
 
-write.csv(by_dat, here("data", "salmonData", "cwt_indicator_surv_clean.csv"),
+write.csv(by_dat, 
+          here::here("data", "salmonData", "cwt_indicator_surv_clean.csv"),
           row.names = FALSE)
 
 

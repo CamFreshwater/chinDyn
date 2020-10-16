@@ -12,21 +12,24 @@ cov <- read.csv(here::here("data/salmonData/survCovariateAnom.csv"),
 surv_raw <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
                  stringsAsFactors = FALSE) 
 surv <- surv_raw %>% 
-  filter(agg_reg == "SS",
-         !is.na(M)) %>% 
+  filter(
+    agg_reg == "SS",
+    !is.na(M)) %>% 
   #add ocean entry year to match covariates based on life history
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
                        brood_year + 1)) %>% 
-  select(year, stock, smolt, survival, M) %>% 
+  select(year, stock, smolt, group, survival, M) %>% 
   mutate(smolt = as.factor(smolt),
-         stock = as.factor(stock))
+         stock = as.factor(stock),
+         group = as.factor(group)) %>% 
+  droplevels()
 
 stock_key <- surv_raw %>% 
-  filter(agg_reg == "SS") %>% 
+  # filter(agg_reg == "SS") %>% 
   select(stock, stock_name, region, smolt) %>% 
   distinct()
 
-# # raw plot 
+# raw plot 
 plot_dat <- surv %>%
   left_join(., cov, by = "year")
 
@@ -131,6 +134,7 @@ fixed_effs_only
 m6_preds
 dev.off()
 
+
 # ------------------------------------------------------------------------------
 
 # merge covariate data then fit two GAMs (random intercepts and random splines)
@@ -168,6 +172,11 @@ dat <- cov %>%
       )
     })
   )
+
+dat <- dat %>% 
+  filter(!grepl("rkw", metric)) %>% 
+  rbind(dat2)
+
 saveRDS(dat, here::here("data", "gamFits", "salish_beta_gam.RDS"))
 
 # generate fixed effects predictions from simpler model
@@ -261,7 +270,7 @@ pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, titl
                 alpha = 0.3) +
     geom_point(data = obs_dat, aes(x = env_anomaly, y = survival, fill = smolt),
                shape = 21) +
-    facet_wrap(~stock)  +
+    facet_wrap(~stock, scales = "free_y")  +
     ggsidekick::theme_sleek() +
     labs(title = title)
 })
@@ -284,3 +293,105 @@ pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, titl
     labs(title = title)
 })
 dev.off()
+
+
+# ------------------------------------------------------------------------------
+
+# Model selection with SST arc, seals and RKW 
+trim_cov <- cov %>% 
+  filter(metric %in% c("annual_anom_sst_arc", "rkw_anom", "seal_anom"),
+         !is.na(anomaly),
+         year > 1977, 
+         year < 2013) %>% 
+  group_by(metric) %>% 
+  select(year, metric, anomaly) %>% 
+  pivot_wider(names_from = "metric", values_from = "anomaly")
+
+dat2 <- surv %>% 
+  left_join(., trim_cov, by = "year") %>% 
+  filter(!is.na(seal_anom))
+
+
+# models
+m1_sst <- gam(survival ~ s(annual_anom_sst_arc, m = 2, bs = "tp", k = 4) + 
+            s(annual_anom_sst_arc, by = smolt, m = 1, bs = "tp", k = 4) + 
+            s(stock, bs = "re"), 
+          data = dat2, family=betar(link="logit"))
+m1_seal <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+                s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
+                s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+                s(stock, bs = "re"), 
+              data = dat2, family=betar(link="logit"))
+m1_rkw <- gam(survival ~ s(rkw_anom, m = 2, bs = "tp", k = 4) + 
+                s(rkw_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
+                s(rkw_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+                s(stock, bs = "re"), 
+              data = dat2, family=betar(link="logit"))
+m2_rkw <- gam(survival ~ s(annual_anom_sst_arc, m = 2, bs = "tp", k = 4) + 
+                s(annual_anom_sst_arc, by = smolt, m = 1, bs = "tp", k = 4) + 
+                s(rkw_anom, m = 2, bs = "tp", k = 4) + 
+                s(rkw_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
+                s(rkw_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+                s(stock, bs = "re"), 
+              data = dat2, family=betar(link="logit"))
+m2_seal <- gam(survival ~ s(annual_anom_sst_arc, m = 2, bs = "tp", k = 4) + 
+                 s(annual_anom_sst_arc, by = smolt, m = 1, bs = "tp", k = 4) +
+                 s(seal_anom, m = 2, bs = "tp", k = 4) + 
+                 s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
+                 s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+                 s(stock, bs = "re"), 
+               data = dat2, family=betar(link="logit"))
+
+AIC(m1_sst, m1_seal, m1_rkw, m2_rkw, m2_seal)
+
+
+# Fit southern and Salish Sea --------------------------------------------------
+
+surv2 <- surv_raw %>% 
+  filter(
+    !is.na(M),
+    !group %in% c("north_streamtype", "north_oceantype")) %>% 
+  #add ocean entry year to match covariates based on life history
+  mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
+                       brood_year + 1)) %>% 
+  select(year, stock, smolt, group, survival, M) %>% 
+  mutate(smolt = as.factor(smolt),
+         stock = as.factor(stock),
+         group = as.factor(group)) %>% 
+  droplevels()
+
+dat2 <- cov %>% 
+  filter(!region == "sog") %>% 
+  select(year, metric, env_anomaly = anomaly) %>% 
+  nest(data = c(year, env_anomaly)) %>% 
+  mutate(
+    #for each covariate combine with survival data
+    data = map(data, function (x) {
+      surv2 %>% 
+        left_join(., x, by = "year") %>% 
+        filter(!is.na(env_anomaly))
+    }),
+    #fit gam w/ random intercepts
+    gam1 = map(data, function (x) {
+      gam(survival ~ s(env_anomaly, by = smolt, bs = "tp", m = 2, k = 4) +  
+            s(stock, bs = "re"), 
+          data = x, family=betar(link="logit"))
+    }),
+    #fit gam w/ stock-specific splines
+    gam2 = map(data, function (x) {
+      gam(survival ~ s(env_anomaly, m = 2, bs = "tp", k = 4) + 
+            s(env_anomaly, by = smolt, m = 1, bs = "tp", k = 4) + 
+            s(env_anomaly, by = stock, m = 1, bs = "tp", k = 4) + 
+            s(stock, bs = "re"), 
+          data = x, family=betar(link="logit"))
+    }),
+    #save AIC for both
+    aic = map2(gam1, gam2, function(x, y) {
+      data.frame(
+        model = c("rand_ints", "stock_splines"),
+        aic = c(AIC(x), AIC(y))
+      )
+    })
+  )
+
+

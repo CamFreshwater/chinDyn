@@ -30,9 +30,12 @@ newportCope <- read.csv(here("data/salmonData/copeIndices_newport.csv"),
 diet <- read.csv(here("data/salmonData/ckSummerDiet.csv"), 
                  stringsAsFactors = FALSE)
 
+whales <- read.csv(here("data/salmonData/rkw_salmon_jun2019.csv"), 
+                   stringsAsFactors = FALSE)
+
 npgo <- read.csv(here("data/salmonData/npgo_jul2020.csv"), 
-                 stringsAsFactors = FALSE) %>% 
-  rename(year = YEAR, month = MONTH, npgo = NPGO.index)
+                 stringsAsFactors = FALSE)
+colnames(npgo) <- c("year", "month", "npgo")
 
 pdo1 <- read.csv(here("data/salmonData/pdo_aug2020.csv"), 
                  stringsAsFactors = FALSE) 
@@ -51,8 +54,9 @@ pdo <- pdo1 %>%
   select(year, month, pdo = Value)
 
 sstArc <- read.csv(here("data/salmonData/johnstone_indicators.csv"), 
-                 stringsAsFactors = FALSE) %>% 
-  select(year = Time, sst_arc = SSTarc)
+                 stringsAsFactors = FALSE) 
+names(sstArc)[1] <- "year"
+sstArc <- sstArc %>%  select(year, sst_arc = SSTarc)
 
 biIndex <- read.csv(here("data/salmonData/bifurcation-index.csv"), 
                    stringsAsFactors = FALSE) 
@@ -108,8 +112,7 @@ ggplot(plotEnv, aes(x = year, y = anomaly, colour = var)) +
   scale_colour_viridis_d() +
   samSim::theme_sleekX()
 
-
-## seal data
+# seal data
 ggplot(seals, aes(x = year, y = mean)) +
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
@@ -120,6 +123,21 @@ trimSeal <- seals %>%
   filter(reg == "SOG") %>%
   mutate(seal_anom = scale(mean)[ , 1]) %>% 
   select(year, seal_anom)
+
+# resident killer whale data
+whales %>% 
+  pivot_longer(., cols = c(NRKW_N, SRKW_N), names_to = "population", 
+               values_to = "abundance") %>% 
+  ggplot(.) +
+  geom_line(aes(x = Year, y = abundance, color = population)) 
+
+trimWhales <- whales %>% 
+  #scale and subtract two years to estimate effects at maturity
+  mutate(lagged_year = Year - 2,
+         nrkw_anom = scale(NRKW_N)[ , 1],
+         srkw_anom = scale(SRKW_N)[ , 1],
+         rkw_anom = scale(NRKW_N + SRKW_N)[ , 1]) %>% 
+  select(year = lagged_year, nrkw_anom, srkw_anom, rkw_anom)
 
 # for oceanographic indices which have monthly values calculate annual means and
 # means for April-July (priming period)
@@ -153,11 +171,13 @@ phys_ocean_anom <- phys_ocean %>%
   glimpse()
 
 ## consolidate all anomalies
-covOut <- phys_ocean_anom %>% 
+covWide <- phys_ocean_anom %>% 
   full_join(trimSeal, by = "year") %>% 
-  full_join(bi_index %>% select(year, bi_anom = bi_stnd), by = "year") %>% 
+  full_join(trimWhales, by = "year") %>% 
+  full_join(biIndex %>% select(year, bi_anom = bi_stnd), by = "year") %>% 
   full_join(trimDiet, by = "year") %>% 
-  full_join(trimEnv, by = "year") %>%  
+  full_join(trimEnv, by = "year") 
+covOut <- covWide
   pivot_longer(cols = 2:ncol(.), names_to = "metric", values_to = "anomaly") %>%
   mutate(
     time_step = case_when(
@@ -170,9 +190,12 @@ covOut <- phys_ocean_anom %>%
       grepl("prime", metric) ~ "physical",
       metric == "bi_anom" ~ "physical",
       grepl("seal", metric) ~ "predator",
+      grepl("rkw", metric) ~ "predator",
       TRUE ~ "diet"
     ),
     region = case_when(
+      metric == "srkw_anom" ~ "sog",
+      grepl("rkw", metric) ~ "basin",
       class == "physical" ~ "basin",
       metric == "cci_anom" ~ "ca_current",
       metric %in% c("zp_env_anom", "fish_env_anom", "seal_anom") ~ "sog",
@@ -195,40 +218,10 @@ cov_ts
 dev.off()
 
 
-# ------------------------------------------------------------------------------
-
-# raw comparison of seal abundance data with survival
-
-eyDat <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
-                  stringsAsFactors = FALSE)
-
-dat1 <- eyDat %>% 
-  mutate(lat = as.numeric(lat),
-         long = as.numeric(long),
-         aggReg = case_when(
-           (is.na(lat)) ~ "north",
-           (lat > 52 & !region == "UFR") ~ "north",
-           (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
-                          "WCVI")) ~ "south",
-           TRUE ~ "SS"
-         ),
-         group = paste(aggReg, smoltType, sep = "_")) %>% 
-  rename(year = OEY) %>% 
-  left_join(., 
-            seals %>% 
-              filter(reg == "SOG") %>% 
-              select(mean, year),
-            by = "year") %>% 
-  filter(!is.na(mean),
-         !is.na(surv))
-
-seal_plot <- dat1 %>% 
-  filter(aggReg == "SS") %>% 
-  ggplot() +
-  geom_point(aes(x = mean, y = surv, fill = group), shape = 21) +
-  ggsidekick::theme_sleek() +
-  facet_wrap(~stock)
-
-pdf(here::here("figs", "seal_corr.pdf"), height = 7, width = 8)
-seal_plot
-dev.off()
+## Correlelogram 
+corCov <- covWide %>% 
+  select(-year) %>% 
+  na.omit() %>% 
+  as.matrix() %>% 
+  cor()
+corrplot::corrplot(corCov, method = "number", "upper")

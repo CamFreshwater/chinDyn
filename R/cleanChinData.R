@@ -54,85 +54,43 @@ by_dat <- by_dat1 %>%
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          M = -log(survival),
-         agg_reg = case_when(
-           (is.na(lat)) ~ "north",
+         j_group = case_when(
            (lat > 52 & !region == "UFR") ~ "north",
-           (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
-                          "WCVI", "SBC")) ~ "south",
-           TRUE ~ "SS"
+           region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
+                          "WCVI") ~ "south",
+           TRUE ~ "salish"
          ),
-         run = tolower(adultRunTiming),
-         group = paste(agg_reg, smoltType, sep = "_")) %>% 
+         a_group = case_when(
+           smoltType == "streamtype" ~ "offshore",
+           region %in% c("ECVI", "LFR", "HOODC", "SPGSD", "NPGSD") ~ "south",
+           grepl("COLR", region) ~ "columbia",
+           TRUE ~ "north"
+         ),
+         run = tolower(adultRunTiming)#,
+         # group = paste(juv_reg, smoltType, sep = "_")
+         ) %>% 
   select(brood_year:stock_name, smolt = smoltType, run, 
-         region:long, agg_reg, group, survival, M)
+         region:long, j_group, a_group, #group, 
+         survival, M)
 
 write.csv(by_dat, 
           here::here("data", "salmonData", "cwt_indicator_surv_clean.csv"),
           row.names = FALSE)
 
+a_palette <- disco::disco("bright", n = length(unique(by_dat$a_group)))
+names(a_palette) <- unique(by_dat$a_group)
+j_palette <- disco::disco("muted", n = length(unique(by_dat$j_group)))
+names(j_palette) <- unique(by_dat$j_group)
+pals <- list(a_palette, j_palette)
+saveRDS(pals, here::here("data", "color_pals.RDS"))
 
 #How many stocks per region?
 by_dat %>% 
-  group_by(region) %>% 
+  group_by(j_group) %>% 
   summarize(nStocks = length(unique(stock)))
 by_dat %>% 
-  group_by(group) %>% 
+  group_by(a_group) %>% 
   summarize(nStocks = length(unique(stock)))
-
-
-## OLD ##
-# byDatWide <- read.csv(here("data","salmonData","rawData","cwt2SRData",
-#                            "cwtInd_age2SR_BY.csv"), 
-#                   stringsAsFactors = FALSE)
-# eyDatWide <- read.csv(here("data","salmonData","rawData","cwt2SRData",
-#                            "cwtInd_age2SR_OEY.csv"), 
-#                   stringsAsFactors = FALSE)
-# stockInfo <- read.csv(here("data","salmonData","rawData", "cwt2SRData",
-#                            "pstID.csv"), 
-#                       stringsAsFactors = FALSE) %>% 
-#   #remove some extra columns to keep things clean
-#   select(-oceanStartAge, -terminalNetAge, -maxAge, -smoltAgeCode,
-#          -adultRunTimingCode, -country, -comments) %>% 
-#   mutate(lat = as.numeric(lat),
-#          long = as.numeric(long),
-#          aggReg = case_when(
-#            (is.na(lat)) ~ "north",
-#            (lat > 52 & !region == "UFR") ~ "north",
-#            (region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
-#                           "WCVI")) ~ "south",
-#            TRUE ~ "SS"
-#          )) %>% 
-#   filter(aggReg == "SS")
-# 
-# 
-# 
-# #Lengthen each dataset
-# byDat <- byDatWide %>% 
-#   gather(key = "stock", value = "surv", -BY) 
-# eyDat <- eyDatWide %>% 
-#   gather(key = "stock", value = "surv", -OEY)
-# 
-# # Function to merge and filter each dataset w/ less than 10 years of survival
-# # data
-# cleanPST <- function(dat, stockInfo) {
-#   #ID stocks w/ long TS
-#   longStks <- dat %>% 
-#     filter(!is.na(surv)) %>% 
-#     group_by(stock) %>% 
-#     summarize(tsLength = length(surv)) %>% 
-#     filter(!tsLength <= 10) 
-#   #join and subset
-#   dat %>% 
-#     left_join(stockInfo) %>% 
-#     filter(stock %in% longStks$stock)
-# }
-# byDat <- cleanPST(byDat, stockInfo)
-# write.csv(byDat, here("data", "salmonData", "CLEANcwtInd_age2SR_BY.csv"), 
-#           row.names = FALSE)
-# eyDat <- cleanPST(eyDat, stockInfo)
-# write.csv(eyDat, here("data", "salmonData", "CLEANcwtInd_age2SR_OEY.csv"), 
-#           row.names = FALSE)
-
 
 #----- 
 

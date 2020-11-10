@@ -66,17 +66,16 @@ biIndex <- read.csv(here("data/salmonData/bifurcation-index.csv"),
 ### Plot each TS
 
 ## Diet data
-plotDiet <- diet %>% 
-  gather(key = "group", value = "ppn", -year, -season) %>% 
-  mutate(ppn = case_when(
-    is.na(ppn) ~ 0,
-    TRUE ~ ppn
-  ))
-
-ggplot(plotDiet, aes(x = year, y = ppn, fill = group)) +
-  geom_area(position = "stack") +
-  scale_fill_viridis_d() +
-  samSim::theme_sleekX()
+# plotDiet <- diet %>% 
+#   gather(key = "group", value = "ppn", -year, -season) %>% 
+#   mutate(ppn = case_when(
+#     is.na(ppn) ~ 0,
+#     TRUE ~ ppn
+#   )) %>% 
+#   ggplot(., aes(x = year, y = ppn, fill = group)) +
+#   geom_area(position = "stack") +
+#   scale_fill_viridis_d() +
+#   samSim::theme_sleekX()
 
 trimDiet <- diet %>% 
   mutate(fish_diet_anom = scale(teleostei)[ , 1]) %>% 
@@ -104,20 +103,19 @@ trimEnv <- viZP %>%
   full_join(trimSoG, by = "year") %>% 
   full_join(trimNewport %>% select(-meanCCI), by = "year")
 
-plotEnv <- trimEnv %>% 
-  gather(key = "var", value = "anomaly", -year)
-
-ggplot(plotEnv, aes(x = year, y = anomaly, colour = var)) +
-  geom_line() +
-  scale_colour_viridis_d() +
-  samSim::theme_sleekX()
+# trimEnv %>% 
+#   gather(key = "var", value = "anomaly", -year) %>% 
+#   ggplot(., aes(x = year, y = anomaly, colour = var)) +
+#   geom_line() +
+#   scale_colour_viridis_d() +
+#   samSim::theme_sleekX()
 
 # seal data
-ggplot(seals, aes(x = year, y = mean)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
-  samSim::theme_sleekX() +
-  facet_wrap(~reg, scales = "free_y")
+# ggplot(seals, aes(x = year, y = mean)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
+#   samSim::theme_sleekX() +
+#   facet_wrap(~reg, scales = "free_y")
 
 trimSeal <- seals %>%
   filter(reg == "SOG") %>%
@@ -125,11 +123,11 @@ trimSeal <- seals %>%
   select(year, seal_anom)
 
 # resident killer whale data
-whales %>% 
-  pivot_longer(., cols = c(NRKW_N, SRKW_N), names_to = "population", 
-               values_to = "abundance") %>% 
-  ggplot(.) +
-  geom_line(aes(x = Year, y = abundance, color = population)) 
+# whales %>% 
+#   pivot_longer(., cols = c(NRKW_N, SRKW_N), names_to = "population", 
+#                values_to = "abundance") %>% 
+#   ggplot(.) +
+#   geom_line(aes(x = Year, y = abundance, color = population)) 
 
 trimWhales <- whales %>% 
   #scale and subtract two years to estimate effects at maturity
@@ -177,7 +175,8 @@ covWide <- phys_ocean_anom %>%
   full_join(biIndex %>% select(year, bi_anom = bi_stnd), by = "year") %>% 
   full_join(trimDiet, by = "year") %>% 
   full_join(trimEnv, by = "year") 
-covOut <- covWide
+
+covOut <- covWide %>% 
   pivot_longer(cols = 2:ncol(.), names_to = "metric", values_to = "anomaly") %>%
   mutate(
     time_step = case_when(
@@ -225,3 +224,11 @@ corCov <- covWide %>%
   as.matrix() %>% 
   cor()
 corrplot::corrplot(corCov, method = "number", "upper")
+
+
+## Length of time series
+covOut %>% 
+  filter(!is.na(anomaly)) %>% 
+  group_by(metric) %>% 
+  summarize(min = min(year),
+            max = max(year))

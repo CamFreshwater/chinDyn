@@ -18,18 +18,23 @@ surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"),
   mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
                        brood_year + 1),
-         group = as.factor(group),
-         stock = fct_reorder(stock, as.numeric(group)))
+         j_group = as.factor(j_group),
+         a_group = as.factor(a_group),
+         stock = fct_reorder(stock, as.numeric(j_group)))
 # saveRDS(surv, here::here("data", "salmonData", "clean_dfa_inputs.rds"))
 
+pals <- readRDS(here::here("data", "color_pals.RDS"))
+
 # plots 
-# raw_surv <- surv %>% 
-#   filter(!is.na(M)) %>% 
-#   ggplot(.) +
-#   geom_point(aes(x = year, y = M, fill = group), shape = 21) + 
-#   facet_wrap(~ fct_reorder(stock, as.numeric(group))) +
-#   theme(legend.position = "top") +
-#   labs(y = "Scaled M")
+raw_surv <- surv %>%
+  filter(!is.na(M)) %>%
+  ggplot(.) +
+  geom_point(aes(x = year, y = M, fill = j_group), shape = 21) +
+  scale_fill_manual(values = pals[[2]]) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(j_group))) +
+  theme(legend.position = "top") +
+  labs(y = "M")
+
 # pdf(here::here("figs", "raw_M_trends.pdf"))
 # raw_surv
 # dev.off()
@@ -68,76 +73,66 @@ plot_loadings(r_global) +
 dev.off()
 
 
-## GROUP MODEL SELECTION -------------------------------------------------------
+## JUVENILE GROUPINGS  ---------------------------------------------------------
+make_surv_tbl <- function (dat_in) {
+  surv_tbl <- tibble(group = levels(dat_in$group)) %>% 
+    mutate(
+      m_mat = dat_in %>% 
+        filter(!is.na(M)) %>% 
+        group_split(group) %>% 
+        map(., make_mat)
+    )
+  surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
+    data.frame(stock = row.names(x)) %>% 
+      left_join(., surv %>% select(stock, stock_name) %>% distinct(),
+                by = "stock")
+  })
+  surv_tbl$years <- unique(dat_in$years)
 
-surv_trim2 <- surv %>%
-  filter(!group %in% c("north_oceantype", "south_streamtype")) %>% 
-  droplevels()
-surv_tbl <- tibble(group = levels(surv_trim2$group)) %>% 
-  mutate(
-    m_mat = surv_trim2 %>% 
-      filter(!is.na(M)) %>% 
-      group_split(group) %>% 
-      map(., make_mat)
-  )
-surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
-  data.frame(stock = row.names(x)) %>% 
-    left_join(., surv %>% select(stock, stock_name) %>% distinct(),
-              by = "stock")
-})
+  return(surv_tbl)  
+}
 
-# # evaluate up to 3 trends per group
-# surv_tbl <- readRDS(here::here("data", "dfaBayesFits", 
-#                                "group_top_models.rds")) 
-# trend_select_list <- lapply(surv_tbl$m_mat, function(x) {
-#   find_dfa_trends(x, iter = 2500, kmin = 1, kmax = 2, chains = 4,
-#                   variance =  "equal",
-#                   control = list(adapt_delta = 0.95, max_treedepth = 20))
-# })
-# 
-
-# map(trend_select_list, ~.$summary)
-# surv_tbl$top_dfa <- map(trend_select_list, ~.$best_model)
-# saveRDS(surv_tbl, here::here("data", "dfaBayesFits", "group_top_models.rds"))
-
-map2(surv_tbl$group, surv_tbl$top_dfa, function (group_name, x) {
-  file_name <- paste(group_name, "2trend_fit.pdf", sep = "_")
-  
-  rot_dum <- rotate_trends(x)
-  
-  pdf(here::here("figs", "dfa", "bayes", file_name))
-  print(plot_fitted(x))
-  print(plot_trends(rot_dum))
-  print(plot_loadings(rot_dum) +
-    ylim(-2, 2))
-  dev.off()
-})
-
-
-## FIT TWO TREND MODELS --------------------------------------------------------
+surv_tbl_j <- surv %>%
+  filter(!(grepl("COLR", region) & smolt == "streamtype")) %>%
+  droplevels() %>% 
+  rename(group = j_group) %>% 
+  make_surv_tbl()
+surv_tbl_a <- surv %>%
+  rename(group = a_group) %>% 
+  make_surv_tbl()
 
 # fit models to each region, then export to Rmd
-dfa_list <- map(surv_tbl$m_mat, function(x) {
-  fit_dfa(y = x, num_trends = 2, zscore = TRUE, iter = 8000, chains = 1, 
+surv_tbl_j$dfa_two_trend <- map(surv_tbl_j$m_mat, function(x) {
+  fit_dfa(y = x, num_trends = 2, zscore = TRUE, iter = 2000, chains = 4, 
           thin = 1, control = list(adapt_delta = 0.95, max_treedepth = 20))
 })
-surv_tbl$dfa_two_trend <- dfa_list
+surv_tbl_a$dfa_two_trend <- map(surv_tbl_a$m_mat, function(x) {
+  fit_dfa(y = x, num_trends = 2, zscore = TRUE, iter = 2000, chains = 4, 
+          thin = 1, control = list(adapt_delta = 0.95, max_treedepth = 20))
+})
 
-saveRDS(surv_tbl, here::here("data", "dfaBayesFits", "two-trend-fits.rds"))
+saveRDS(surv_tbl_j, here::here("data", "dfaBayesFits", "two-trend-fits-juv.rds"))
+saveRDS(surv_tbl_a, here::here("data", "dfaBayesFits", "two-trend-fits-adult.rds"))
 
 # save figs
-pmap(list(surv_tbl$group, surv_tbl$dfa_two_trend), function (group_name, x) {
+print_dfa_plots <- function (group_name, x, names, dir_name, obs_years) {
   file_name <- paste(group_name, "2trend_fit.pdf", sep = "_")
+  stock_names <- names$stock
   
   rot_dum <- rotate_trends(x)
-  pdf(here::here("figs", "dfa", "bayes", file_name))
-  print(plot_fitted(x))
-  print(plot_trends(rot_dum))
-  print(plot_loadings(rot_dum) +
-          ylim(-2, 2))
+  pdf(here::here("figs", "dfa", "bayes", dir_name, file_name))
+  print(plot_fitted(x, names = stock_names))
+  print(plot_trends(rot_dum, years = obs_years))
+  print(plot_loadings(rot_dum, names = stock_names) +
+    ylim(-2, 2))
   dev.off()
 }
-)
+pmap(list(surv_tbl_j$group, surv_tbl_j$dfa_two_trend, surv_tbl_j$names, 
+          "juv_grouping", ), 
+     print_dfa_plots)
+pmap(list(surv_tbl_a$group, surv_tbl_a$dfa_two_trend, surv_tbl_a$names, 
+          "adult_grouping", ), 
+     print_dfa_plots)
 
 
 ## FIT SALISH SEA MODEL --------------------------------------------------------
@@ -205,3 +200,57 @@ pmap(list(ss_surv_tbl$group, ss_surv_tbl$fit1, ss_surv_tbl$fit2),
        dev.off()
      }
   )
+
+
+
+
+
+
+
+
+
+## GROUP MODEL SELECTION -------------------------------------------------------
+
+surv_trim_j <- surv %>%
+  filter(!(grepl("COLR", region) & smolt == "streamtype")) %>%
+  droplevels()
+
+surv_tbl <- tibble(group = levels(surv_trim_j$j_group)) %>% 
+  mutate(
+    m_mat = surv_trim_j %>% 
+      filter(!is.na(M)) %>% 
+      group_split(j_group) %>% 
+      map(., make_mat)
+  )
+surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
+  data.frame(stock = row.names(x)) %>% 
+    left_join(., surv %>% select(stock, stock_name) %>% distinct(),
+              by = "stock")
+})
+
+# # evaluate up to 3 trends per group
+# surv_tbl <- readRDS(here::here("data", "dfaBayesFits",
+#                                "group_top_models.rds"))
+# trend_select_list <- lapply(surv_tbl$m_mat, function(x) {
+#   find_dfa_trends(x, iter = 2500, kmin = 1, kmax = 3, chains = 4,
+#                   variance =  "equal",
+#                   control = list(adapt_delta = 0.95, max_treedepth = 20))
+# })
+
+
+# map(trend_select_list, ~.$summary)
+# surv_tbl$top_dfa <- map(trend_select_list, ~.$best_model)
+# saveRDS(surv_tbl, here::here("data", "dfaBayesFits", "group_top_models.rds"))
+
+# map2(surv_tbl$group, surv_tbl$top_dfa, function (group_name, x) {
+#   file_name <- paste(group_name, "2trend_fit.pdf", sep = "_")
+#   
+#   rot_dum <- rotate_trends(x)
+#   
+#   pdf(here::here("figs", "dfa", "bayes", file_name))
+#   print(plot_fitted(x))
+#   print(plot_trends(rot_dum))
+#   print(plot_loadings(rot_dum) +
+#     ylim(-2, 2))
+#   dev.off()
+# })

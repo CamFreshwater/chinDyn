@@ -13,32 +13,24 @@
 library(tidyverse); library(here); library(ggplot2); library(viridis)
   
 # load and initial clean
-seals <- read.csv(here("data/salmonData/sealPopEst.csv"), 
-                  stringsAsFactors = FALSE) %>% 
+seals <- read.csv(here("data/salmonData/sealPopEst.csv")) %>% 
   rename(year = "Estimate", mean = "Mean", low = "X2.5th", up = "X97.5th", 
          reg = "Region")
 
-sogZP <- read.csv(here("data/salmonData/totalPreyAnomalies_SOG.csv"),
-                  stringsAsFactors = FALSE)
+sogZP <- read.csv(here("data/salmonData/totalPreyAnomalies_SOG.csv"))
 
-viZP <- read.csv(here("data/salmonData/totalPreyAnomalies_sVI.csv"),
-                 stringsAsFactors = FALSE)
+viZP <- read.csv(here("data/salmonData/totalPreyAnomalies_sVI.csv"))
 
-newportCope <- read.csv(here("data/salmonData/copeIndices_newport.csv"),
-                        stringsAsFactors = FALSE)
+newportCope <- read.csv(here("data/salmonData/copeIndices_newport.csv"))
 
-diet <- read.csv(here("data/salmonData/ckSummerDiet.csv"), 
-                 stringsAsFactors = FALSE)
+diet <- read.csv(here("data/salmonData/ckSummerDiet.csv"))
 
-whales <- read.csv(here("data/salmonData/rkw_salmon_jun2019.csv"), 
-                   stringsAsFactors = FALSE)
+whales <- read.csv(here("data/salmonData/rkw_salmon_jun2019.csv"))
 
-npgo <- read.csv(here("data/salmonData/npgo_jul2020.csv"), 
-                 stringsAsFactors = FALSE)
+npgo <- read.csv(here("data/salmonData/npgo_jul2020.csv"))
 colnames(npgo) <- c("year", "month", "npgo")
 
-pdo1 <- read.csv(here("data/salmonData/pdo_aug2020.csv"), 
-                 stringsAsFactors = FALSE) 
+pdo1 <- read.csv(here("data/salmonData/pdo_aug2020.csv")) 
 pdo_date_list <- strsplit(as.character(pdo1$Date), "") 
 pdo <- pdo1 %>% 
   mutate(
@@ -53,14 +45,41 @@ pdo <- pdo1 %>%
   ) %>% 
   select(year, month, pdo = Value)
 
-sstArc <- read.csv(here("data/salmonData/johnstone_indicators.csv"), 
-                 stringsAsFactors = FALSE) 
+sstArc <- read.csv(here("data/salmonData/johnstone_indicators.csv")) 
 names(sstArc)[1] <- "year"
 sstArc <- sstArc %>%  select(year, sst_arc = SSTarc)
 
-biIndex <- read.csv(here("data/salmonData/bifurcation-index.csv"), 
-                   stringsAsFactors = FALSE) 
+biIndex <- read.csv(here("data/salmonData/bifurcation-index.csv")) %>% 
+  mutate(bi_stnd = scale(bifurcation_index)[, 1])
 
+# helper function to rename herring data
+split_bind <- function(x) {
+  strsplit(x, "_") %>% 
+    map(., .f = function(y) y[1]) %>% 
+    unlist(.)
+}
+
+herring <- read.csv(here("data/salmonData/herring_r.csv")) %>% 
+  pivot_wider(., names_from = "Indicator", values_from = "Value") %>% 
+  pivot_longer(cols = contains("_Med"), names_to = "stock", 
+               values_to = "median") %>%
+  pivot_longer(cols = contains("_LowerCI"), names_to = "stock2", 
+               values_to = "lo_ci") %>%
+  pivot_longer(cols = contains("_UpperCI"), names_to = "stock3", 
+               values_to = "up_ci") %>% 
+  mutate(
+    stock = split_bind(stock),
+    stock2 = split_bind(stock2), 
+    stock3 = split_bind(stock3)
+  ) %>% 
+  #retain only rows with stocks matching
+  filter(
+    (stock == stock2 & stock2 == stock3)
+  ) %>%
+  select(year = Year, stock, median, lo_ci, up_ci) 
+
+  
+  
 #-------------------------------------------------------------------------------
 
 ### Plot each TS
@@ -110,17 +129,34 @@ trimEnv <- viZP %>%
 #   scale_colour_viridis_d() +
 #   samSim::theme_sleekX()
 
+
 # seal data
-# ggplot(seals, aes(x = year, y = mean)) +
-#   geom_line() +
-#   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
-#   samSim::theme_sleekX() +
-#   facet_wrap(~reg, scales = "free_y")
+ggplot(seals, aes(x = year, y = mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
+  samSim::theme_sleekX() +
+  facet_wrap(~reg, scales = "free_y")
 
 trimSeal <- seals %>%
   filter(reg == "SOG") %>%
   mutate(seal_anom = scale(mean)[ , 1]) %>% 
   select(year, seal_anom)
+
+
+# herring data
+ggplot(herring, aes(x = year, y = median)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lo_ci, ymax = up_ci), alpha = 0.4) +
+  samSim::theme_sleekX() +
+  facet_wrap(~stock, scales = "free_y")
+
+trimHerring <- herring %>% 
+  group_by(stock) %>% 
+  mutate(herr_anom = scale(median)[ , 1]) %>% 
+  ungroup() %>% 
+  filter(stock %in% c("WCVIHerringR", "SoGHerringR")) %>% 
+  pivot_wider(names_from = stock, values_from = herr_anom) %>% 
+  select(year, sog_herr_anom = SoGHerringR, wcvi_herr_anom = WCVIHerringR) 
 
 # resident killer whale data
 # whales %>% 
@@ -172,6 +208,7 @@ phys_ocean_anom <- phys_ocean %>%
 covWide <- phys_ocean_anom %>% 
   full_join(trimSeal, by = "year") %>% 
   full_join(trimWhales, by = "year") %>% 
+  full_join(trimHerring, by = "year") %>% 
   full_join(biIndex %>% select(year, bi_anom = bi_stnd), by = "year") %>% 
   full_join(trimDiet, by = "year") %>% 
   full_join(trimEnv, by = "year") 
@@ -197,12 +234,23 @@ covOut <- covWide %>%
       grepl("rkw", metric) ~ "basin",
       class == "physical" ~ "basin",
       metric == "cci_anom" ~ "ca_current",
-      metric %in% c("zp_env_anom", "fish_env_anom", "seal_anom") ~ "sog",
-      metric %in% c("boreal_anom", "south_anom", "fish_diet_anom") ~ "wcvi"
+      metric %in% c("zp_env_anom", "fish_env_anom", "seal_anom",
+                    "sog_herr_anom") ~ "sog",
+      metric %in% c("boreal_anom", "south_anom", "fish_diet_anom",
+                    "wcvi_herr_anom") ~ "wcvi"
     )
   )
   
 write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
+
+
+## Export whale, seal and herring data as list
+cov_subset_list <- list(seals = seals,
+                        herring = herring,
+                        whales = whales %>% 
+                          select(Year, NRKW_N, SRKW_N))
+saveRDS(cov_subset_list, here::here("data/salmonData/cov_subset_list.rds"))
+
 
 ## Looks at covariates
 cov_ts <- covOut %>% 

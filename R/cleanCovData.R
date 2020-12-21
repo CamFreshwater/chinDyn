@@ -246,6 +246,18 @@ write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
 
 ## Export whale, seal and herring data as list for juvenile analyses (i.e. SoG
 # only, herring lagged by two years)
+
+# Eventually incorporate uncertainty using CIs and assuming:
+# SD = sqrt(n-1) x ((up - lo) / 3.92) where n is length of time series for seals
+# (should be DF of model) and number of MCMC iterations for herring estimates
+# herr_clean <- herring %>% 
+#   mutate(sd = sqrt(1000) * (abs(lo_ci - up_ci) / 3.92)) %>% 
+#   glimpse()
+# seal_clean <- seals %>% 
+#   filter(reg == "SOG") %>% 
+#   mutate(n = length(unique(year)),
+#          sd = sqrt(n - 1) * (abs(low - up) / 3.92))
+
 juv_cov <- herring %>% 
   filter(stock == "SoGHerringR") %>% 
   mutate(year2 = year - 2) %>%
@@ -255,6 +267,7 @@ juv_cov <- herring %>%
               filter(reg == "SOG") %>% 
               select(year, seal_abund = mean),
             by = "year") 
+
 saveRDS(juv_cov, here::here("data/salmonData/cov_subset_juv.rds"))
 
 

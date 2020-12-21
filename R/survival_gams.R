@@ -64,17 +64,18 @@ h_mod <- gam(survival ~ s(herr_anom, m = 2, bs = "tp", k = 4) +
                s(herr_anom, by = stock, m = 1, bs = "tp", k = 4) + 
                s(stock, bs = "re"), 
              data = dat, family=betar(link="logit"))
-hs_mod <- gam(survival ~ te(herr_anom, seal_anom, m = 2, bs = "tp", k = 4) + 
-                te(herr_anom, seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
-                s(stock, bs = "re"), 
-             data = dat, family=betar(link="logit"))
-hs_mod2 <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+# hs_mod2 <- gam(survival ~ te(herr_anom, seal_anom, m = 2, bs = "tp", k = 4) + 
+#                 te(herr_anom, seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+#                 s(stock, bs = "re"), 
+#              data = dat, family=betar(link="logit"))
+hs_mod <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
                  s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) +
                  s(herr_anom, m = 2, bs = "tp", k = 4) + 
                  s(herr_anom, by = stock, m = 1, bs = "tp", k = 4) + 
                  s(stock, bs = "re"), 
                data = dat, family=betar(link="logit"))
-AIC(s_mod, h_mod, hs_mod, hs_mod2)
+AIC(s_mod, h_mod, hs_mod#, hs_mod2
+    )
 
 # generate predictions for interaction model
 excl_pars <- map(hs_mod2$smooth, function(x) x$label) %>% unlist
@@ -95,28 +96,75 @@ new_dat2 <- new_dat %>%
          pred_surv_up = plogis(link_fit + (qnorm(0.975) * link_se))
          )
 
-ggplot(new_dat2, aes(x = seal_anom, y = herr_anom)) +
+heat_plot <- ggplot(new_dat2, aes(x = seal_anom, y = herr_anom)) +
   geom_raster(aes(fill = pred_surv)) +
-  scale_fill_viridis_c()
+  scale_fill_viridis_c(name = "Predicted\nSurvival") +
+  labs(x = "SoG Seal Anomaly", y = "SoG Herring Anomaly") +
+  ggsidekick::theme_sleek()
 
-# herring only effects
+# herring only fixed effects
 zero_seal <- new_dat2$seal_anom[which.min(abs(new_dat2$seal_anom - 0))]
-new_dat2 %>% 
+h_plot <- new_dat2 %>% 
   filter(seal_anom == zero_seal) %>% 
   ggplot(., aes(x = herr_anom)) +
   geom_line(aes(y = pred_surv)) +
   geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
-  ggsidekick::theme_sleek()
+  ggsidekick::theme_sleek() +
+  lims(y = c(0.01, 0.05)) +
+  labs(x = "SoG Herring Anomaly", y = "Predicted Survival")
 
-# seal only effects
+# seal only fixed effects
 zero_herr <- new_dat2$herr_anom[which.min(abs(new_dat2$herr_anom - 0))]
-new_dat2 %>% 
+s_plot <- new_dat2 %>% 
   filter(herr_anom == zero_herr) %>% 
   ggplot(., aes(x = seal_anom)) +
   geom_line(aes(y = pred_surv)) +
   geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
-  ggsidekick::theme_sleek()
+  ggsidekick::theme_sleek() +
+  lims(y = c(0.01, 0.05)) +
+  labs(x = "SoG Seal Anomaly", y = "Predicted Survival")
 
+
+pdf(here::here("figs", "gam", "herr_seal_gam_FE.pdf"))
+heat_plot
+ggpubr::ggarrange(h_plot, s_plot, nrow = 1, ncol = 2)
+dev.off()
+
+# include stock-specific effects 
+new_dat_stock <- expand.grid(seal_anom = seal_seq, 
+                             herr_anom = herr_seq,
+                             stock = unique(dat$stock))
+
+# fixed effects predictions
+preds <- predict(hs_mod, new_dat_stock, se.fit = TRUE, 
+                 newdata.guaranteed = TRUE)
+new_dat_stock2 <- new_dat_stock %>% 
+  mutate(link_fit = as.numeric(preds$fit),
+         link_se = as.numeric(preds$se.fit),
+         pred_surv = plogis(link_fit),
+         pred_surv_lo = plogis(link_fit + (qnorm(0.025) * link_se)),
+         pred_surv_up = plogis(link_fit + (qnorm(0.975) * link_se))
+  )
+
+# herring only stock-specific effects
+new_dat_stock2 %>% 
+  filter(seal_anom == zero_seal) %>% 
+  ggplot(., aes(x = herr_anom)) +
+  geom_line(aes(y = pred_surv)) +
+  geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
+  geom_point(data = dat, aes(x = herr_anom, y = survival)) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~stock)
+
+# seal only stock-specific effects
+new_dat_stock2 %>% 
+  filter(herr_anom == zero_herr) %>% 
+  ggplot(., aes(x = seal_anom)) +
+  geom_line(aes(y = pred_surv)) +
+  geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
+  geom_point(data = dat, aes(x = seal_anom, y = survival)) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~stock)
 
 
 # TEST STRUCTURE ---------------------------------------------------------------

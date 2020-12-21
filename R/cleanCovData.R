@@ -244,12 +244,18 @@ covOut <- covWide %>%
 write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
 
 
-## Export whale, seal and herring data as list
-cov_subset_list <- list(seals = seals,
-                        herring = herring,
-                        whales = whales %>% 
-                          select(Year, NRKW_N, SRKW_N))
-saveRDS(cov_subset_list, here::here("data/salmonData/cov_subset_list.rds"))
+## Export whale, seal and herring data as list for juvenile analyses (i.e. SoG
+# only, herring lagged by two years)
+juv_cov <- herring %>% 
+  filter(stock == "SoGHerringR") %>% 
+  mutate(year2 = year - 2) %>%
+  select(herring_model_year = year, year = year2, herr_abund = median) %>% 
+  left_join(., 
+            seals %>%
+              filter(reg == "SOG") %>% 
+              select(year, seal_abund = mean),
+            by = "year") 
+saveRDS(juv_cov, here::here("data/salmonData/cov_subset_juv.rds"))
 
 
 ## Looks at covariates

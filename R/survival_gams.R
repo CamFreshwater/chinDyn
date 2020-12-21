@@ -3,37 +3,47 @@
 # and Chinook survival to age 2 
 # For now focused only on Salish Sea individuals
 # Oct. 1 2020
+# Update Dec. 18: remove RKW component (that's now analyzed with age data) and
+# incorporate herring effects
 
 library(mgcv)
 library(tidyverse)
 
-cov <- read.csv(here::here("data/salmonData/survCovariateAnom.csv"), 
-                stringsAsFactors = F)
-surv_raw <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
-                 stringsAsFactors = FALSE) 
+file_path <- "data/salmonData/"
+
+#survival data
+surv_raw <- read.csv(here::here(file_path, "cwt_indicator_surv_clean.csv")) 
 surv <- surv_raw %>% 
   filter(
-    agg_reg == "SS",
-    !is.na(M)) %>% 
+    j_group == "salish",
+    !is.na(M)) %>%
   #add ocean entry year to match covariates based on life history
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
                        brood_year + 1)) %>% 
-  select(year, stock, smolt, group, survival, M) %>% 
+  select(year, stock, smolt, j_group, survival, M) %>% 
   mutate(smolt = as.factor(smolt),
          stock = as.factor(stock),
-         group = as.factor(group)) %>% 
+         j_group = as.factor(j_group)) %>% 
   droplevels()
 
 stock_key <- surv_raw %>% 
-  # filter(agg_reg == "SS") %>% 
+  filter(j_group == "salish") %>%
   select(stock, stock_name, region, smolt) %>% 
   distinct()
 
-# raw plot 
-plot_dat <- surv %>%
-  left_join(., cov, by = "year")
+# covariate data
+cov <- readRDS(here::here(file_path, "cov_subset_juv.rds"))
 
-plot_dat %>%
+# raw plot 
+dat <- surv %>%
+  left_join(., cov, by = "year") %>% 
+  filter(!is.na(seal_abund)) %>% 
+  mutate(herr_anom = scale(herr_abund)[ , 1],
+         seal_anom = scale(seal_abund)[ , 1]) 
+  
+dat %>%
+  pivot_longer(cols = c("herr_anom", "seal_anom"), names_to = "metric",
+               values_to = "anomaly") %>% 
   filter(smolt == "streamtype") %>%
   ggplot(., aes(x = anomaly, y = M)) +
   geom_point() +
@@ -41,52 +51,132 @@ plot_dat %>%
   facet_wrap(~metric)
   
 
-# Test fit ---------------------------------------------------------------------
+# COMPARE ANOMALIES ------------------------------------------------------------
+
+# Compare predictions of herring and seal model using structure identified in 
+# following section
+
+s_mod <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+               s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+               s(stock, bs = "re"), 
+             data = dat, family=betar(link="logit"))
+h_mod <- gam(survival ~ s(herr_anom, m = 2, bs = "tp", k = 4) + 
+               s(herr_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+               s(stock, bs = "re"), 
+             data = dat, family=betar(link="logit"))
+hs_mod <- gam(survival ~ te(herr_anom, seal_anom, m = 2, bs = "tp", k = 4) + 
+                te(herr_anom, seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+                s(stock, bs = "re"), 
+             data = dat, family=betar(link="logit"))
+hs_mod2 <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+                 s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) +
+                 s(herr_anom, m = 2, bs = "tp", k = 4) + 
+                 s(herr_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+                 s(stock, bs = "re"), 
+               data = dat, family=betar(link="logit"))
+AIC(s_mod, h_mod, hs_mod, hs_mod2)
+
+# generate predictions for interaction model
+excl_pars <- map(hs_mod2$smooth, function(x) x$label) %>% unlist
+seal_seq <- seq(-2.5, 0.75, length.out = 75)
+herr_seq <- seq(-1.7, 1.8, length.out = 75)
+new_dat <- expand.grid(seal_anom = seal_seq, 
+                       herr_anom = herr_seq)
+
+# fixed effects predictions
+preds <- predict(hs_mod2, new_dat, se.fit = TRUE, 
+                 exclude = excl_pars[grepl("stock", excl_pars)],
+                 newdata.guaranteed = TRUE)
+new_dat2 <- new_dat %>% 
+  mutate(link_fit = as.numeric(preds$fit),
+         link_se = as.numeric(preds$se.fit),
+         pred_surv = plogis(link_fit),
+         pred_surv_lo = plogis(link_fit + (qnorm(0.025) * link_se)),
+         pred_surv_up = plogis(link_fit + (qnorm(0.975) * link_se))
+         )
+
+ggplot(new_dat2, aes(x = seal_anom, y = herr_anom)) +
+  geom_raster(aes(fill = pred_surv)) +
+  scale_fill_viridis_c()
+
+# herring only effects
+zero_seal <- new_dat2$seal_anom[which.min(abs(new_dat2$seal_anom - 0))]
+new_dat2 %>% 
+  filter(seal_anom == zero_seal) %>% 
+  ggplot(., aes(x = herr_anom)) +
+  geom_line(aes(y = pred_surv)) +
+  geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
+  ggsidekick::theme_sleek()
+
+# seal only effects
+zero_herr <- new_dat2$herr_anom[which.min(abs(new_dat2$herr_anom - 0))]
+new_dat2 %>% 
+  filter(herr_anom == zero_herr) %>% 
+  ggplot(., aes(x = seal_anom)) +
+  geom_line(aes(y = pred_surv)) +
+  geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
+  ggsidekick::theme_sleek()
+
+
+
+# TEST STRUCTURE ---------------------------------------------------------------
+
+## Fit seal (or herring) response with various model structures to isolate how
+# stock-specific and life-history effects should be accounted for
+# TAKE HOME: Global smooth, stock-specific intercepts and smooths, but no life
+# history parameter are the most parsimonious
 
 # Fit various GAM structures
-seal_dat <- plot_dat %>% 
-  filter(metric == "seal_anom") 
-m1 <- gam(survival ~ s(anomaly, k = 4), data = seal_dat, 
+m1 <- gam(survival ~ s(seal_anom, k = 4), data = dat, 
           family=betar(link="logit"))
-m2 <- gam(survival ~ s(anomaly, by = smolt, bs = "tp", m = 2, k = 4), 
-          data = seal_dat, family=betar(link="logit"))
-m3 <- gam(survival ~ s(anomaly, m = 2, bs = "tp", k = 4) + 
-            s(anomaly, by = smolt, m = 1, bs = "tp", k = 4), 
-          data = seal_dat, family=betar(link="logit"))
-m4 <- gam(survival ~ s(anomaly, by = smolt, bs = "tp", m = 2, k = 4) +  
+m2 <- gam(survival ~ s(seal_anom, by = smolt, bs = "tp", m = 2, k = 4), 
+          data = dat, family=betar(link="logit"))
+m3 <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+            s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4), 
+          data = dat, family=betar(link="logit"))
+m4 <- gam(survival ~ s(seal_anom, by = smolt, bs = "tp", m = 2, k = 4) +  
             s(stock, bs = "re"), 
-          data = seal_dat, family=betar(link="logit"))
-m5 <- gam(survival ~ s(anomaly, m = 2, bs = "tp", k = 4) + 
-            s(anomaly, by = smolt, m = 1, bs = "tp", k = 4) + 
+          data = dat, family=betar(link="logit"))
+m5 <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+            s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
             s(stock, bs = "re"), 
-          data = seal_dat, family=betar(link="logit"))
-m6 <- gam(survival ~ s(anomaly, m = 2, bs = "tp", k = 4) + 
-            s(anomaly, by = smolt, m = 1, bs = "tp", k = 4) + 
-            s(anomaly, by = stock, m = 1, bs = "tp", k = 4) + 
+          data = dat, family=betar(link="logit"))
+m6 <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+            s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
             s(stock, bs = "re"), 
-          data = seal_dat, family=betar(link="logit"))
-AIC(m1, m2, m3, m4, m5, m6)
+          data = dat, family=betar(link="logit"))
+m7 <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
+            s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
+            s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
+            s(stock, bs = "re"), 
+          data = dat, family=betar(link="logit"))
+AIC(m1, m2, m3, m4, m5, m6, m7)
 
 #vector of coefficients to exclude from main effects predictions
-tt <- map(m6$smooth, function(x) x$label) %>% unlist
+exclude_coefs <- map(m6$smooth, function(x) x$label) %>% unlist
 
 # Compare predictions among model structures
 temp_list <- tibble(model_name = c("group_sm", "group_global_sm", "group_sm_re",
                                    "group_global_sm_re", 
                                    "group_global_sm_re_splines"),
-                    gam_in = list(m2, m3, m4, m5, m6)
+                    gam_in = list(m2, m3, m4, m5, m7)
                     ) %>%
   #add predictions
   mutate(pred_dat = map2(model_name, gam_in, function(model_name, gam_in) {
-    seal_seq <- seq(-1.5, 1, length.out = 100)
-    new_dat <- expand.grid(anomaly = seal_seq, smolt = unique(temp$smolt))
+    seal_seq <- seq(-2.5, 0.75, length.out = 100)
+    herr_seq <- seq(-1.7, 1.8, length.out = 100)
+    new_dat <- expand.grid(seal_anom = seal_seq, 
+                           # herr_anom = herr_seq,
+                           smolt = unique(dat$smolt))
     # exclude REs from predictions if present
     if (model_name %in% c("group_sm_re", "group_global_sm_re")) {
-      preds <- predict(gam_in, new_dat, se.fit = TRUE, exclude="s(stock)",
+      preds <- predict(gam_in, new_dat, se.fit = TRUE, 
+                       exclude = "s(stock)",
                        newdata.guaranteed=TRUE, type = "response")
     } else if (model_name == "group_global_sm_re_splines") {
-      preds <- predict(gam_in, new_dat, se.fit = TRUE, exclude = tt[4:31],
-                       newdata.guaranteed=TRUE, type = "response")
+      preds <- predict(gam_in, new_dat, se.fit = TRUE, 
+                       exclude = exclude_coefs[grepl("stock", exclude_coefs)],
+                       newdata.guaranteed = TRUE, type = "response")
     } else {
       preds <- predict(gam_in, new_dat, se.fit = TRUE, type = "response")
     }
@@ -97,17 +187,19 @@ temp_list <- tibble(model_name = c("group_sm", "group_global_sm", "group_sm_re",
   })) 
 
 #unnest and plot
-fixed_effs_only <- temp_list %>% 
+temp_list %>% 
   select(-gam_in) %>% 
   unnest(pred_dat) %>% 
   mutate(model_name = fct_relevel(as.factor(model_name), "group_sm", 
                                   "group_global_sm", "group_sm_re", 
                                   "group_global_sm_re")) %>% 
-  ggplot(., aes(x = anomaly)) +
+  ggplot(., aes(x = seal_anom)) +
+  # ggplot(., aes(x = herr_anom)) +
   geom_line(aes(y = fit, color = smolt)) +
   geom_ribbon(aes(ymin = low, ymax = up, fill = smolt), alpha = 0.3) +
   facet_wrap(~model_name) +
   ggsidekick::theme_sleek()
+
 
 # focus on random effects models and look at stock-specific predictions
 seal_seq <- seq(min(temp$anomaly, na.rm = T), 1, length.out = 100)
@@ -133,265 +225,5 @@ pdf(here::here("figs", "gam", "beta_seal_gam_splineRE.pdf"),
 fixed_effs_only
 m6_preds
 dev.off()
-
-
-# ------------------------------------------------------------------------------
-
-# merge covariate data then fit two GAMs (random intercepts and random splines)
-dat <- readRDS(here::here("data", "gamFits", "salish_beta_gam.RDS"))
-
-dat <- cov %>% 
-  select(year, metric, env_anomaly = anomaly) %>% 
-  nest(data = c(year, env_anomaly)) %>% 
-  mutate(
-    #for each covariate combine with survival data
-    data = map(data, function (x) {
-      surv %>% 
-        left_join(., x, by = "year") %>% 
-        filter(!is.na(env_anomaly))
-    }),
-    #fit gam w/ random intercepts
-    gam1 = map(data, function (x) {
-      gam(survival ~ s(env_anomaly, by = smolt, bs = "tp", m = 2, k = 4) +  
-            s(stock, bs = "re"), 
-          data = x, family=betar(link="logit"))
-    }),
-    #fit gam w/ stock-specific splines
-    gam2 = map(data, function (x) {
-      gam(survival ~ s(env_anomaly, m = 2, bs = "tp", k = 4) + 
-            s(env_anomaly, by = smolt, m = 1, bs = "tp", k = 4) + 
-            s(env_anomaly, by = stock, m = 1, bs = "tp", k = 4) + 
-            s(stock, bs = "re"), 
-          data = x, family=betar(link="logit"))
-    }),
-    #save AIC for both
-    aic = map2(gam1, gam2, function(x, y) {
-      data.frame(
-        model = c("rand_ints", "stock_splines"),
-        aic = c(AIC(x), AIC(y))
-      )
-    })
-  )
-
-dat <- dat %>% 
-  filter(!grepl("rkw", metric)) %>% 
-  rbind(dat2)
-
-saveRDS(dat, here::here("data", "gamFits", "salish_beta_gam.RDS"))
-
-# generate fixed effects predictions from simpler model
-dat$fixed_preds <- map2(dat$data, dat$gam1, function(dat_in, gam_in) {
-  pred_seq <- seq(min(dat_in$env_anomaly, na.rm = T),
-                  max(dat_in$env_anomaly, na.rm = T), 
-                  length.out = 100)
-  new_dat <- expand.grid(env_anomaly = pred_seq, smolt = unique(dat_in$smolt))
-  preds <- predict(gam_in, new_dat, se.fit = TRUE, exclude="s(stock)",
-                   newdata.guaranteed=TRUE, type = "link")
-  new_dat %>%
-    mutate(fit = boot::inv.logit(preds$fit),
-           up = boot::inv.logit(preds$fit + (qnorm(0.975) * preds$se.fit)),
-           low = boot::inv.logit(preds$fit + (qnorm(0.025) * preds$se.fit)),
-           logit_fit = preds$fit,
-           logit_up = preds$fit + (qnorm(0.975) * preds$se.fit),
-           logit_low = preds$fit + (qnorm(0.025) * preds$se.fit)
-    )
-})
-
-fe_splines <- dat %>% 
-  select(metric, fixed_preds) %>% 
-  unnest(fixed_preds) %>% 
-  left_join(., cov %>% select(metric, class), by = "metric") %>%
-  # glimpse()
-  ggplot(.) +
-  geom_line(aes(x = env_anomaly, y = fit, color = smolt)) +
-  geom_ribbon(aes(x = env_anomaly, ymin = low, ymax = up, fill = smolt), 
-              alpha = 0.3) +
-  facet_wrap(~fct_reorder(metric, as.numeric(as.factor(class))), 
-             scales = "free_x") +
-  ggsidekick::theme_sleek() +
-  labs(x = "Environmental Anomaly", y = "Predicted Survival")
-
-pdf(here::here("figs", "gam", "fixed_effect_splines.pdf"), 
-    height = 5, width = 7)
-fe_splines
-dev.off()
-
-saveRDS(fe_splines, here::here("data", "gamFits", "fe_splines.rds"))
-
-# FE predictions (as above) but in link space
-pdf(here::here("figs", "gam", "fixed_effect_splines_link.pdf"), 
-    height = 5, width = 7)
-dat %>% 
-  select(metric, fixed_preds) %>% 
-  unnest(fixed_preds) %>% 
-  left_join(., cov %>% select(metric, class), by = "metric") %>%
-  ggplot(.) +
-  geom_line(aes(x = env_anomaly, y = logit_fit, color = smolt)) +
-  geom_ribbon(aes(x = env_anomaly, ymin = logit_low, ymax = logit_up, 
-                  fill = smolt), alpha = 0.3) +
-  facet_wrap(~fct_reorder(metric, as.numeric(as.factor(class))), 
-             scales = "free_x") +
-  ggsidekick::theme_sleek()
-dev.off()
-
-
-# generate stock-specific predictions from more complicated model
-# observed data for plotting
-dat$ss_preds <- map2(dat$data, dat$gam2, function(dat_in, gam_in) {
-  pred_seq <- seq(min(dat_in$env_anomaly, na.rm = T),
-                  max(dat_in$env_anomaly, na.rm = T), 
-                  length.out = 100)
-  new_dat <- expand.grid(env_anomaly = pred_seq, 
-                         stock = unique(dat_in$stock)) %>% 
-    left_join(., dat_in %>% select(stock, smolt) %>% distinct(), by = "stock")
-  
-  preds <- predict(gam_in, new_dat, se.fit = TRUE, type = "link")
-  new_dat %>%
-    mutate(
-      stock = fct_reorder(stock, as.numeric(smolt)),
-      fit = as.numeric(boot::inv.logit(preds$fit)),
-      up = as.numeric(boot::inv.logit(preds$fit + 
-                                        (qnorm(0.975) * preds$se.fit))),
-      low = as.numeric(boot::inv.logit(preds$fit + 
-                                         (qnorm(0.025) * preds$se.fit))),
-      logit_fit = preds$fit,
-      logit_up = preds$fit + (qnorm(0.975) * preds$se.fit),
-      logit_low = preds$fit + (qnorm(0.025) * preds$se.fit)
-    )
-})
-
-pdf(here::here("figs", "gam", "stock_specific_splines.pdf"), 
-    height = 5, width = 7)
-pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, title) {
-  ggplot() +
-    geom_line(data = pred_dat, aes(x = env_anomaly, y = fit, color = smolt)) +
-    geom_ribbon(data = pred_dat, aes(x = env_anomaly, ymin = low, ymax = up, 
-                                     fill = smolt), 
-                alpha = 0.3) +
-    geom_point(data = obs_dat, aes(x = env_anomaly, y = survival, fill = smolt),
-               shape = 21) +
-    facet_wrap(~stock, scales = "free_y")  +
-    ggsidekick::theme_sleek() +
-    labs(title = title)
-})
-dev.off()
-
-pdf(here::here("figs", "gam", "stock_specific_splines_link.pdf"), 
-    height = 5, width = 7)
-pmap(list(dat$ss_preds, dat$data, dat$metric), function (pred_dat, obs_dat, title) {
-  ggplot() +
-    geom_line(data = pred_dat, aes(x = env_anomaly, y = logit_fit, 
-                                   color = smolt)) +
-    geom_ribbon(data = pred_dat, aes(x = env_anomaly, ymin = logit_low, 
-                                     ymax = logit_up, fill = smolt), 
-                alpha = 0.3) +
-    geom_point(data = obs_dat, aes(x = env_anomaly, y = boot::logit(survival),
-                                   fill = smolt),
-               shape = 21) +
-    facet_wrap(~stock)  +
-    ggsidekick::theme_sleek() +
-    labs(title = title)
-})
-dev.off()
-
-
-# ------------------------------------------------------------------------------
-
-# Model selection with SST arc, seals and RKW 
-trim_cov <- cov %>% 
-  filter(metric %in% c("annual_anom_sst_arc", "rkw_anom", "seal_anom"),
-         !is.na(anomaly),
-         year > 1977, 
-         year < 2013) %>% 
-  group_by(metric) %>% 
-  select(year, metric, anomaly) %>% 
-  pivot_wider(names_from = "metric", values_from = "anomaly")
-
-dat2 <- surv %>% 
-  left_join(., trim_cov, by = "year") %>% 
-  filter(!is.na(seal_anom))
-
-
-# models
-m1_sst <- gam(survival ~ s(annual_anom_sst_arc, m = 2, bs = "tp", k = 4) + 
-            s(annual_anom_sst_arc, by = smolt, m = 1, bs = "tp", k = 4) + 
-            s(stock, bs = "re"), 
-          data = dat2, family=betar(link="logit"))
-m1_seal <- gam(survival ~ s(seal_anom, m = 2, bs = "tp", k = 4) + 
-                s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
-                s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
-                s(stock, bs = "re"), 
-              data = dat2, family=betar(link="logit"))
-m1_rkw <- gam(survival ~ s(rkw_anom, m = 2, bs = "tp", k = 4) + 
-                s(rkw_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
-                s(rkw_anom, by = stock, m = 1, bs = "tp", k = 4) + 
-                s(stock, bs = "re"), 
-              data = dat2, family=betar(link="logit"))
-m2_rkw <- gam(survival ~ s(annual_anom_sst_arc, m = 2, bs = "tp", k = 4) + 
-                s(annual_anom_sst_arc, by = smolt, m = 1, bs = "tp", k = 4) + 
-                s(rkw_anom, m = 2, bs = "tp", k = 4) + 
-                s(rkw_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
-                s(rkw_anom, by = stock, m = 1, bs = "tp", k = 4) + 
-                s(stock, bs = "re"), 
-              data = dat2, family=betar(link="logit"))
-m2_seal <- gam(survival ~ s(annual_anom_sst_arc, m = 2, bs = "tp", k = 4) + 
-                 s(annual_anom_sst_arc, by = smolt, m = 1, bs = "tp", k = 4) +
-                 s(seal_anom, m = 2, bs = "tp", k = 4) + 
-                 s(seal_anom, by = smolt, m = 1, bs = "tp", k = 4) + 
-                 s(seal_anom, by = stock, m = 1, bs = "tp", k = 4) + 
-                 s(stock, bs = "re"), 
-               data = dat2, family=betar(link="logit"))
-
-AIC(m1_sst, m1_seal, m1_rkw, m2_rkw, m2_seal)
-
-
-# Fit southern and Salish Sea --------------------------------------------------
-
-surv2 <- surv_raw %>% 
-  filter(
-    !is.na(M),
-    !group %in% c("north_streamtype", "north_oceantype")) %>% 
-  #add ocean entry year to match covariates based on life history
-  mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
-                       brood_year + 1)) %>% 
-  select(year, stock, smolt, group, survival, M) %>% 
-  mutate(smolt = as.factor(smolt),
-         stock = as.factor(stock),
-         group = as.factor(group)) %>% 
-  droplevels()
-
-dat2 <- cov %>% 
-  filter(!region == "sog") %>% 
-  select(year, metric, env_anomaly = anomaly) %>% 
-  nest(data = c(year, env_anomaly)) %>% 
-  mutate(
-    #for each covariate combine with survival data
-    data = map(data, function (x) {
-      surv2 %>% 
-        left_join(., x, by = "year") %>% 
-        filter(!is.na(env_anomaly))
-    }),
-    #fit gam w/ random intercepts
-    gam1 = map(data, function (x) {
-      gam(survival ~ s(env_anomaly, by = smolt, bs = "tp", m = 2, k = 4) +  
-            s(stock, bs = "re"), 
-          data = x, family=betar(link="logit"))
-    }),
-    #fit gam w/ stock-specific splines
-    gam2 = map(data, function (x) {
-      gam(survival ~ s(env_anomaly, m = 2, bs = "tp", k = 4) + 
-            s(env_anomaly, by = smolt, m = 1, bs = "tp", k = 4) + 
-            s(env_anomaly, by = stock, m = 1, bs = "tp", k = 4) + 
-            s(stock, bs = "re"), 
-          data = x, family=betar(link="logit"))
-    }),
-    #save AIC for both
-    aic = map2(gam1, gam2, function(x, y) {
-      data.frame(
-        model = c("rand_ints", "stock_splines"),
-        aic = c(AIC(x), AIC(y))
-      )
-    })
-  )
 
 

@@ -62,15 +62,18 @@ by_dat <- by_dat1 %>%
          ),
          a_group = case_when(
            smoltType == "streamtype" ~ "offshore",
+           #subset of ECVI stocks are north-migrating
+           stock_name %in% c("Puntledge River Summer", "Quinsam River Fall") ~
+             "north",
            region %in% c("ECVI", "LFR", "HOODC", "SPGSD", "NPGSD") ~ "south",
            grepl("COLR", region) ~ "columbia",
            TRUE ~ "north"
          ),
-         run = tolower(adultRunTiming)#,
-         # group = paste(juv_reg, smoltType, sep = "_")
+         run = tolower(adultRunTiming),
+         j_group2 = paste(j_group, smoltType, sep = "_")
          ) %>% 
   select(brood_year:stock_name, smolt = smoltType, run, 
-         region:long, j_group, a_group, #group, 
+         region:long, j_group, j_group2, a_group, 
          survival, M)
 
 write.csv(by_dat, 

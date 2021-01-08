@@ -20,6 +20,7 @@ knitr-cache
 .Rhistory
 .Rapp.history
 
+R/defunct
 myNotes.*
 data/salmonData/rawData
 data/dfaBayesFits/

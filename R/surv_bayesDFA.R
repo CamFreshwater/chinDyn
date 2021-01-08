@@ -13,25 +13,23 @@ source(here::here("R/functions/dfaFunctions.R"))
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv"), 
-                 stringsAsFactors = FALSE) %>% 
+surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv")) %>% 
   mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
                        brood_year + 1),
          j_group = as.factor(j_group),
-         a_group = as.factor(a_group),
+         j_group2 = as.factor(j_group2),
+         j_group3 = as.factor(j_group3),
          stock = fct_reorder(stock, as.numeric(j_group)))
 # saveRDS(surv, here::here("data", "salmonData", "clean_dfa_inputs.rds"))
 
-pals <- readRDS(here::here("data", "color_pals.RDS"))
 
 # plots 
 raw_surv <- surv %>%
   filter(!is.na(M)) %>%
   ggplot(.) +
-  geom_point(aes(x = year, y = M, fill = j_group), shape = 21) +
-  scale_fill_manual(values = pals[[2]]) +
-  facet_wrap(~ fct_reorder(stock, as.numeric(j_group))) +
+  geom_point(aes(x = year, y = M, fill = j_group2), shape = 21) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(j_group2))) +
   theme(legend.position = "top") +
   labs(y = "M")
 
@@ -74,6 +72,14 @@ dev.off()
 
 
 ## JUVENILE GROUPINGS  ---------------------------------------------------------
+
+
+a_palette <- disco::disco("bright", n = length(unique(dat$a_group)))
+names(a_palette) <- unique(by_dat$a_group)
+j_palette <- disco::disco("muted", n = length(unique(dat$j_group3)))
+names(j_palette) <- unique(by_dat$j_group3)
+
+
 make_surv_tbl <- function (dat_in) {
   surv_tbl <- tibble(group = levels(dat_in$group)) %>% 
     mutate(
@@ -97,9 +103,7 @@ surv_tbl_j <- surv %>%
   droplevels() %>% 
   rename(group = j_group) %>% 
   make_surv_tbl()
-surv_tbl_a <- surv %>%
-  rename(group = a_group) %>% 
-  make_surv_tbl()
+
 
 # fit models to each region, then export to Rmd
 surv_tbl_j$dfa_two_trend <- map(surv_tbl_j$m_mat, function(x) {

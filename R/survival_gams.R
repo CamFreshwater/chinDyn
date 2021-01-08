@@ -49,7 +49,13 @@ dat %>%
   geom_point() +
   geom_smooth(method = "gam") +
   facet_wrap(~metric)
-  
+
+
+a_palette <- disco::disco("bright", n = length(unique(dat$a_group)))
+names(a_palette) <- unique(by_dat$a_group)
+j_palette <- disco::disco("muted", n = length(unique(dat$j_group3)))
+names(j_palette) <- unique(by_dat$j_group3)
+
 
 # COMPARE ANOMALIES ------------------------------------------------------------
 

@@ -70,22 +70,29 @@ by_dat <- by_dat1 %>%
            TRUE ~ "north"
          ),
          run = tolower(adultRunTiming),
-         j_group2 = paste(j_group, smoltType, sep = "_")
+         # split sog and puget
+         j_group2 = case_when(
+           region %in% c("HOODC", "SPGSD", "NPGSD") ~ "puget",
+           j_group == "salish" ~ "sog",
+           TRUE ~ j_group
+         ),
+         j_group3 = paste(j_group2, smoltType, sep = "_"),
+         # split salish resident stocks from non
+         a_group2 = case_when(
+           stock_name %in% c("Big Qualicum River Fall", "Chilliwack River Fall",
+                             "Cowichan River Fall", "Nanaimo River Fall") ~ 
+             "salish",
+           j_group2 == "puget" ~ "salish",
+           TRUE ~ a_group
+         )
          ) %>% 
   select(brood_year:stock_name, smolt = smoltType, run, 
-         region:long, j_group, j_group2, a_group, 
+         region:long, j_group, j_group2, j_group3, a_group, a_group2,
          survival, M)
 
 write.csv(by_dat, 
           here::here("data", "salmonData", "cwt_indicator_surv_clean.csv"),
           row.names = FALSE)
-
-a_palette <- disco::disco("bright", n = length(unique(by_dat$a_group)))
-names(a_palette) <- unique(by_dat$a_group)
-j_palette <- disco::disco("muted", n = length(unique(by_dat$j_group)))
-names(j_palette) <- unique(by_dat$j_group)
-pals <- list(a_palette, j_palette)
-saveRDS(pals, here::here("data", "color_pals.RDS"))
 
 #How many stocks per region?
 by_dat %>% 
@@ -95,7 +102,8 @@ by_dat %>%
   group_by(a_group) %>% 
   summarize(nStocks = length(unique(stock)))
 
-#----- 
+
+#-------------------------------------------------------------------------------
 
 ## Prep escapement data
 # Focus only on Salish Sea stocks

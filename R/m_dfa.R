@@ -1,4 +1,4 @@
-## Fit MARSS then DFA models to instantaneous mortality data
+## Fit MARSS then Bayes DFA models to instantaneous mortality data
 # Jan 6 2021
 # Update on surv_bayesDFA; instead of deciding groupings a priori, first perform
 # model selection for groupings with MARSS (faster to converge than bayesDFA), 
@@ -7,32 +7,27 @@
 library(MARSS)
 library(tidyverse)
 
-surv <- read.csv(here::here("data/salmonData/cwt_indicator_surv_clean.csv")) %>% 
-  mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
-  mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
-                       brood_year + 1),
-         smolt = as.factor(smolt),
-         j_group = as.factor(j_group),
-         j_group2 = as.factor(j_group2),
-         j_group3 = as.factor(j_group3),
-         stock_f = fct_reorder(stock, as.numeric(j_group))) %>% 
-  filter(!year > 2017)
+surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>% 
+  #remove stocks that are aggregates of others on CP's advice
+  # TST combines STI/TAK and AKS combines SSA and NSA
+  filter(!stock %in% c("TST", "AKS"),
+         year < 2017)
+  
 
 # dataframe of only stocks and juvenile groupings
 stk_tbl <- surv %>% 
   select(stock, stock_name, smolt, j_group:j_group3) %>% 
   distinct()
 
-#test surv dataset
-keep_stks <- surv %>% 
-  filter(year > 1980,
-         year < 2010,
-         !is.na(M)) %>% 
-  group_by(stock) %>% 
-  tally() %>% 
-  filter(n == 29)
-
 # subset of stocks for test run
+# keep_stks <- surv %>% 
+#   filter(year > 1980,
+#          year < 2010,
+#          !is.na(M)) %>% 
+#   group_by(stock) %>% 
+#   tally() %>% 
+#   filter(n == 29)
+# 
 # surv_sub <- surv %>% 
 #   filter(#year > 1980,
 #          #year < 2010,
@@ -41,7 +36,19 @@ keep_stks <- surv %>%
 #   filter(stock %in% keep_stks$stock)
 
 
-## MARSS MODEL RUNS -----------------------------------------------------------
+## EXPLORATORY -----------------------------------------------------------------
+
+#plot raw survival data
+surv %>%
+  filter(!is.na(M)) %>%
+  ggplot(.) +
+  geom_point(aes(x = year, y = M, fill = j_group3), shape = 21) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(j_group3))) +
+  theme(legend.position = "top") +
+  labs(y = "M")
+
+
+## MARSS MODEL RUNS ------------------------------------------------------------
 
 # make matrix of natural mortality rates
 m_mat <- surv %>% 
@@ -142,7 +149,6 @@ library(bayesdfa)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-
 j_palette <- disco::disco("muted", n = length(unique(surv$j_group3)))
 names(j_palette) <- unique(surv$j_group3)
 
@@ -157,6 +163,12 @@ make_mat <- function(x) {
   return(out_mat)
 }
 
+# number of stocks per group
+kept_grps <- stk_tbl %>% 
+  group_by(j_group3) %>% 
+  tally() %>% 
+  filter(n > 2)
+
 #generate tbl by group
 surv_tbl <- tibble(group = levels(surv$j_group3)) %>% 
   mutate(
@@ -164,6 +176,10 @@ surv_tbl <- tibble(group = levels(surv$j_group3)) %>%
       filter(!is.na(M)) %>% 
       group_split(j_group3) %>% 
       map(., make_mat)
+  ) %>% 
+  # remove groups with less than three time series
+  filter(
+    group %in% kept_grps$j_group3
   )
 surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
@@ -172,16 +188,26 @@ surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
 })
 
 #function to fit 2 trends unless n_groups < 3
-pick_and_fit <- function(x) {
-  nn <- ifelse(nrow(x) < 3, 1, 2)
-  fit_dfa(y = x, num_trends = nn, zscore = TRUE, iter = 2000, chains = 4, 
-          thin = 1, control = list(adapt_delta = 0.95, max_treedepth = 20))
-}
+dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
+                              num_trends = 2, zscore = TRUE, 
+                              iter = 1500, chains = 4, thin = 1, 
+                              control = list(adapt_delta = 0.95, 
+                                             max_treedepth = 20),
+                              .progress = TRUE,
+                              seed = TRUE)
 
-temp <- surv_tbl$m_mat[[3]]
-temp_fit <- find_dfa_trends(temp, iter = 2000, kmin = 1, kmax = 5, chains = 4, 
-                            variance =  "equal",
-                            control = list(adapt_delta = 0.95, max_treedepth = 20))
+# temp <- surv_tbl$m_mat[[3]]
+# temp_fit <- find_dfa_trends(temp, iter = 2000, kmin = 1, kmax = 5, chains = 4, 
+#                             variance =  "equal",
+#                             control = list(adapt_delta = 0.95, 
+#                                            max_treedepth = 20))
+
+tt <- temp_fit$best_model
+rotate_trends(dfa_fits[[1]]) %>% 
+  plot_trends()
+plot_fitted(tt)
+rotate_trends(tt) %>% 
+  plot_loadings()
 
 
 ## DFA model selection approach (NOT USED) -------------------------------------

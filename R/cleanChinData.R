@@ -17,7 +17,8 @@ require(tidyverse); require(here)
 
 
 # new survival data
-by_raw <- read.csv(here::here("data","salmonData", "cwt_indicator_surv_sep2020.csv"), 
+by_raw <- read.csv(here::here("data","salmonData", 
+                              "cwt_indicator_surv_sep2020.csv"), 
                       stringsAsFactors = FALSE)
 colnames(by_raw)[1] <- "year"
 stock_key <- data.frame(
@@ -28,32 +29,48 @@ stock_key <- data.frame(
 by_dat1 <- by_raw[-1, ] %>% 
   pivot_longer(., 2:ncol(.), names_to = "stock", values_to = "survival") %>% 
   left_join(., stock_key, by = "stock") %>% 
-  mutate(survival = as.numeric(survival)) %>% 
-  select(brood_year = year, stock, stock_name, survival) %>% 
-  arrange(stock) %>% 
-  #remove stocks that are aggregates of others on CP's advice
-  filter(!stock %in% c("TST", "AKS"))
+  mutate(survival = as.numeric(survival),
+         brood_year = as.numeric(year)) %>% 
+  select(brood_year, stock, stock_name, survival) %>% 
+  arrange(stock) 
 
+# mean generation length data
+gen <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv")) %>% 
+  mutate(stock = as.factor(Stock)) %>% 
+  select(stock, brood_year = BY, 
+         gen_length = GenTim.fishing.mortality.represented.in.calcuations.)
+
+
+## Generate metadata using old survival as a template than modify in excel
 # import old survival data to add some features
-# old_surv <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"), 
-#                      stringsAsFactors = FALSE)
+# also includes some stocks added manually
+# old_surv <- read.csv(here::here("data/salmonData/CLEANcwtInd_age2SR_OEY.csv"),
+#                      stringsAsFactors = FALSE) %>% 
+#   mutate(lat = as.numeric(lat),
+#          long = as.numeric(long)) %>% 
+#   select(stock, jurisdiction:long) %>%
+#   distinct()
+
 # export temporary .csv to fill in metadata
 # temp_out <- by_dat1 %>%
-#   left_join(., old_surv %>% select(stock, jurisdiction:long) %>% distinct(), 
-#             by = "stock") %>%   
-#   # filter(is.na(jurisdiction)) %>% 
-#   select(stock_name, jurisdiction:long) %>% 
-#   distinct()
+#   left_join(., old_surv, by = "stock") %>%
+#   # filter(is.na(jurisdiction)) %>%
+#   select(stock, stock_name, jurisdiction:long) %>%
+#   distinct() %>% 
+#   arrange(stock)
 # write.csv(temp_out, here::here("data", "salmonData", "metadata.csv"))
 
-metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) %>% 
-  select(-X)
+# import version cleaned by hand (added lat/longs and two systems HOK and SMK)
+metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) 
 
-by_dat <- by_dat1 %>% 
-  left_join(., metadata, by = "stock_name") %>%
+by_dat <- metadata %>% 
+  left_join(., by_dat1, by = c("stock", "stock_name")) %>% 
+  left_join(., gen, by = c("stock", "brood_year")) %>%
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          M = -log(survival),
+         # change Elwha's region given catch dist similar to Puget
+         region = ifelse(stock == "ELW", "NPGSD", region),
          j_group = case_when(
            (lat > 52 & !region == "UFR") ~ "north",
            region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
@@ -61,12 +78,12 @@ by_dat <- by_dat1 %>%
            TRUE ~ "salish"
          ),
          a_group = case_when(
-           smoltType == "streamtype" ~ "offshore",
            #subset of ECVI stocks are north-migrating
            stock_name %in% c("Puntledge River Summer", "Quinsam River Fall") ~
              "north",
            region %in% c("ECVI", "LFR", "HOODC", "SPGSD", "NPGSD") ~ "south",
-           grepl("COLR", region) ~ "columbia",
+           smoltType == "streamtype" ~ "offshore",
+           region == "LCOLR" ~ "broad",
            TRUE ~ "north"
          ),
          run = tolower(adultRunTiming),
@@ -86,15 +103,23 @@ by_dat <- by_dat1 %>%
            TRUE ~ a_group
          )
          ) %>% 
-  select(brood_year:stock_name, smolt = smoltType, run, 
-         region:long, j_group, j_group2, j_group3, a_group, a_group2,
-         survival, M)
+  select(stock, stock_name, brood_year, survival, M, gen_length,
+         jurisdiction, smolt = smoltType, run, 
+         region:long, j_group, j_group2, j_group3, a_group, a_group2) %>% 
+  mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
+  mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
+                       brood_year + 1),
+         smolt = as.factor(smolt),
+         j_group = as.factor(j_group),
+         j_group2 = as.factor(j_group2),
+         j_group3 = as.factor(j_group3),
+         a_group =  as.factor(a_group),
+         a_group2 = as.factor(a_group2)) 
 
-write.csv(by_dat, 
-          here::here("data", "salmonData", "cwt_indicator_surv_clean.csv"),
-          row.names = FALSE)
+saveRDS(by_dat,
+        here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))
 
-#How many stocks per region?
+# How many stocks per region?
 by_dat %>% 
   group_by(j_group) %>% 
   summarize(nStocks = length(unique(stock)))

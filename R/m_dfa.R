@@ -195,6 +195,7 @@ dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa,
                                              max_treedepth = 20),
                               .progress = TRUE,
                               seed = TRUE)
+saveRDS(dfa_fits, here::here("data", "mortality_fits", "bayesdfa_by_group.RDS"))
 
 # temp <- surv_tbl$m_mat[[3]]
 # temp_fit <- find_dfa_trends(temp, iter = 2000, kmin = 1, kmax = 5, chains = 4, 
@@ -208,6 +209,7 @@ rotate_trends(dfa_fits[[1]]) %>%
 plot_fitted(tt)
 rotate_trends(tt) %>% 
   plot_loadings()
+
 
 
 ## DFA model selection approach (NOT USED) -------------------------------------

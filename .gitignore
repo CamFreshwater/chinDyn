@@ -25,6 +25,7 @@ myNotes.*
 data/salmonData/rawData
 data/dfaBayesFits/
 data/gamFits/
+data/mortality_fits/
 .Rproj.user/
 .Rproj.user
 *.html

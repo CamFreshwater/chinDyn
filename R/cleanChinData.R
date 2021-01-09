@@ -60,12 +60,18 @@ gen <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv"))
 #   arrange(stock)
 # write.csv(temp_out, here::here("data", "salmonData", "metadata.csv"))
 
+
 # import version cleaned by hand (added lat/longs and two systems HOK and SMK)
-metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) 
+metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) %>% 
+  left_join(.,
+             expand.grid(brood_year = unique(by_dat1$brood_year),
+                         stock = unique(metadata$stock)),
+             by = "stock")
+
 
 by_dat <- metadata %>% 
-  left_join(., by_dat1, by = c("stock", "stock_name")) %>% 
-  left_join(., gen, by = c("stock", "brood_year")) %>%
+  left_join(., by_dat1, by = c("stock", "stock_name", "brood_year")) %>% 
+  full_join(., gen, by = c("stock", "brood_year")) %>%
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          M = -log(survival),

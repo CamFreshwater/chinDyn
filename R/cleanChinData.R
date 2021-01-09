@@ -62,14 +62,13 @@ gen <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv"))
 
 
 # import version cleaned by hand (added lat/longs and two systems HOK and SMK)
-metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) %>% 
-  left_join(.,
-             expand.grid(brood_year = unique(by_dat1$brood_year),
-                         stock = unique(metadata$stock)),
-             by = "stock")
-
+metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) 
 
 by_dat <- metadata %>% 
+  left_join(.,
+            expand.grid(brood_year = unique(by_dat1$brood_year),
+                        stock = unique(metadata$stock)),
+            by = "stock") %>% 
   left_join(., by_dat1, by = c("stock", "stock_name", "brood_year")) %>% 
   full_join(., gen, by = c("stock", "brood_year")) %>%
   mutate(lat = as.numeric(lat),
@@ -83,7 +82,7 @@ by_dat <- metadata %>%
                           "WCVI") ~ "south",
            TRUE ~ "salish"
          ),
-         a_group = case_when(
+         a_group2 = case_when(
            #subset of ECVI stocks are north-migrating
            stock_name %in% c("Puntledge River Summer", "Quinsam River Fall") ~
              "north",
@@ -91,6 +90,10 @@ by_dat <- metadata %>%
            smoltType == "streamtype" ~ "offshore",
            region == "LCOLR" ~ "broad",
            TRUE ~ "north"
+         ),
+         a_group = case_when(
+           a_group2 == "offshore" ~ "offshore",
+           TRUE ~ "shelf"
          ),
          run = tolower(adultRunTiming),
          # split sog and puget
@@ -101,17 +104,18 @@ by_dat <- metadata %>%
          ),
          j_group3 = paste(j_group2, smoltType, sep = "_"),
          # split salish resident stocks from non
-         a_group2 = case_when(
+         a_group3 = case_when(
            stock_name %in% c("Big Qualicum River Fall", "Chilliwack River Fall",
-                             "Cowichan River Fall", "Nanaimo River Fall") ~ 
-             "salish",
-           j_group2 == "puget" ~ "salish",
+                             "Cowichan River Fall", "Nanaimo River Fall", 
+                             "Harrison River") ~ "sog",
+           j_group2 == "puget" ~ "puget",
            TRUE ~ a_group
          )
          ) %>% 
   select(stock, stock_name, brood_year, survival, M, gen_length,
          jurisdiction, smolt = smoltType, run, 
-         region:long, j_group, j_group2, j_group3, a_group, a_group2) %>% 
+         region:long, j_group, j_group2, j_group3, a_group, a_group2, 
+         a_group3) %>% 
   mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
                        brood_year + 1),
@@ -120,7 +124,8 @@ by_dat <- metadata %>%
          j_group2 = as.factor(j_group2),
          j_group3 = as.factor(j_group3),
          a_group =  as.factor(a_group),
-         a_group2 = as.factor(a_group2)) 
+         a_group2 = as.factor(a_group2),
+         a_group3 = as.factor(a_group3)) 
 
 saveRDS(by_dat,
         here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))

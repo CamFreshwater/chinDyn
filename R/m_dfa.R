@@ -187,7 +187,7 @@ surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
               by = "stock")
 })
 
-#function to fit 2 trends unless n_groups < 3
+# fit bayesdfa
 dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
                               num_trends = 2, zscore = TRUE, 
                               iter = 1500, chains = 4, thin = 1, 

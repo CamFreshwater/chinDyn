@@ -145,6 +145,7 @@ top_model <- marss_list[[14]]$fit
 ## Bayesian DFA ----------------------------------------------------------------
 
 library(bayesdfa)
+library(rstan)
 
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
@@ -190,7 +191,7 @@ surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
 # fit bayesdfa
 dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
                               num_trends = 2, zscore = TRUE, 
-                              iter = 1500, chains = 4, thin = 1, 
+                              iter = 1750, chains = 4, thin = 1, 
                               control = list(adapt_delta = 0.95, 
                                              max_treedepth = 20),
                               .progress = TRUE,

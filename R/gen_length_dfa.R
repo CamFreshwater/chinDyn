@@ -23,14 +23,17 @@ stk_tbl <- gen %>%
 ## EXPLORATORY -----------------------------------------------------------------
 
 #plot raw generation length data
-gen  %>% 
+raw_gen <- gen %>% 
   ggplot(.) +
-  geom_point(aes(x = year, y = gen_length, fill = a_group2), shape = 21) +
+  geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
   theme(legend.position = "top") +
   labs(y = "Mean Generation Length") +
   ggsidekick::theme_sleek()
 
+pdf(here::here("figs", "raw_gen_trends.pdf"), width = 10, height = 7)
+raw_gen
+dev.off()
 
 #distribution of generation length 
 gen %>%
@@ -141,3 +144,104 @@ saveRDS(marss_list, here::here("data", "generation_fits",
                                "marss_selection_fits.RDS"))
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
+
+
+## Bayesian DFA ----------------------------------------------------------------
+
+library(bayesdfa)
+library(rstan)
+
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+a_palette <- disco::disco("muted", n = length(unique(gen$a_group2)))
+names(a_palette) <- unique(gen$a_group2)
+
+#helper function to spread and label input matrices for bayesdfa
+make_mat <- function(x) {
+  mat1 <- x %>%
+    select(year, stock, gen_length) %>%
+    spread(key = stock, value = gen_length) %>%
+    as.matrix() 
+  out_mat <- t(mat1[, 2:ncol(mat1)])
+  colnames(out_mat) <- mat1[, "year"]
+  return(out_mat)
+}
+
+# number of stocks per group
+kept_grps <- stk_tbl %>% 
+  group_by(a_group2) %>% 
+  tally() %>% 
+  filter(n > 2)
+
+#generate tbl by group
+gen_tbl <- tibble(group = levels(gen$a_group2)) %>% 
+  mutate(
+    gen_mat = gen %>% 
+      filter(!is.na(gen_length)) %>% 
+      group_split(a_group2) %>% 
+      map(., make_mat)
+  ) %>% 
+  # remove groups with less than three time series
+  filter(
+    group %in% kept_grps$a_group2
+  )
+gen_tbl$names <- map(gen_tbl$gen_mat, function (x) {
+  data.frame(stock = row.names(x)) %>% 
+    left_join(., gen %>% select(stock, stock_name) %>% distinct(),
+              by = "stock")
+})
+gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
+  as.numeric(colnames(x))
+})
+
+# specify one trend if there are less than 4 time series, otherwise 2
+n_trend_list <- ifelse(unlist(map(gen_tbl$gen_mat, nrow)) < 4, 1, 2) 
+
+dfa_fits <- furrr::future_map2(gen_tbl$gen_mat[2:4], 
+                               n_trend_list[2:4],
+                               .f = function (y, n_trend) {
+                                 fit_dfa(y = y, num_trends = n_trend, 
+                                         zscore = TRUE,
+                                         iter = 2000, chains = 4, thin = 1,
+                                         control = list(adapt_delta = 0.95,
+                                                        max_treedepth = 20))
+                               },
+                              .progress = TRUE, 
+                              seed = TRUE)
+
+# save outputs
+map2(dfa_fits, gen_tbl$group, function(x, y) {
+  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+  saveRDS(x, here::here("data", "generation_fits", f_name))
+})
+
+# read outputs
+temp <- map(gen_tbl$group, function(y) {
+  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+  readRDS(here::here("data", "generation_fits", f_name))
+})
+rot_list <- map(temp, rotate_trends)
+
+# make plots 
+source(here::here("R", "functions", "plot_fitted_bayes.R"))
+fit_list <- pmap(list(temp, gen_tbl$names, gen_tbl$years), 
+                 function(x, names, obs_years) {
+                   plot_fitted_bayes(x, names = names$stock_name, 
+                                     years = obs_years) +
+                     lims(x = c(min(gen$year), max(gen$year)))
+                 })
+trend_list <- pmap(list(rot_list, gen_tbl$years), 
+                   function(x, obs_years) {
+                     plot_trends(x, years = obs_years) +
+                       lims(x = c(min(gen$year), max(gen$year)))
+                   }
+)
+loadings_list <- pmap(list(rot_list, gen_tbl$names), 
+                   function(x, names) {
+                     plot_loadings(x, names = names$stock_name)
+                   }
+) 
+  
+  
+

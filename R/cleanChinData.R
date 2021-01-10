@@ -35,7 +35,7 @@ by_dat1 <- by_raw[-1, ] %>%
   arrange(stock) 
 
 # mean generation length data
-gen <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv")) %>% 
+gen1 <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv")) %>% 
   mutate(stock = as.factor(Stock)) %>% 
   select(stock, brood_year = BY, 
          gen_length = GenTim.fishing.mortality.represented.in.calcuations.)
@@ -70,7 +70,7 @@ by_dat <- metadata %>%
                         stock = unique(metadata$stock)),
             by = "stock") %>% 
   left_join(., by_dat1, by = c("stock", "stock_name", "brood_year")) %>% 
-  full_join(., gen, by = c("stock", "brood_year")) %>%
+  full_join(., gen1, by = c("stock", "brood_year")) %>%
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          M = -log(survival),
@@ -109,7 +109,7 @@ by_dat <- metadata %>%
                              "Cowichan River Fall", "Nanaimo River Fall", 
                              "Harrison River") ~ "sog",
            j_group2 == "puget" ~ "puget",
-           TRUE ~ a_group
+           TRUE ~ a_group2
          )
          ) %>% 
   select(stock, stock_name, brood_year, survival, M, gen_length,
@@ -166,3 +166,4 @@ escDat <- escDatWide %>%
 
 write.csv(escDat, here::here("data", "salmonData", "CLEANsalishSea_escData.csv"),
           row.names = FALSE)
+

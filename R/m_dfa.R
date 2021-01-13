@@ -187,29 +187,70 @@ surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),
               by = "stock")
 })
+surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
+  as.numeric(colnames(x))
+})
 
 # fit bayesdfa
 dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
                               num_trends = 2, zscore = TRUE, 
-                              iter = 1750, chains = 4, thin = 1, 
-                              control = list(adapt_delta = 0.95, 
-                                             max_treedepth = 20),
+                              iter = 2250, chains = 4, thin = 1, 
+                              control = list(adapt_delta = 0.90,
+                                             max_treedepth =20),
                               .progress = TRUE,
                               seed = TRUE)
-saveRDS(dfa_fits, here::here("data", "mortality_fits", "bayesdfa_by_group.RDS"))
+# saveRDS(dfa_fits, here::here("data", "mortality_fits", "bayesdfa_by_group.RDS"))
 
-# temp <- surv_tbl$m_mat[[3]]
-# temp_fit <- find_dfa_trends(temp, iter = 2000, kmin = 1, kmax = 5, chains = 4, 
-#                             variance =  "equal",
-#                             control = list(adapt_delta = 0.95, 
-#                                            max_treedepth = 20))
+map2(dfa_fits, surv_tbl$group, function(x, y) {
+  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+  saveRDS(x, here::here("data", "mortality_fits", f_name))
+})
 
-tt <- temp_fit$best_model
-rotate_trends(dfa_fits[[1]]) %>% 
-  plot_trends()
-plot_fitted(tt)
-rotate_trends(tt) %>% 
-  plot_loadings()
+# read outputs
+dfa_fits2 <- map(surv_tbl$group, function(y) {
+  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+  readRDS(here::here("data", "mortality_fits", f_name))
+})
+rot_list <- map(dfa_fits2, rotate_trends)
+
+# make plots 
+source(here::here("R", "functions", "plot_fitted_bayes.R"))
+fit_list <- pmap(list(dfa_fits2, surv_tbl$names, surv_tbl$years), 
+                 function(x, names, obs_years) {
+                   plot_fitted_bayes(x, names = names$stock_name, 
+                                     years = obs_years) +
+                     scale_x_continuous(breaks = c(1970, 1990, 2010), 
+                                        limits = c(min(surv$year), 
+                                                   max(surv$year)))
+                 })
+trend_list <- pmap(list(rot_list, surv_tbl$years), 
+                   function(x, obs_years) {
+                     plot_trends(x, years = obs_years) +
+                       scale_x_continuous(breaks = c(1970, 1990, 2010), 
+                                          limits = c(min(surv$year), 
+                                                     max(surv$year)))
+                   }
+)
+loadings_list <- pmap(list(rot_list, surv_tbl$names), 
+                      function(x, names) {
+                        plot_loadings(x, names = names$stock_name) +
+                          lims(y = c(-2, 2))
+                      }
+) 
+
+fig_path <- paste("figs", "dfa", "bayes", "mortality", sep = "/")
+
+pdf(here::here(fig_path, "fits.pdf"))
+fit_list
+dev.off()
+
+pdf(here::here(fig_path, "trends.pdf"))
+trend_list
+dev.off()
+
+pdf(here::here(fig_path, "loadings.pdf"))
+loadings_list
+dev.off()
 
 
 

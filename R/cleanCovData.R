@@ -59,7 +59,7 @@ split_bind <- function(x) {
     unlist(.)
 }
 
-herring <- read.csv(here("data/salmonData/herring_r.csv")) %>% 
+herring <- read.csv(here::here("data/salmonData/herring_r.csv")) %>% 
   pivot_wider(., names_from = "Indicator", values_from = "Value") %>% 
   pivot_longer(cols = contains("_Med"), names_to = "stock", 
                values_to = "median") %>%
@@ -259,7 +259,9 @@ write.csv(covOut, here("data/salmonData/survCovariateAnom.csv"), row.names = F)
 #          sd = sqrt(n - 1) * (abs(low - up) / 3.92))
 
 juv_cov <- herring %>% 
-  filter(stock == "SoGHerringR") %>% 
+  filter(stock == "SoGHerringR") %>%
+  #subtract by two since index is for age-2 recruits and age-0 likely most 
+  #important
   mutate(year2 = year - 2) %>%
   select(herring_model_year = year, year = year2, herr_abund = median) %>% 
   left_join(., 
@@ -270,6 +272,24 @@ juv_cov <- herring %>%
 
 saveRDS(juv_cov, here::here("data/salmonData/cov_subset_juv.rds"))
 
+
+# adult cleaning requires more complex stock-specific considerations
+adult_cov <- list(herring = herring %>%
+                    mutate(herring_age0_year = year - 2) %>% 
+                    select(herring_model_year = year, 
+                           herring_age0_year,
+                           herr_abund = median, 
+                           stock),
+                  rkw = whales %>% 
+                    mutate(total_n = SRKW_N + NRKW_N) %>% 
+                    select(year = Year, srkw_n = SRKW_N, nrkw_n = NRKW_N, 
+                           total_n)
+)
+
+saveRDS(adult_cov, here::here("data/salmonData/cov_subset_adult.rds"))
+
+
+## EXPLORATORY -----------------------------------------------------------------
 
 ## Looks at covariates
 cov_ts <- covOut %>% 

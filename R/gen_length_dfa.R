@@ -16,8 +16,14 @@ gen <- gen_raw %>%
   
 # dataframe of only stocks and adult groupings
 stk_tbl <- gen %>% 
-  select(stock, stock_name, run, a_group:a_group3) %>% 
-  distinct()
+  group_by(stock) %>% 
+  mutate(max_age = ceiling(max(gen_length)),
+         max_ocean_age = ifelse(smolt == "oceantype", max_age - 1, 
+                                max_age - 2)) %>% 
+  ungroup() %>% 
+  select(stock, stock_name, smolt, run, j_group2, a_group:a_group3,
+         max_ocean_age) %>% 
+  distinct() 
 
 
 ## EXPLORATORY -----------------------------------------------------------------
@@ -25,7 +31,7 @@ stk_tbl <- gen %>%
 #plot raw generation length data
 raw_gen <- gen %>% 
   ggplot(.) +
-  geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
+  geom_point(aes(x = year, y = gen_length, fill = a_group2), shape = 21) +
   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
   theme(legend.position = "top") +
   labs(y = "Mean Generation Length") +
@@ -120,12 +126,6 @@ mod_tbl <- tibble(
   q_models = rep(q_models, times = 4)
 )
 
-# MARSS(gen_mat, model =  c(list(Z = z_models[[1]], 
-#                                Q = "unconstrained"), 
-#                           model_constants),
-#       silent = FALSE, control = list(maxit = 100),
-#       method = "BFGS")
-
 # fit generic MARSS models
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models,
@@ -203,45 +203,144 @@ dfa_fits <- furrr::future_map2(gen_tbl$gen_mat[2:4],
                                .f = function (y, n_trend) {
                                  fit_dfa(y = y, num_trends = n_trend, 
                                          zscore = TRUE,
-                                         iter = 2000, chains = 4, thin = 1,
-                                         control = list(adapt_delta = 0.95,
-                                                        max_treedepth = 20))
+                                         iter = 3250, chains = 4, thin = 1,
+                                         control = list(adapt_delta = 0.9))
                                },
-                              .progress = TRUE, 
-                              seed = TRUE)
+                              .progress = TRUE,
+                              .options = furrr::furrr_options(seed = TRUE))
 
 # save outputs
-map2(dfa_fits, gen_tbl$group, function(x, y) {
+map2(dfa_fits, gen_tbl$group[2:4], function(x, y) {
   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
   saveRDS(x, here::here("data", "generation_fits", f_name))
 })
 
 # read outputs
-temp <- map(gen_tbl$group, function(y) {
+dfa_fits2 <- map(gen_tbl$group, function(y) {
   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
-rot_list <- map(temp, rotate_trends)
+rot_list <- map(dfa_fits2, rotate_trends)
 
 # make plots 
 source(here::here("R", "functions", "plot_fitted_bayes.R"))
-fit_list <- pmap(list(temp, gen_tbl$names, gen_tbl$years), 
+fit_list <- pmap(list(dfa_fits2, gen_tbl$names, gen_tbl$years), 
                  function(x, names, obs_years) {
                    plot_fitted_bayes(x, names = names$stock_name, 
                                      years = obs_years) +
-                     lims(x = c(min(gen$year), max(gen$year)))
+                     scale_x_continuous(breaks = c(1970, 1990, 2010), 
+                                        limits = c(min(gen$year), 
+                                                   max(gen$year)))
                  })
 trend_list <- pmap(list(rot_list, gen_tbl$years), 
                    function(x, obs_years) {
                      plot_trends(x, years = obs_years) +
-                       lims(x = c(min(gen$year), max(gen$year)))
+                       scale_x_continuous(breaks = c(1970, 1990, 2010), 
+                                          limits = c(min(gen$year), 
+                                                     max(gen$year)))
                    }
 )
 loadings_list <- pmap(list(rot_list, gen_tbl$names), 
                    function(x, names) {
-                     plot_loadings(x, names = names$stock_name)
+                     plot_loadings(x, names = names$stock_name) +
+                       lims(y = c(-2, 2))
                    }
 ) 
-  
+
+
+fig_path <- paste("figs", "dfa", "bayes", "generation_length", sep = "/")
+
+pdf(here::here(fig_path, "fits.pdf"))
+fit_list
+dev.off()
+
+pdf(here::here(fig_path, "trends.pdf"))
+trend_list
+dev.off()
+
+pdf(here::here(fig_path, "loadings.pdf"))
+loadings_list
+dev.off()
+
+
+# FIT GAMS ---------------------------------------------------------------------
+
+library(mgcv)
+
+# prepare covariate data
+adult_cov <- readRDS(here::here("data/salmonData/cov_subset_adult.rds"))
+
+
+# focus on Strait of Georgia stocks and add herring at two lags to test timing
+# of prey availability effects: 
+# 1) year of ocean entry (Strait of Georgia herring only)
+# 2) year after ocean entry (WCVI + SoG for most SoG stocks, PRD + HG + CC for
+# north migrating)
+herr_year0 <- adult_cov$herring %>% 
+  filter(stock == "SoGHerringR") %>% 
+  mutate(
+    ck_ocean_year0 = herring_age0_year) %>% 
+  select(herr_age0_abund = herr_abund, ck_ocean_year0)
+
+herr_year1 <- adult_cov$herring %>% 
+  mutate(
+    herr_reg = case_when(
+      stock %in% c("WCVIHerringR", "SoGHerringR") ~ "south",
+      stock %in% c("HGHerringR", "CCHerringR", "PRDHerringR") ~ "north"
+    ),
+    ck_ocean_year1 = herring_age0_year - 1) %>% 
+  group_by(ck_ocean_year1, herr_reg) %>% 
+  summarize(agg_abund = sum(herr_abund), .groups = "drop") %>% 
+  pivot_wider(names_from = herr_reg, values_from = agg_abund,
+              names_prefix = "herr_abund_") 
+
+# calculate rkw abundance for northern stocks (NRKW) and southern stocks (SRKW +
+# NRKW) by brood year (rolling average of brood year + 1:4)
+rkw_exp <- function(max_age) {
+  zoo::rollmean(adult_cov$rkw$srkw_n, max_age)
+} 
+
+sog_stks <- stk_tbl %>% 
+  filter(j_group2 == "sog") 
+
+expand.grid(stock = sog_stks$stock,
+            year = unique(adult_cov$rkw$year)) %>% 
+  arrange(stock) %>%
+  left_join(., stk_tbl, by = "stock") %>% 
+  select(stock, stock_name, smolt, a_group2, max_ocean_age, year) %>% 
+  droplevels() %>% 
+  left_join(., adult_cov$rkw, by = "year") %>% 
+  group_by(stock) %>% 
+  mutate(
+    #identify which rkw pop is relevant
+    relevant_rkw = case_when(
+      a_group2 == "south" ~ total_n,
+      a_group2 == "offshore" ~ srkw_n,
+      a_group2 == "north" ~ nrkw_n
+    ),
+    #calculate rolling mean based on the maximum ocean age of each stock
+    rollmean_rkw = zoo::rollmean(relevant_rkw, max_ocean_age, fill = NA, 
+                                 align = "right")
+  ) %>% 
+  ungroup() %>% 
+  tail()
+  # split(., as.factor(.$stock))
+
+
+map(temp, ~{.x %>% mutate(year = unique(adult_cov$rkw$year))})
   
 
+gen %>% 
+  filter(j_group2 == "sog") %>% 
+  # ocean entry year herring abundance
+  left_join(.,
+            herr_year0 %>% 
+              select(year = ck_ocean_year0, herr_abund_OEY = herr_age0_abund),
+            by = "year") %>% 
+  # ocean entry year + 1 herring abundance
+  left_join(., 
+            herr_year1 %>% 
+              rename(year = ck_ocean_year1),
+            by = "year") %>%
+  mutate()
+  glimpse()

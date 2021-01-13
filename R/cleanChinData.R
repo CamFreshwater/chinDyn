@@ -78,6 +78,7 @@ by_dat <- metadata %>%
          region = ifelse(stock == "ELW", "NPGSD", region),
          j_group = case_when(
            (lat > 52 & !region == "UFR") ~ "north",
+           stock_name == "Transboundary Rivers" ~ "north",
            region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
                           "WCVI") ~ "south",
            TRUE ~ "salish"

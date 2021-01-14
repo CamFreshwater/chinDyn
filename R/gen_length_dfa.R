@@ -22,7 +22,7 @@ stk_tbl <- gen %>%
                                 max_age - 2)) %>% 
   ungroup() %>% 
   select(stock, stock_name, smolt, run, j_group2, a_group:a_group3,
-         max_ocean_age) %>% 
+         max_age, max_ocean_age) %>% 
   distinct() 
 
 
@@ -262,85 +262,3 @@ pdf(here::here(fig_path, "loadings.pdf"))
 loadings_list
 dev.off()
 
-
-# FIT GAMS ---------------------------------------------------------------------
-
-library(mgcv)
-
-# prepare covariate data
-adult_cov <- readRDS(here::here("data/salmonData/cov_subset_adult.rds"))
-
-
-# focus on Strait of Georgia stocks and add herring at two lags to test timing
-# of prey availability effects: 
-# 1) year of ocean entry (Strait of Georgia herring only)
-# 2) year after ocean entry (WCVI + SoG for most SoG stocks, PRD + HG + CC for
-# north migrating)
-herr_year0 <- adult_cov$herring %>% 
-  filter(stock == "SoGHerringR") %>% 
-  mutate(
-    ck_ocean_year0 = herring_age0_year) %>% 
-  select(herr_age0_abund = herr_abund, ck_ocean_year0)
-
-herr_year1 <- adult_cov$herring %>% 
-  mutate(
-    herr_reg = case_when(
-      stock %in% c("WCVIHerringR", "SoGHerringR") ~ "south",
-      stock %in% c("HGHerringR", "CCHerringR", "PRDHerringR") ~ "north"
-    ),
-    ck_ocean_year1 = herring_age0_year - 1) %>% 
-  group_by(ck_ocean_year1, herr_reg) %>% 
-  summarize(agg_abund = sum(herr_abund), .groups = "drop") %>% 
-  pivot_wider(names_from = herr_reg, values_from = agg_abund,
-              names_prefix = "herr_abund_") 
-
-# calculate rkw abundance for northern stocks (NRKW) and southern stocks (SRKW +
-# NRKW) by brood year (rolling average of brood year + 1:4)
-rkw_exp <- function(max_age) {
-  zoo::rollmean(adult_cov$rkw$srkw_n, max_age)
-} 
-
-sog_stks <- stk_tbl %>% 
-  filter(j_group2 == "sog") 
-
-expand.grid(stock = sog_stks$stock,
-            year = unique(adult_cov$rkw$year)) %>% 
-  arrange(stock) %>%
-  left_join(., stk_tbl, by = "stock") %>% 
-  select(stock, stock_name, smolt, a_group2, max_ocean_age, year) %>% 
-  droplevels() %>% 
-  left_join(., adult_cov$rkw, by = "year") %>% 
-  group_by(stock) %>% 
-  mutate(
-    #identify which rkw pop is relevant
-    relevant_rkw = case_when(
-      a_group2 == "south" ~ total_n,
-      a_group2 == "offshore" ~ srkw_n,
-      a_group2 == "north" ~ nrkw_n
-    ),
-    #calculate rolling mean based on the maximum ocean age of each stock
-    rollmean_rkw = zoo::rollmean(relevant_rkw, max_ocean_age, fill = NA, 
-                                 align = "right")
-  ) %>% 
-  ungroup() %>% 
-  tail()
-  # split(., as.factor(.$stock))
-
-
-map(temp, ~{.x %>% mutate(year = unique(adult_cov$rkw$year))})
-  
-
-gen %>% 
-  filter(j_group2 == "sog") %>% 
-  # ocean entry year herring abundance
-  left_join(.,
-            herr_year0 %>% 
-              select(year = ck_ocean_year0, herr_abund_OEY = herr_age0_abund),
-            by = "year") %>% 
-  # ocean entry year + 1 herring abundance
-  left_join(., 
-            herr_year1 %>% 
-              rename(year = ck_ocean_year1),
-            by = "year") %>%
-  mutate()
-  glimpse()

@@ -43,10 +43,9 @@ dev.off()
 
 #distribution of generation length 
 gen %>%
-  # filter(!is.na(gen_length)) %>% 
   group_by(stock) %>% 
   ggplot(.) +
-  geom_histogram(aes(x = gen_z, fill = a_group)) +
+  geom_histogram(aes(x = log(gen_length), fill = a_group)) +
   facet_wrap(~ fct_reorder(stock, as.numeric(a_group))) +
   theme(legend.position = "top") +
   ggsidekick::theme_sleek()

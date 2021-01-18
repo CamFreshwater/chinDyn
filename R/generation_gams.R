@@ -33,7 +33,6 @@ adult_cov <- readRDS(here::here("data/salmonData/cov_subset_adult.rds"))
 
 # PREP DATA --------------------------------------------------------------------
 
-
 # Focus on Strait of Georgia stocks and add herring at two lags to test timing
 # of prey availability effects: 
 # 1) year of ocean entry (Strait of Georgia herring only)
@@ -55,7 +54,8 @@ herr_year1 <- adult_cov$herring %>%
   group_by(ck_ocean_year1, herr_reg) %>% 
   summarize(agg_abund = sum(herr_abund), .groups = "drop") %>% 
   pivot_wider(names_from = herr_reg, values_from = agg_abund,
-              names_prefix = "herr_abund_") 
+              names_prefix = "herr_abund_OEY1_") 
+
 
 # calculate rkw abundance for northern stocks (NRKW) and southern stocks (SRKW +
 # NRKW) by brood year (rolling average of brood year + 1:4)
@@ -88,8 +88,9 @@ rkw <- expand.grid(stock = sog_stks$stock,
   ) %>% 
   ungroup() 
 
+
 # join relevant stock data, herring data and rkw
-gen %>% 
+dat <- gen %>% 
   filter(j_group2 == "sog") %>% 
   # ocean entry year herring abundance
   left_join(.,
@@ -103,10 +104,100 @@ gen %>%
             by = "year") %>%
   # define oey1 herring abundance based on adult distribution
   mutate(
-    herr_abund_OEY1 = case_when()
+    herr_abund_OEY1 = case_when(
+      a_group2 == "south" ~ herr_abund_OEY1_south,
+      a_group2 == "offshore" ~ herr_abund_OEY1_north,
+      a_group2 == "north" ~ herr_abund_OEY1_north
+    )
+  ) %>% 
+  # rkw abundance
+  left_join(., 
+            rkw %>% 
+              select(stock, brood_year, rollmean_rkw), 
+            by = c("brood_year", "stock")) %>% 
+  # scale covariates
+  mutate(
+    herr_OEY_z = as.numeric(scale(herr_abund_OEY)),
+    herr_OEY1_z = as.numeric(scale(herr_abund_OEY1)),
+    rkw_z = as.numeric(scale(rollmean_rkw))
+  ) %>% 
+  select(stock, stock_name, brood_year, a_group2, gen_length, gen_z, 
+         herr_abund_OEY, herr_abund_OEY1, rollmean_rkw, herr_OEY_z, herr_OEY1_z,
+         rkw_z) %>% 
+  # remove missing data
+  filter(!is.na(rkw_z))
+
+
+# FIT GAMS ---------------------------------------------------------------------
+
+# Test various model structures including single, additive or interaction models
+# between herring (various lags) and RKW with the potential for stratification
+# by adult rearing location
+
+h_mod1 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) + 
+                s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                s(stock, bs = "re"), 
+              data = dat)
+h_mod2a <- gam(gen_length ~  s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
+                 s(herr_OEY_z, by = a_group2, m = 1, bs = "tp", k = 4) + 
+                 a_group2 +
+                 s(stock, bs = "re"), 
+               data = dat)
+h_mod2b <- gam(gen_length ~ s(herr_OEY_z, by = a_group2, m = 2, bs = "tp", k = 4) + 
+                 a_group2 +
+                 s(stock, bs = "re"), 
+               data = dat)
+h_mod3a <- gam(gen_length ~ s(herr_OEY_z, by = a_group2, m = 2, bs = "tp", k = 4) + 
+                s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                a_group2 +
+                s(stock, bs = "re"), 
+              data = dat)
+h_mod3b <- gam(gen_length ~ s(herr_OEY_z, by = a_group2, m = 2, bs = "tp", k = 4) + 
+               s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                s(a_group2, bs = "re") +
+                s(stock, bs = "re"), 
+             data = dat)
+AIC(h_mod1, h_mod2a, h_mod2b, h_mod3)
+AIC(h_mod2a, h_mod2b, h_mod2c)
+
+
+
+# generate predictions for interaction model
+excl_pars <- map(h_mod1$smooth, function(x) x$label) %>% unlist
+herr_seq <- seq(min(dat$herr_OEY_z), max(dat$herr_OEY_z), length.out = 75)
+new_dat <- expand.grid(#seal_anom = seal_seq, 
+                       herr_OEY_z = herr_seq,
+                       a_group2 = unique(dat$a_group2))
+
+# fixed effects predictions
+preds <- predict(h_mod2c, new_dat, se.fit = TRUE, 
+                 exclude = excl_pars[grepl("stock", excl_pars)],
+                 newdata.guaranteed = TRUE)
+new_dat2 <- new_dat %>% 
+  mutate(link_fit = as.numeric(preds$fit),
+         link_se = as.numeric(preds$se.fit),
+         pred_gen = plogis(link_fit),
+         pred_gen_lo = plogis(link_fit + (qnorm(0.025) * link_se)),
+         pred_gen_up = plogis(link_fit + (qnorm(0.975) * link_se))
   )
-# rkw abundance
-left_join(., 
-          rkw %>% 
-            select(stock, brood_year, rollmean_rkw), 
-          by = c("brood_year", "stock")) 
+
+# herring only fixed effects
+# zero_seal <- new_dat2$seal_anom[which.min(abs(new_dat2$seal_anom - 0))]
+new_dat2 %>% 
+  # filter(seal_anom == zero_seal) %>% 
+  ggplot(., aes(x = herr_OEY_z)) +
+  geom_line(aes(y = pred_gen)) +
+  geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up), alpha = 0.3) +
+  ggsidekick::theme_sleek() +
+  # lims(y = c(0.01, 0.05)) +
+  labs(x = "Herring Anomaly", y = "Predicted Generation Length") +
+  facet_wrap(~a_group2)
+
+
+
+heat_plot <- ggplot(new_dat2, aes(x = seal_anom, y = herr_anom)) +
+  geom_raster(aes(fill = pred_surv)) +
+  scale_fill_viridis_c(name = "Predicted\nSurvival") +
+  labs(x = "SoG Seal Anomaly", y = "SoG Herring Anomaly") +
+  ggsidekick::theme_sleek()
+

@@ -128,49 +128,153 @@ dat <- gen %>%
   filter(!is.na(rkw_z))
 
 
-# FIT GAMS ---------------------------------------------------------------------
+# look at correlations among covariates (minimal)
+dat %>%
+  select(brood_year, herr_OEY_z, herr_OEY1_z, rkw_z) %>% 
+  as.matrix() %>% 
+  cor() %>% 
+  corrplot::corrplot(., method = "number", "upper")
+
+
+# look at raw data
+p <- ggplot(dat) +
+  facet_wrap(~fct_reorder(stock, as.numeric(a_group2))) +
+  ggsidekick::theme_sleek()
+p +
+  geom_point(aes(x = herr_OEY_z, y = gen_length, fill = a_group2), shape = 21)
+p +
+  geom_point(aes(x = herr_OEY1_z, y = gen_length, fill = a_group2), shape = 21)
+p +
+  geom_point(aes(x = rkw_z, y = gen_length, fill = a_group2), shape = 21)
+
+
+# GAM COMPARISON ---------------------------------------------------------------
 
 # Test various model structures including single, additive or interaction models
 # between herring (various lags) and RKW with the potential for stratification
 # by adult rearing location
 
-h_mod1 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) + 
-                s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) + 
-                s(stock, bs = "re"), 
+# Herring at one year lags: model structure supports model 1
+h_mod1 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 4) +
+                s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 4) +
+                s(stock, bs = "re"),
               data = dat)
-h_mod2a <- gam(gen_length ~  s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
-                 s(herr_OEY_z, by = a_group2, m = 1, bs = "tp", k = 4) + 
-                 a_group2 +
-                 s(stock, bs = "re"), 
-               data = dat)
-h_mod2b <- gam(gen_length ~ s(herr_OEY_z, by = a_group2, m = 2, bs = "tp", k = 4) + 
-                 a_group2 +
-                 s(stock, bs = "re"), 
-               data = dat)
-h_mod3a <- gam(gen_length ~ s(herr_OEY_z, by = a_group2, m = 2, bs = "tp", k = 4) + 
-                s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) + 
+h_mod2 <- gam(gen_length ~ s(herr_OEY1_z, by = a_group2, m = 2, bs = "tp", k = 4) +
                 a_group2 +
-                s(stock, bs = "re"), 
+                s(stock, bs = "re"),
               data = dat)
-h_mod3b <- gam(gen_length ~ s(herr_OEY_z, by = a_group2, m = 2, bs = "tp", k = 4) + 
-               s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) + 
-                s(a_group2, bs = "re") +
-                s(stock, bs = "re"), 
-             data = dat)
-AIC(h_mod1, h_mod2a, h_mod2b, h_mod3)
-AIC(h_mod2a, h_mod2b, h_mod2c)
+h_mod3 <- gam(gen_length ~ s(herr_OEY1_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+                s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 4) +
+                a_group2 +
+                s(stock, bs = "re"),
+              data = dat)
+h_mod4 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 4) +
+                a_group2 +
+                s(stock, bs = "re"),
+              data = dat)
+AIC(h_mod1, h_mod2, h_mod3, h_mod4)
+
+
+# Herring at entry - global smooth for juveniles strongly supported
+hj_mod1 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
+                  s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) +
+                  s(stock, bs = "re"),
+                data = dat)
+hj_mod2 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
+                  s(stock, bs = "re"),
+                data = dat)
+AIC(hj_mod1, hj_mod2)
+
+
+# RKW - greatest support for model 2 (global smooth and stock effects)
+k_mod1 <- gam(gen_length ~  s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+               s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
+               s(stock, bs = "re") +
+               a_group2,
+               data = dat)
+k_mod2 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
+                s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
+                 s(stock, bs = "re"),
+               data = dat)
+k_mod3 <- gam(gen_length ~ s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+                s(stock, bs = "re"),
+              data = dat)
+k_mod4 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
+                s(stock, bs = "re"),
+              data = dat)
+AIC(k_mod1, k_mod2, k_mod3, k_mod4)
+
+
+# Combined models to resolve whether relationships are additive
+n_stks <- length(unique(dat$stock))
+h_hj_mod <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+                  s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
+                  s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+                  s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+                  s(stock, bs = "re"),
+              data = dat,
+              method = "REML")
+k_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
+                   s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+                   s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+                   s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
+                   s(stock, bs = "re"),
+                data = dat,
+                method = "REML")
+k_hj_int_mod <- gam(gen_length ~ te(herr_OEY_z, rkw_z, 
+                                   bs = c("tp", "tp"), k = c(3, 3), m = 2) +
+                     t2(herr_OEY_z, rkw_z, stock, m = 2,
+                        bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
+                   data = dat,
+                   method = "REML")
+k_h_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
+                  s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+                  s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+                  s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+                  s(stock, bs = "re"),
+              data = dat,
+              method = "REML")
+k_h_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z, 
+                                  bs = c("tp", "tp"), k = c(3, 3), m = 2) +
+                     t2(herr_OEY1_z, rkw_z, stock, m = 2,
+                       bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
+               data = dat,
+               method = "REML")
+k_h_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
+                    s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+                    s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+                    s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+                    s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+                    s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
+                    s(stock, bs = "re"),
+               data = dat,
+               method = "REML")
+k_h_hj_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z, 
+                                      bs = c("tp", "tp"), k = c(3, 3), m = 2) +
+                        t2(herr_OEY1_z, rkw_z, stock, m = 2,
+                           bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)) +
+                        te(herr_OEY_z, rkw_z, 
+                           bs = c("tp", "tp"), k = c(3, 3), m = 2) +
+                        t2(herr_OEY_z, rkw_z, stock, m = 2,
+                           bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
+                      data = dat,
+                      method = "REML")
+AIC(h_mod1, hj_mod1, k_mod2, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod, 
+    k_h_hj_mod, k_hj_int_mod, k_h_hj_int_mod)
+# top supported model is most complex additive (i.e. no support for interactions)
+
+
 
 
 
 # generate predictions for interaction model
-excl_pars <- map(h_mod1$smooth, function(x) x$label) %>% unlist
+excl_pars <- map(h_mod3a$smooth, function(x) x$label) %>% unlist
 herr_seq <- seq(min(dat$herr_OEY_z), max(dat$herr_OEY_z), length.out = 75)
-new_dat <- expand.grid(#seal_anom = seal_seq, 
-                       herr_OEY_z = herr_seq,
+new_dat <- expand.grid(herr_OEY_z = herr_seq,
                        a_group2 = unique(dat$a_group2))
 
 # fixed effects predictions
-preds <- predict(h_mod2c, new_dat, se.fit = TRUE, 
+preds <- predict(h_mod3, new_dat, se.fit = TRUE, 
                  exclude = excl_pars[grepl("stock", excl_pars)],
                  newdata.guaranteed = TRUE)
 new_dat2 <- new_dat %>% 
@@ -184,12 +288,10 @@ new_dat2 <- new_dat %>%
 # herring only fixed effects
 # zero_seal <- new_dat2$seal_anom[which.min(abs(new_dat2$seal_anom - 0))]
 new_dat2 %>% 
-  # filter(seal_anom == zero_seal) %>% 
   ggplot(., aes(x = herr_OEY_z)) +
   geom_line(aes(y = pred_gen)) +
   geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up), alpha = 0.3) +
   ggsidekick::theme_sleek() +
-  # lims(y = c(0.01, 0.05)) +
   labs(x = "Herring Anomaly", y = "Predicted Generation Length") +
   facet_wrap(~a_group2)
 
@@ -200,4 +302,7 @@ heat_plot <- ggplot(new_dat2, aes(x = seal_anom, y = herr_anom)) +
   scale_fill_viridis_c(name = "Predicted\nSurvival") +
   labs(x = "SoG Seal Anomaly", y = "SoG Herring Anomaly") +
   ggsidekick::theme_sleek()
+
+
+
 

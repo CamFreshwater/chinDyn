@@ -261,29 +261,158 @@ k_h_hj_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z,
                       method = "REML")
 AIC(h_mod1, hj_mod1, k_mod2, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod, 
     k_h_hj_mod, k_hj_int_mod, k_h_hj_int_mod)
-# top supported model is most complex additive (i.e. no support for interactions)
+AIC(k_h_hj_mod, k_h_hj_modB)
+# top supported model is most complex additive (i.e. no support for 
+# interactions)
+
+
+# GAM PREDICTIONS --------------------------------------------------------------
+
+# function to generate predictions
+gen_pred <- function(mod_in, dat_in, random = FALSE) {
+  if (random == FALSE) {
+    preds <- predict(mod_in, dat_in, se.fit = TRUE, 
+                     exclude = excl_pars[grepl("stock", excl_pars)],
+                     newdata.guaranteed = TRUE)
+  } else {
+    preds <- predict(mod_in, dat_in, se.fit = TRUE, 
+                     newdata.guaranteed = TRUE)
+  }
+  
+  #remove zero columns 
+  dat_out <- dat_in[c(-2, -3)] %>% 
+    mutate(pred_gen = as.numeric(preds$fit),
+           pred_gen_se = as.numeric(preds$se.fit),
+           pred_gen_lo = pred_gen + (qnorm(0.025) * pred_gen_se),
+           pred_gen_up = pred_gen + (qnorm(0.975) * pred_gen_se)
+    ) 
+  colnames(dat_out)[1] <- "cov1"
+  
+  return(dat_out)
+}
+
+# equivalent model to k_h_hj_mod
+mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
+             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+             s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+             s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(stock, bs = "re"),
+           data = dat,
+           method = "REML")
+mod2 <- gam(gen_length ~ s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 3) +
+             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+             s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+             s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(stock, bs = "re"),
+           data = dat,
+           method = "REML")
+
+# input vectors
+excl_pars <- map(mod$smooth, function(x) x$label) %>% unlist
+herr0_seq <- seq(min(dat$herr_OEY_z), max(dat$herr_OEY_z), length.out = 75)
+herr1_seq <- seq(min(dat$herr_OEY1_z), max(dat$herr_OEY1_z), length.out = 75)
+rkw_seq <- seq(min(dat$rkw_z), max(dat$rkw_z), length.out = 75)
+
+# stock-specific averages for each covariate
+stock_means <- dat %>% 
+  group_by(stock) %>% 
+  summarize(herr_OEY_z = mean(herr_OEY_z),
+            herr_OEY1_z = mean(herr_OEY1_z),
+            rkw_z = mean(rkw_z),
+            .groups = "drop") %>% 
+  ungroup()
+
+# make mixed effects predictions using stock mean values
+# note that order of covariates in DF varies and is important
+mixed_preds_herr0 <- expand.grid(herr_OEY_z = herr0_seq,
+                                 stock = unique(dat$stock),
+                                 var = "herr0") %>% 
+  left_join(., stock_means %>% select(-herr_OEY_z), by = "stock") %>% 
+  select(herr_OEY_z, herr_OEY1_z, rkw_z, stock, var)
+mixed_preds_herr1 <- expand.grid(herr_OEY1_z = herr1_seq,
+                                 stock = unique(dat$stock),
+                                 var = "herr1") %>% 
+  left_join(., stock_means %>% select(-herr_OEY1_z), by = "stock") %>% 
+  select(herr_OEY1_z, herr_OEY_z, rkw_z, stock, var)
+mixed_preds_rkw <- expand.grid(rkw_z = rkw_seq,
+                               stock = unique(dat$stock),
+                               var = "rkw") %>% 
+  left_join(., stock_means %>% select(-rkw_z), by = "stock") %>% 
+  select(rkw_z, herr_OEY_z, herr_OEY1_z, stock, var)
+mixed_pred_list1 <- list(herr0 = mixed_preds_herr0,
+                         herr1 = mixed_preds_herr1,
+                         rkw = mixed_preds_rkw)
+fixed_pred_list1 <- map(mixed_pred_list1, function(x) {
+  #replace stock-specific covariates with 0s 
+  x[, 2] <- 0
+  x[, 3] <- 0 
+  x %>% select(-stock) %>% distinct()
+})
+
+mixed_pred_dat <- map(mixed_pred_list1, function (x) {
+  gen_pred(mod, x, random = TRUE) 
+}) %>% 
+  bind_rows() %>%
+  left_join(., dat %>% select(stock, a_group2) %>% distinct(), by = "stock")
+fixed_pred_dat <- map(fixed_pred_list1, function (x) {
+  gen_pred(mod, x, random = FALSE) 
+}) %>% 
+  bind_rows()
+
+# plot fixed effects
+ggplot(fixed_pred_dat, aes(x = cov1)) +
+  geom_line(aes(y = pred_gen)) +
+  geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up), alpha = 0.3) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Standardized Abundance", y = "Predicted Generation Length") +
+  facet_wrap(~var)
+  
+# plot mixed effects w/ observations
+obs_dat <- dat %>% 
+  select(stock, a_group2, gen_length, herr_OEY_z, herr_OEY1_z, rkw_z) %>% 
+  pivot_longer(., cols = c(herr_OEY_z, herr_OEY1_z, rkw_z), 
+               names_to = "var", values_to = "z_value") %>% 
+  mutate(var = fct_recode(as.factor(var), 
+                          herr0 = "herr_OEY_z",
+                          herr1 = "herr_OEY1_z",
+                          rkw = "rkw_z"))
+
+ggplot(mixed_pred_dat, aes(x = cov1)) +
+  geom_line(aes(y = pred_gen)) +
+  geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up, fill = a_group2), 
+              alpha = 0.3) +
+  geom_point(data = obs_dat, aes(x = z_value, y = gen_length, fill = a_group2),
+             shape = 21, alpha = 0.5) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Standardized Abundance", y = "Generation Length") +
+  facet_grid(var~fct_reorder(stock, as.numeric(a_group2)))
 
 
 
+gen_pred2 <- function(mod_in, dat_in, random = FALSE) {
+  preds <- predict(mod_in, dat_in, se.fit = TRUE, 
+                   newdata.guaranteed = TRUE)
+  
+  
+  #remove zero columns 
+  dat_out <- dat_in[c(-2, -3)] %>% 
+    mutate(link_fit = as.numeric(preds$fit),
+           link_se = as.numeric(preds$se.fit),
+           pred_gen = exp(link_fit),
+           pred_gen_lo = exp(link_fit + (qnorm(0.025) * link_se)),
+           pred_gen_up = exp(link_fit + (qnorm(0.975) * link_se))
+    ) 
+  colnames(dat_out)[1] <- "cov1"
+  
+  return(dat_out)
+}
 
 
-# generate predictions for interaction model
-excl_pars <- map(h_mod3a$smooth, function(x) x$label) %>% unlist
-herr_seq <- seq(min(dat$herr_OEY_z), max(dat$herr_OEY_z), length.out = 75)
-new_dat <- expand.grid(herr_OEY_z = herr_seq,
-                       a_group2 = unique(dat$a_group2))
 
-# fixed effects predictions
-preds <- predict(h_mod3, new_dat, se.fit = TRUE, 
-                 exclude = excl_pars[grepl("stock", excl_pars)],
-                 newdata.guaranteed = TRUE)
-new_dat2 <- new_dat %>% 
-  mutate(link_fit = as.numeric(preds$fit),
-         link_se = as.numeric(preds$se.fit),
-         pred_gen = plogis(link_fit),
-         pred_gen_lo = plogis(link_fit + (qnorm(0.025) * link_se)),
-         pred_gen_up = plogis(link_fit + (qnorm(0.975) * link_se))
-  )
 
 # herring only fixed effects
 # zero_seal <- new_dat2$seal_anom[which.min(abs(new_dat2$seal_anom - 0))]

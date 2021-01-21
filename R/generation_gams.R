@@ -148,107 +148,114 @@ p +
   geom_point(aes(x = rkw_z, y = gen_length, fill = a_group2), shape = 21)
 
 
+dat %>% 
+  select(a_group2, gen_length, herr_OEY_z:rkw_z) %>% 
+  pivot_longer(., cols = -a_group2, names_to = "var", values_to = "val") %>% 
+  ggplot(., aes(x = a_group2, y = val)) +
+  geom_boxplot() +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~var)
+
+## NOTE: RKW abundance highly correlated with adult rearing location probably
+# can't include categorical variable as covariate
+
+
 # GAM COMPARISON ---------------------------------------------------------------
 
 # Test various model structures including single, additive or interaction models
 # between herring (various lags) and RKW with the potential for stratification
 # by adult rearing location
 
-# Herring at one year lags: model structure supports model 1
-h_mod1 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 4) +
-                s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 4) +
+# Herring at one year lags: model structure supports model 2 based on parsimony
+h_mod1 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+                s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
                 s(stock, bs = "re"),
-              data = dat)
-h_mod2 <- gam(gen_length ~ s(herr_OEY1_z, by = a_group2, m = 2, bs = "tp", k = 4) +
-                a_group2 +
+              data = dat, method = "REML", family=Gamma(link="log"))
+h_mod2 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
                 s(stock, bs = "re"),
-              data = dat)
-h_mod3 <- gam(gen_length ~ s(herr_OEY1_z, by = a_group2, m = 2, bs = "tp", k = 4) +
-                s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 4) +
-                a_group2 +
-                s(stock, bs = "re"),
-              data = dat)
-h_mod4 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 4) +
-                a_group2 +
-                s(stock, bs = "re"),
-              data = dat)
-AIC(h_mod1, h_mod2, h_mod3, h_mod4)
+              data = dat, method = "REML", family=Gamma(link="log"))
+# h_mod2 <- gam(gen_length ~ s(herr_OEY1_z, by = a_group2, m = 2, bs = "tp", k = 3) +
+#                 a_group2 +
+#                 s(stock, bs = "re"),
+#               data = dat, method = "REML", family=Gamma(link="log"))
+# h_mod3 <- gam(gen_length ~ s(herr_OEY1_z, by = a_group2, m = 2, bs = "tp", k = 3) +
+#                 s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+#                 s(stock, bs = "re"),
+#               data = dat, method = "REML", family=Gamma(link="log"))
+# h_mod4 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+#                 a_group2 +
+#                 s(stock, bs = "re"),
+#               data = dat, method = "REML", family=Gamma(link="log"))
+AIC(h_mod1, h_mod2)
 
 
 # Herring at entry - global smooth for juveniles strongly supported
+# No region effect because all common
 hj_mod1 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
                   s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 4) +
                   s(stock, bs = "re"),
-                data = dat)
+               data = dat, method = "REML", family=Gamma(link="log"))
 hj_mod2 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
                   s(stock, bs = "re"),
-                data = dat)
+               data = dat, method = "REML", family=Gamma(link="log"))
 AIC(hj_mod1, hj_mod2)
 
 
-# RKW - greatest support for model 2 (global smooth and stock effects)
-k_mod1 <- gam(gen_length ~  s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
-               s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
-               s(stock, bs = "re") +
-               a_group2,
-               data = dat)
-k_mod2 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
+# RKW - greatest support for model 1 (overall smooth plus random stock 
+# effects)
+# k_mod1 <- gam(gen_length ~  s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+#                s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
+#                s(stock, bs = "re") +
+#                a_group2,
+#               data = dat, method = "REML", family=Gamma(link="log"))
+k_mod1 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
                 s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
                  s(stock, bs = "re"),
-               data = dat)
-k_mod3 <- gam(gen_length ~ s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+              data = dat, method = "REML", family=Gamma(link="log"))
+# k_mod3 <- gam(gen_length ~ s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+#                 s(stock, bs = "re"),
+#               data = dat, method = "REML", family=Gamma(link="log"))
+k_mod2 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
                 s(stock, bs = "re"),
-              data = dat)
-k_mod4 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
-                s(stock, bs = "re"),
-              data = dat)
-AIC(k_mod1, k_mod2, k_mod3, k_mod4)
+              data = dat, method = "REML", family=Gamma(link="log"))
+# k_mod5 <- gam(gen_length ~  s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 4) +
+#                 s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
+#                 s(stock, bs = "re"),
+              # data = dat, method = "REML", family=Gamma(link="log"))
+AIC(k_mod1, k_mod2)
 
 
 # Combined models to resolve whether relationships are additive
 n_stks <- length(unique(dat$stock))
+cat_mod <- gam(gen_length ~ a_group2 ,
+                data = dat, method = "REML", family=Gamma(link="log"))
 h_hj_mod <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
                   s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
                   s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
-                  s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
-                  s(stock, bs = "re"),
-              data = dat,
-              method = "REML")
+                  s(stock, bs = "re") +
+                  a_group2 ,
+                data = dat, method = "REML", family=Gamma(link="log"))
 k_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
                    s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
                    s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
                    s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
                    s(stock, bs = "re"),
-                data = dat,
-                method = "REML")
+              data = dat, method = "REML", family=Gamma(link="log"))
 k_hj_int_mod <- gam(gen_length ~ te(herr_OEY_z, rkw_z, 
                                    bs = c("tp", "tp"), k = c(3, 3), m = 2) +
                      t2(herr_OEY_z, rkw_z, stock, m = 2,
                         bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
-                   data = dat,
-                   method = "REML")
+              data = dat, method = "REML", family=Gamma(link="log"))
 k_h_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
                   s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
                   s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
-                  s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
-                  s(stock, bs = "re"),
-              data = dat,
-              method = "REML")
+                  s(stock, bs = "re") ,
+              data = dat, method = "REML", family=Gamma(link="log"))
 k_h_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z, 
                                   bs = c("tp", "tp"), k = c(3, 3), m = 2) +
                      t2(herr_OEY1_z, rkw_z, stock, m = 2,
                        bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
-               data = dat,
-               method = "REML")
-k_h_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-                    s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
-                    s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
-                    s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
-                    s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
-                    s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
-                    s(stock, bs = "re"),
-               data = dat,
-               method = "REML")
+              data = dat, method = "REML", family=Gamma(link="log"))
 k_h_hj_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z, 
                                       bs = c("tp", "tp"), k = c(3, 3), m = 2) +
                         t2(herr_OEY1_z, rkw_z, stock, m = 2,
@@ -258,10 +265,9 @@ k_h_hj_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z,
                         t2(herr_OEY_z, rkw_z, stock, m = 2,
                            bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
                       data = dat,
-                      method = "REML")
-AIC(h_mod1, hj_mod1, k_mod2, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod, 
+                      method = "REML", family=Gamma(link="log"))
+AIC(cat_mod, h_mod2, hj_mod1, k_mod1, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod, 
     k_h_hj_mod, k_hj_int_mod, k_h_hj_int_mod)
-AIC(k_h_hj_mod, k_h_hj_modB)
 # top supported model is most complex additive (i.e. no support for 
 # interactions)
 
@@ -281,10 +287,11 @@ gen_pred <- function(mod_in, dat_in, random = FALSE) {
   
   #remove zero columns 
   dat_out <- dat_in[c(-2, -3)] %>% 
-    mutate(pred_gen = as.numeric(preds$fit),
-           pred_gen_se = as.numeric(preds$se.fit),
-           pred_gen_lo = pred_gen + (qnorm(0.025) * pred_gen_se),
-           pred_gen_up = pred_gen + (qnorm(0.975) * pred_gen_se)
+    mutate(link_fit = as.numeric(preds$fit),
+           link_se = as.numeric(preds$se.fit),
+           pred_gen = exp(link_fit),
+           pred_gen_lo = exp(link_fit + (qnorm(0.025) * link_se)),
+           pred_gen_up = exp(link_fit + (qnorm(0.975) * link_se))
     ) 
   colnames(dat_out)[1] <- "cov1"
   
@@ -295,21 +302,12 @@ gen_pred <- function(mod_in, dat_in, random = FALSE) {
 mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
              s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
              s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
-             s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
              s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
              s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
              s(stock, bs = "re"),
            data = dat,
-           method = "REML")
-mod2 <- gam(gen_length ~ s(rkw_z, by = a_group2, m = 2, bs = "tp", k = 3) +
-             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
-             s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
-             s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
-             s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
-             s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
-             s(stock, bs = "re"),
-           data = dat,
-           method = "REML")
+           method = "REML",
+           family=Gamma(link="log"))
 
 # input vectors
 excl_pars <- map(mod$smooth, function(x) x$label) %>% unlist
@@ -356,8 +354,8 @@ fixed_pred_list1 <- map(mixed_pred_list1, function(x) {
 mixed_pred_dat <- map(mixed_pred_list1, function (x) {
   gen_pred(mod, x, random = TRUE) 
 }) %>% 
-  bind_rows() %>%
-  left_join(., dat %>% select(stock, a_group2) %>% distinct(), by = "stock")
+  bind_rows() %>% 
+  left_join(., dat %>% select(stock, a_group2), by = "stock")
 fixed_pred_dat <- map(fixed_pred_list1, function (x) {
   gen_pred(mod, x, random = FALSE) 
 }) %>% 
@@ -366,7 +364,8 @@ fixed_pred_dat <- map(fixed_pred_list1, function (x) {
 # plot fixed effects
 ggplot(fixed_pred_dat, aes(x = cov1)) +
   geom_line(aes(y = pred_gen)) +
-  geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up), alpha = 0.3) +
+  geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up), 
+              alpha = 0.3) +
   ggsidekick::theme_sleek() +
   labs(x = "Standardized Abundance", y = "Predicted Generation Length") +
   facet_wrap(~var)
@@ -389,27 +388,9 @@ ggplot(mixed_pred_dat, aes(x = cov1)) +
              shape = 21, alpha = 0.5) +
   ggsidekick::theme_sleek() +
   labs(x = "Standardized Abundance", y = "Generation Length") +
-  facet_grid(var~fct_reorder(stock, as.numeric(a_group2)))
+  facet_grid(var~fct_reorder(stock, as.numeric(a_group2))) +
+  coord_cartesian(ylim = c(2, 6))
 
-
-
-gen_pred2 <- function(mod_in, dat_in, random = FALSE) {
-  preds <- predict(mod_in, dat_in, se.fit = TRUE, 
-                   newdata.guaranteed = TRUE)
-  
-  
-  #remove zero columns 
-  dat_out <- dat_in[c(-2, -3)] %>% 
-    mutate(link_fit = as.numeric(preds$fit),
-           link_se = as.numeric(preds$se.fit),
-           pred_gen = exp(link_fit),
-           pred_gen_lo = exp(link_fit + (qnorm(0.025) * link_se)),
-           pred_gen_up = exp(link_fit + (qnorm(0.975) * link_se))
-    ) 
-  colnames(dat_out)[1] <- "cov1"
-  
-  return(dat_out)
-}
 
 
 

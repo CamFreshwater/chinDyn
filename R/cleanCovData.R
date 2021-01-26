@@ -8,11 +8,13 @@
 # (rawData/zpData)
 # 3. Juvenile stomach contents data
 # 4. Various basin-scale oceanographic drivers (PDO, SSTarc, NPGO)
+# 5. Sea surface temperature and salinity data from Entrance Island lighthouse
+# 6. Herring age-2 recruit index from Jaclyn Cleary
 # -----
 
 library(tidyverse); library(here); library(ggplot2); library(viridis)
   
-# load and initial clean
+## Load and initial clean of each dataset
 seals <- read.csv(here("data/salmonData/sealPopEst.csv")) %>% 
   rename(year = "Estimate", mean = "Mean", low = "X2.5th", up = "X97.5th", 
          reg = "Region")
@@ -30,6 +32,7 @@ whales <- read.csv(here("data/salmonData/rkw_salmon_jun2019.csv"))
 npgo <- read.csv(here("data/salmonData/npgo_jul2020.csv"))
 colnames(npgo) <- c("year", "month", "npgo")
 
+
 pdo1 <- read.csv(here("data/salmonData/pdo_aug2020.csv")) 
 pdo_date_list <- strsplit(as.character(pdo1$Date), "") 
 pdo <- pdo1 %>% 
@@ -45,12 +48,15 @@ pdo <- pdo1 %>%
   ) %>% 
   select(year, month, pdo = Value)
 
+
 sstArc <- read.csv(here("data/salmonData/johnstone_indicators.csv")) 
 names(sstArc)[1] <- "year"
 sstArc <- sstArc %>%  select(year, sst_arc = SSTarc)
 
+
 biIndex <- read.csv(here("data/salmonData/bifurcation-index.csv")) %>% 
   mutate(bi_stnd = scale(bifurcation_index)[, 1])
+
 
 # helper function to rename herring data
 split_bind <- function(x) {
@@ -78,7 +84,31 @@ herring <- read.csv(here::here("data/salmonData/herring_r.csv")) %>%
   ) %>%
   select(year = Year, stock, median, lo_ci, up_ci) 
 
-  
+# Entrance Island data
+sog_sst_wide <- read.csv(here::here("data/salmonData/entrance_island_sst.csv"))
+colnames(sog_sst_wide) <- tolower(colnames(sog_sst_wide))
+sog_salinity_wide <- read.csv(here::here("data/salmonData/entrance_island_salinity.csv"))
+colnames(sog_salinity_wide) <- tolower(colnames(sog_salinity_wide))
+
+sog_sst <- pivot_longer(sog_sst_wide, cols = -year, names_to = "month", 
+                        values_to = "entrance_sst") 
+sog_salinity <- pivot_longer(sog_salinity_wide, cols = -year, names_to = "month", 
+                             values_to = "entrance_salinity") 
+sog_ocean <- left_join(sog_sst, sog_salinity, by = c("year", "month")) %>% 
+  mutate(month_f = fct_relevel(as.factor(month), 
+                             "jan", "feb", "mar", "apr", "may", "jun", "jul", 
+                             "aug", "sep", "oct", "nov", "dec"),
+         month = as.numeric(month_f),
+         #replace filler values
+         entrance_sst = ifelse(entrance_sst == "99.99",
+                               NA,
+                               entrance_sst),
+         entrance_salinity = ifelse(entrance_salinity == "99.99",
+                               NA,
+                               entrance_salinity)) %>% 
+  filter(!is.na(entrance_sst),
+         !is.na(entrance_salinity))
+
   
 #-------------------------------------------------------------------------------
 
@@ -131,11 +161,11 @@ trimEnv <- viZP %>%
 
 
 # seal data
-ggplot(seals, aes(x = year, y = mean)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
-  samSim::theme_sleekX() +
-  facet_wrap(~reg, scales = "free_y")
+# ggplot(seals, aes(x = year, y = mean)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.2) +
+#   samSim::theme_sleekX() +
+#   facet_wrap(~reg, scales = "free_y")
 
 trimSeal <- seals %>%
   filter(reg == "SOG") %>%
@@ -144,11 +174,11 @@ trimSeal <- seals %>%
 
 
 # herring data
-ggplot(herring, aes(x = year, y = median)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = lo_ci, ymax = up_ci), alpha = 0.4) +
-  samSim::theme_sleekX() +
-  facet_wrap(~stock, scales = "free_y")
+# ggplot(herring, aes(x = year, y = median)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = lo_ci, ymax = up_ci), alpha = 0.4) +
+#   samSim::theme_sleekX() +
+#   facet_wrap(~stock, scales = "free_y")
 
 trimHerring <- herring %>% 
   group_by(stock) %>% 
@@ -184,7 +214,10 @@ sstArc2 <- sstArc %>%
 phys_ocean <- left_join(pdo, npgo, by = c("month", "year")) %>% 
   left_join(., sstArc2 %>% select(year = year_n, month, sst_arc), 
             by = c("month", "year")) %>% 
-  pivot_longer(., cols = c("pdo", "npgo", "sst_arc"), names_to = "index",
+  left_join(., sog_ocean, by = c("month", "year")) %>% 
+  pivot_longer(., cols = c("pdo", "npgo", "sst_arc", "entrance_sst",
+                           "entrance_salinity"), 
+               names_to = "index",
                values_to = "value") %>% 
   #identify months making up priming period
   mutate(prime_period = ifelse(month > 3 & month < 8, "y", "n")) %>% 
@@ -268,12 +301,21 @@ juv_cov <- herring %>%
             seals %>%
               filter(reg == "SOG") %>% 
               select(year, seal_abund = mean),
+            by = "year") %>% 
+  left_join(.,
+            phys_ocean %>% 
+              filter(index %in% c("entrance_sst", "entrance_salinity"),
+                     !is.na(prime_mean)) %>% 
+              pivot_wider(., -c(prime_anom, annual_anom, annual_mean), 
+                          names_from = "index", values_from = "prime_mean",
+                          names_prefix = "prime_"),
             by = "year") 
 
 saveRDS(juv_cov, here::here("data/salmonData/cov_subset_juv.rds"))
 
 
-# adult cleaning requires more complex stock-specific considerations
+# adult cleaning requires more complex stock-specific considerations 
+# incorporated in generation_gams
 adult_cov <- list(herring = herring %>%
                     mutate(herring_age0_year = year - 2) %>% 
                     select(herring_model_year = year, 
@@ -283,7 +325,13 @@ adult_cov <- list(herring = herring %>%
                   rkw = whales %>% 
                     mutate(total_n = SRKW_N + NRKW_N) %>% 
                     select(year = Year, srkw_n = SRKW_N, nrkw_n = NRKW_N, 
-                           total_n)
+                           total_n),
+                  sog = phys_ocean %>% 
+                    filter(index %in% c("entrance_sst", "entrance_salinity"),
+                           !is.na(prime_mean)) %>% 
+                    pivot_wider(., -c(prime_anom, annual_anom, annual_mean), 
+                                names_from = "index", values_from = "prime_mean",
+                                names_prefix = "prime_")
 )
 
 saveRDS(adult_cov, here::here("data/salmonData/cov_subset_adult.rds"))

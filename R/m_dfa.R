@@ -168,7 +168,8 @@ make_mat <- function(x) {
 kept_grps <- stk_tbl %>% 
   group_by(j_group3) %>% 
   tally() %>% 
-  filter(n > 2)
+  filter(n > 2) %>% 
+  droplevels()
 
 #generate tbl by group
 surv_tbl <- tibble(group = levels(surv$j_group3)) %>% 
@@ -192,19 +193,19 @@ surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
 })
 
 # fit bayesdfa
-dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
-                              num_trends = 2, zscore = TRUE, 
-                              iter = 2250, chains = 4, thin = 1, 
-                              control = list(adapt_delta = 0.90,
-                                             max_treedepth =20),
-                              .progress = TRUE,
-                              seed = TRUE)
-# saveRDS(dfa_fits, here::here("data", "mortality_fits", "bayesdfa_by_group.RDS"))
-
-map2(dfa_fits, surv_tbl$group, function(x, y) {
-  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
-  saveRDS(x, here::here("data", "mortality_fits", f_name))
-})
+# dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
+#                               num_trends = 2, zscore = TRUE, 
+#                               iter = 2250, chains = 4, thin = 1, 
+#                               control = list(adapt_delta = 0.90,
+#                                              max_treedepth =20),
+#                               .progress = TRUE,
+#                               seed = TRUE)
+# # saveRDS(dfa_fits, here::here("data", "mortality_fits", "bayesdfa_by_group.RDS"))
+# 
+# map2(dfa_fits, surv_tbl$group, function(x, y) {
+#   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+#   saveRDS(x, here::here("data", "mortality_fits", f_name))
+# })
 
 # read outputs
 dfa_fits2 <- map(surv_tbl$group, function(y) {
@@ -252,6 +253,39 @@ pdf(here::here(fig_path, "loadings.pdf"))
 loadings_list
 dev.off()
 
+
+# Make 4 panel plot of dominant trends by juvenile grouping
+rot_dat <- pmap(list(rot_list, kept_grps$j_group3, surv_tbl$years), 
+     function(x, y, z) {
+  data.frame(
+    mean = c(x$trends_mean[1, ], x$trends_mean[2, ]),
+    lo = c(x$trends_lower[1, ], x$trends_lower[2, ]),
+    hi = c(x$trends_upper[1, ], x$trends_upper[2, ]),
+    trend = rep(c("trend1", "trend2"), each = length(z)),
+    j_group = y,
+    years = z
+  )
+}) %>% 
+  bind_rows() %>% 
+  left_join(., surv %>% select(smolt, j_group = j_group3) %>% distinct, 
+            by = "j_group") %>% 
+  glimpse()
+
+trends <- rot_dat %>% 
+  filter(trend == "trend1") %>% 
+  ggplot(., aes(x = years, y = mean, colour = smolt)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lo, ymax = hi, fill = smolt), alpha = 0.3) +
+  facet_wrap(~j_group) +
+  ggsidekick::theme_sleek() +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(x = "Brood Year", y = "Shared Trend") +
+  theme(legend.position = "top")
+
+png(here::here("figs", "dfa", "bayes", "mortality", "trend_all_groups.png"), 
+    height = 5.5, width = 7.5, res = 300, units = "in")
+trends
+dev.off()
 
 
 ## DFA model selection approach (NOT USED) -------------------------------------

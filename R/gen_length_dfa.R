@@ -197,22 +197,22 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
 # specify one trend if there are less than 4 time series, otherwise 2
 n_trend_list <- ifelse(unlist(map(gen_tbl$gen_mat, nrow)) < 4, 1, 2) 
 
-dfa_fits <- furrr::future_map2(gen_tbl$gen_mat[2:4], 
-                               n_trend_list[2:4],
-                               .f = function (y, n_trend) {
-                                 fit_dfa(y = y, num_trends = n_trend, 
-                                         zscore = TRUE,
-                                         iter = 3250, chains = 4, thin = 1,
-                                         control = list(adapt_delta = 0.9))
-                               },
-                              .progress = TRUE,
-                              .options = furrr::furrr_options(seed = TRUE))
-
-# save outputs
-map2(dfa_fits, gen_tbl$group[2:4], function(x, y) {
-  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
-  saveRDS(x, here::here("data", "generation_fits", f_name))
-})
+# dfa_fits <- furrr::future_map2(gen_tbl$gen_mat[2:4], 
+#                                n_trend_list[2:4],
+#                                .f = function (y, n_trend) {
+#                                  fit_dfa(y = y, num_trends = n_trend, 
+#                                          zscore = TRUE,
+#                                          iter = 3250, chains = 4, thin = 1,
+#                                          control = list(adapt_delta = 0.9))
+#                                },
+#                               .progress = TRUE,
+#                               .options = furrr::furrr_options(seed = TRUE))
+# 
+# # save outputs
+# map2(dfa_fits, gen_tbl$group[2:4], function(x, y) {
+#   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+#   saveRDS(x, here::here("data", "generation_fits", f_name))
+# })
 
 # read outputs
 dfa_fits2 <- map(gen_tbl$group, function(y) {
@@ -261,3 +261,32 @@ pdf(here::here(fig_path, "loadings.pdf"))
 loadings_list
 dev.off()
 
+
+# Make 4 panel plot of dominant trends by juvenile grouping
+rot_dat <- pmap(list(rot_list, gen_tbl$group, gen_tbl$years), 
+                function(x, y, z) {
+                  data.frame(
+                    mean = x$trends_mean[1, ],
+                    lo = x$trends_lower[1, ],
+                    hi = x$trends_upper[1, ],
+                    group = y,
+                    years = z
+                  )
+                }) %>% 
+  bind_rows() %>% 
+  glimpse()
+
+trends <- rot_dat %>% 
+  ggplot(., aes(x = years, y = mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.3) +
+  facet_wrap(~group) +
+  ggsidekick::theme_sleek() +
+  geom_hline(yintercept = 0, linetype = 2) +
+  labs(x = "Brood Year", y = "Shared Trend") +
+  theme(legend.position = "top")
+
+png(here::here("figs", "dfa", "bayes", "generation_length", "trend_all_groups.png"), 
+    height = 5.5, width = 7.5, res = 300, units = "in")
+trends
+dev.off()

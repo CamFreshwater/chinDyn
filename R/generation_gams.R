@@ -331,6 +331,46 @@ AIC(cat_mod, h_mod2, hj_mod1, k_mod1, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod,
 
 # GAM PREDICTIONS --------------------------------------------------------------
 
+# equivalent model to k_h_hj_mod
+mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
+             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+             s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+             s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
+             s(stock, bs = "re"),
+           data = dat,
+           method = "REML",
+           family=Gamma(link="log"))
+
+
+## Check fit (note that fit is on scale of observations so unlikely to violate
+# assumption in link space)
+fit_preds <- predict(mod, newdata = dat, se.fit = TRUE, 
+                     newdata.guaranteed = TRUE)
+fit_dat <- dat %>% 
+  mutate(link_fit = as.numeric(fit_preds$fit),
+         link_se = as.numeric(fit_preds$se.fit),
+         pred_gen = exp(link_fit),
+         pred_gen_lo = exp(link_fit + (qnorm(0.025) * link_se)),
+         pred_gen_up = exp(link_fit + (qnorm(0.975) * link_se))
+  )
+
+ggplot(data = fit_dat, aes(x = gen_length, y = pred_gen)) +
+  geom_abline(linetype = 2, color = "grey50", size = .5) +
+  geom_point(aes(color = brood_year), size = 1.5, alpha = 3/4) +
+  geom_linerange(aes(ymin = pred_gen_lo, 
+                     ymax = pred_gen_up),
+                 size = 1/2, color = "firebrick4") +
+  labs(x = "Observed Generation Length", 
+       y = "Predicted Generation Length") +
+  theme_bw()
+
+# minimal evidence of temporal autocorrelation
+acf(resid(mod))
+
+
+## Generate predictions
+
 # function to generate predictions
 gen_pred <- function(mod_in, dat_in, random = FALSE) {
   if (random == FALSE) {
@@ -355,16 +395,6 @@ gen_pred <- function(mod_in, dat_in, random = FALSE) {
   return(dat_out)
 }
 
-# equivalent model to k_h_hj_mod
-mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
-             s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
-             s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
-             s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
-             s(stock, bs = "re"),
-           data = dat,
-           method = "REML",
-           family=Gamma(link="log"))
 
 # input vectors
 excl_pars <- map(mod$smooth, function(x) x$label) %>% unlist

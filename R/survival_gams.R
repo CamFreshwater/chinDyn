@@ -146,7 +146,7 @@ AIC(s_mod, h_mod, sst_mod, sal_mod, h_s_mod, h_sst_mod, h_sal_mod, s_sst_mod,
 
 # TOP MODEL PREDICTIONS --------------------------------------------------------
 
-# equivalent to h_s_mod (top ranked)
+## Equivalent to h_s_mod (top ranked)
 mod <- gam(survival ~ s(seal_z, m = 2, bs = "tp", k = 4) + 
              s(seal_z, by = stock, m = 1, bs = "tp", k = 4) +
              s(herr_z, m = 2, bs = "tp", k = 4) + 
@@ -155,7 +155,33 @@ mod <- gam(survival ~ s(seal_z, m = 2, bs = "tp", k = 4) +
            data = dat, family = betar(link="logit"), method = "REML")
 
 
-# generate predictions for additive model
+## Check fit (note that fit is on scale of observations so unlikely to violate
+# assumption in link space)
+fit_preds <- predict(mod, newdata = dat, se.fit = TRUE, 
+                     newdata.guaranteed = TRUE)
+fit_dat <- dat %>% 
+  mutate(link_fit = as.numeric(fit_preds$fit),
+         link_se = as.numeric(fit_preds$se.fit),
+         pred_surv = plogis(link_fit),
+         pred_surv_lo = plogis(link_fit + (qnorm(0.025) * link_se)),
+         pred_surv_up = plogis(link_fit + (qnorm(0.975) * link_se))
+  )
+
+ggplot(data = fit_dat, aes(x = survival, y = pred_surv)) +
+  geom_abline(linetype = 2, color = "grey50", size = .5) +
+  geom_point(aes(color = year), size = 1.5, alpha = 3/4) +
+  geom_linerange(aes(ymin = pred_surv_lo, 
+                     ymax = pred_surv_up),
+                 size = 1/2, color = "firebrick4") +
+  labs(x = "Observed Survival", 
+       y = "Predicted Survival") +
+  theme_bw()
+
+# no evidence of temporal autocorrelation
+acf(resid(mod))
+
+
+## Generate counterfactual predictions for additive model
 excl_pars <- map(mod$smooth, function(x) x$label) %>% unlist
 # sst_seq <- seq(min(dat$sst_z, na.rm = T), max(dat$sst_z, na.rm = T), 
 #                length.out = 75)

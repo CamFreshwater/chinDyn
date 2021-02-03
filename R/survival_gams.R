@@ -42,12 +42,13 @@ dat <- surv %>%
   mutate(herr_z = scale(herr_abund)[ , 1],
          seal_z = scale(seal_abund)[ , 1],
          sst_z = scale(prime_entrance_sst)[ , 1],
-         salinity_z = scale(prime_entrance_salinity)[ , 1])
+         salinity_z = scale(prime_entrance_salinity)[ , 1],
+         bloom_z = scale(bloom_day)[ , 1])
 
 # correlation among covariates
 dat %>%
   filter(!is.na(sst_z)) %>% 
-  select(year, herr_z, seal_z, sst_z, salinity_z) %>% 
+  select(year, herr_z, seal_z, sst_z, salinity_z, bloom_z) %>% 
   as.matrix() %>% 
   cor() %>% 
   corrplot::corrplot(., method = "number", "upper")
@@ -80,6 +81,10 @@ sal_mod <- gam(survival ~ s(salinity_z, m = 2, bs = "tp", k = 4) +
                  s(salinity_z, by = stock, m = 1, bs = "tp", k = 4) + 
                  s(stock, bs = "re"), 
                data = dat, family = betar(link="logit"), method = "REML")
+bloom_mod <- gam(survival ~ s(bloom_z, m = 2, bs = "tp", k = 4) + 
+                 s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                 s(stock, bs = "re"), 
+               data = dat, family = betar(link="logit"), method = "REML")
 h_s_mod <- gam(survival ~ s(seal_z, m = 2, bs = "tp", k = 4) + 
                  s(seal_z, by = stock, m = 1, bs = "tp", k = 4) +
                  s(herr_z, m = 2, bs = "tp", k = 4) + 
@@ -105,6 +110,12 @@ h_sal_mod <- gam(survival ~ s(salinity_z, m = 2, bs = "tp", k = 4) +
                    s(herr_z, by = stock, m = 1, bs = "tp", k = 4) + 
                    s(stock, bs = "re"), 
                  data = dat, family = betar(link="logit"), method = "REML")
+h_bloom_mod <- gam(survival ~ s(bloom_z, m = 2, bs = "tp", k = 4) + 
+                   s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) +
+                   s(herr_z, m = 2, bs = "tp", k = 4) + 
+                   s(herr_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                   s(stock, bs = "re"), 
+                 data = dat, family = betar(link="logit"), method = "REML")
 s_sst_mod <- gam(survival ~ s(sst_z, m = 2, bs = "tp", k = 4) + 
                    s(sst_z, by = stock, m = 1, bs = "tp", k = 4) +
                    s(seal_z, m = 2, bs = "tp", k = 4) + 
@@ -117,10 +128,22 @@ s_sal_mod <- gam(survival ~ s(salinity_z, m = 2, bs = "tp", k = 4) +
                    s(seal_z, by = stock, m = 1, bs = "tp", k = 4) + 
                    s(stock, bs = "re"), 
                  data = dat, family = betar(link="logit"), method = "REML")
+s_bloom_mod <- gam(survival ~ s(bloom_z, m = 2, bs = "tp", k = 4) + 
+                   s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) +
+                   s(seal_z, m = 2, bs = "tp", k = 4) + 
+                   s(seal_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                   s(stock, bs = "re"), 
+                 data = dat, family = betar(link="logit"), method = "REML")
 sal_sst_mod <- gam(survival ~ s(sst_z, m = 2, bs = "tp", k = 4) + 
                      s(sst_z, by = stock, m = 1, bs = "tp", k = 4) +
                      s(salinity_z, m = 2, bs = "tp", k = 4) + 
                      s(salinity_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                     s(stock, bs = "re"), 
+                   data = dat, family = betar(link="logit"), method = "REML")
+bloom_sst_mod <- gam(survival ~ s(sst_z, m = 2, bs = "tp", k = 4) + 
+                     s(sst_z, by = stock, m = 1, bs = "tp", k = 4) +
+                     s(bloom_z, m = 2, bs = "tp", k = 4) + 
+                     s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) + 
                      s(stock, bs = "re"), 
                    data = dat, family = betar(link="logit"), method = "REML")
 h_s_sst_mod <- gam(survival ~  s(herr_z, m = 2, bs = "tp", k = 4) + 
@@ -139,8 +162,17 @@ h_s_sal_mod <- gam(survival ~  s(herr_z, m = 2, bs = "tp", k = 4) +
                      s(seal_z, by = stock, m = 1, bs = "tp", k = 4) + 
                      s(stock, bs = "re"), 
                    data = dat, family = betar(link="logit"), method = "REML")
+h_s_bloom_mod <- gam(survival ~  s(herr_z, m = 2, bs = "tp", k = 4) + 
+                     s(herr_z, by = stock, m = 1, bs = "tp", k = 4) +
+                     s(bloom_z, m = 2, bs = "tp", k = 4) + 
+                     s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) +
+                     s(seal_z, m = 2, bs = "tp", k = 4) + 
+                     s(seal_z, by = stock, m = 1, bs = "tp", k = 4) + 
+                     s(stock, bs = "re"), 
+                   data = dat, family = betar(link="logit"), method = "REML")
 AIC(s_mod, h_mod, sst_mod, sal_mod, h_s_mod, h_sst_mod, h_sal_mod, s_sst_mod, 
-    s_sal_mod, h_s_sst_mod, h_s_sal_mod, h_s_int_mod) %>% 
+    s_sal_mod, h_s_sst_mod, h_s_sal_mod, h_s_int_mod,
+    bloom_mod, h_bloom_mod, s_bloom_mod, bloom_sst_mod, h_s_bloom_mod) %>% 
   arrange(-AIC)
 
 
@@ -149,10 +181,20 @@ AIC(s_mod, h_mod, sst_mod, sal_mod, h_s_mod, h_sst_mod, h_sal_mod, s_sst_mod,
 ## Equivalent to h_s_mod (top ranked)
 mod <- gam(survival ~ s(seal_z, m = 2, bs = "tp", k = 4) + 
              s(seal_z, by = stock, m = 1, bs = "tp", k = 4) +
+             s(bloom_z, m = 2, bs = "tp", k = 4) + 
+             s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) +
              s(herr_z, m = 2, bs = "tp", k = 4) + 
              s(herr_z, by = stock, m = 1, bs = "tp", k = 4) + 
              s(stock, bs = "re"), 
            data = dat, family = betar(link="logit"), method = "REML")
+# modB <- gam(M ~ s(seal_z, m = 2, bs = "tp", k = 4) + 
+#              s(seal_z, by = stock, m = 1, bs = "tp", k = 4) +
+#              s(bloom_z, m = 2, bs = "tp", k = 4) + 
+#              s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) +
+#              s(herr_z, m = 2, bs = "tp", k = 4) + 
+#              s(herr_z, by = stock, m = 1, bs = "tp", k = 4) + 
+#              s(stock, bs = "re"), 
+#            data = dat, method = "REML")
 
 
 ## Check fit (note that fit is on scale of observations so unlikely to violate
@@ -162,11 +204,25 @@ fit_preds <- predict(mod, newdata = dat, se.fit = TRUE,
 fit_dat <- dat %>% 
   mutate(link_fit = as.numeric(fit_preds$fit),
          link_se = as.numeric(fit_preds$se.fit),
+         link_lo = link_fit + (qnorm(0.025) * link_se),
+         link_up = link_fit + (qnorm(0.975) * link_se),
+         # pred_surv = exp(-1 * link_fit),
+         # pred_surv_lo = exp(-1 * link_fit + (qnorm(0.025) * link_se)),
+         # pred_surv_up = exp(-1 * link_fit + (qnorm(0.975) * link_se))
          pred_surv = plogis(link_fit),
          pred_surv_lo = plogis(link_fit + (qnorm(0.025) * link_se)),
          pred_surv_up = plogis(link_fit + (qnorm(0.975) * link_se))
   )
 
+ggplot(data = fit_dat, aes(x = qlogis(survival), y = link_fit)) +
+  geom_abline(linetype = 2, color = "grey50", size = .5) +
+  geom_point(aes(color = year), size = 1.5, alpha = 3/4) +
+  geom_linerange(aes(ymin = link_lo, 
+                     ymax = link_up),
+                 size = 1/2, color = "firebrick4") +
+  labs(x = "Observed Survival", 
+       y = "Predicted Survival") +
+  theme_bw()
 ggplot(data = fit_dat, aes(x = survival, y = pred_surv)) +
   geom_abline(linetype = 2, color = "grey50", size = .5) +
   geom_point(aes(color = year), size = 1.5, alpha = 3/4) +
@@ -187,11 +243,11 @@ excl_pars <- map(mod$smooth, function(x) x$label) %>% unlist
 #                length.out = 75)
 # sal_seq <- seq(min(dat$salinity_z, na.rm = T), max(dat$salinity_z, na.rm = T), 
 #                length.out = 75)
-seal_seq <- seq(-2.5, 0.75, length.out = 75)
-herr_seq <- seq(-1.7, 1.8, length.out = 75)
+herr_seq <- bloom_seq <- seal_seq <- seq(-2, 2, length.out = 75)
 new_dat <- expand.grid(
   seal_z = seal_seq,
-  herr_z = herr_seq
+  herr_z = herr_seq,
+  bloom_z = bloom_seq
   # sst_z = sst_seq,
   # salinity_z = sal_seq
   )
@@ -224,37 +280,45 @@ new_dat2 <- new_dat %>%
 #   ggsidekick::theme_sleek()
 
 
-heat_plot <- ggplot(new_dat2, aes(x = seal_z, y = herr_z)) +
+heat_plot <- ggplot(new_dat2 %>% filter(bloom_z == "0"), 
+                    aes(x = seal_z, y = herr_z)) +
   geom_raster(aes(fill = pred_surv)) +
   scale_fill_viridis_c(name = "Predicted\nSurvival") +
   labs(x = "Harbour Seal Abundance", y = "Age-0 Herring Abundance") +
   ggsidekick::theme_sleek()
 
-# herring only fixed effects
-zero_seal <- new_dat2$seal_z[which.min(abs(new_dat2$seal_z - 0))]
-h_plot <- new_dat2 %>% 
-  filter(seal_z == zero_seal) %>% 
-  ggplot(., aes(x = herr_z)) +
+# fixed effects splines
+h_dat <- new_dat2 %>% 
+  filter(seal_z == 0,
+         bloom_z == 0) %>%
+  mutate(preds = "Age-0 Herring Abundance") %>% 
+  select(predictor = herr_z, pred_surv:preds)
+s_dat <- new_dat2 %>% 
+  filter(herr_z == 0,
+         bloom_z == 0) %>%
+  mutate(preds = "Harbour Seal Abundance") %>% 
+  select(predictor = seal_z, pred_surv:preds)
+bloom_dat <- new_dat2 %>% 
+  filter(herr_z == 0,
+         seal_z == 0)  %>%
+  mutate(preds = "Bloom Timing") %>% 
+  select(predictor = bloom_z, pred_surv:preds)
+
+fixed_eff_plot <- rbind(h_dat, rbind(s_dat, bloom_dat)) %>% 
+  ggplot(., aes(x = predictor)) +
   geom_line(aes(y = pred_surv)) +
   geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
   ggsidekick::theme_sleek() +
-  labs(x = "Age-0 Herring Abundance", y = "Predicted Survival")
-
-# seal only fixed effects
-zero_herr <- new_dat2$herr_z[which.min(abs(new_dat2$herr_z - 0))]
-s_plot <- new_dat2 %>% 
-  filter(herr_z == zero_herr) %>% 
-  ggplot(., aes(x = seal_z)) +
-  geom_line(aes(y = pred_surv)) +
-  geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Harbour Seal Abundance", y = "Predicted Survival")
-
+  labs(y = "Predicted Survival", x = "Z-Scaled Predictor") +
+  facet_wrap(~preds)
+  
+  
 
 # Mixed effects predictions
 # include stock-specific effects 
 new_dat_stock <- expand.grid(seal_z = seal_seq, 
                              herr_z = herr_seq,
+                             bloom_z = bloom_seq,
                              stock = unique(dat$stock))
 
 preds <- predict(mod, new_dat_stock, se.fit = TRUE, 
@@ -269,7 +333,8 @@ new_dat_stock2 <- new_dat_stock %>%
 
 # herring only stock-specific effects
 herr_rand <- new_dat_stock2 %>% 
-  filter(seal_z == zero_seal) %>% 
+  filter(seal_z == 0,
+         bloom_z == 0) %>% 
   ggplot(., aes(x = herr_z)) +
   geom_line(aes(y = pred_surv)) +
   geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
@@ -280,11 +345,24 @@ herr_rand <- new_dat_stock2 %>%
 
 # seal only stock-specific effects
 seal_rand <- new_dat_stock2 %>% 
-  filter(herr_z == zero_herr) %>% 
+  filter(herr_z == 0,
+         bloom_z == 0) %>% 
   ggplot(., aes(x = seal_z)) +
   geom_line(aes(y = pred_surv)) +
   geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
   geom_point(data = dat, aes(x = seal_z, y = survival)) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~stock) +
+  labs(x = "Harbour Seal Abundance", y = "Predicted Age-2 Survival")
+
+# seal only stock-specific effects
+bloom_rand <- new_dat_stock2 %>% 
+  filter(herr_z == 0,
+         seal_z == 0) %>% 
+  ggplot(., aes(x = bloom_z)) +
+  geom_line(aes(y = pred_surv)) +
+  geom_ribbon(aes(ymin = pred_surv_lo, ymax = pred_surv_up), alpha = 0.3) +
+  geom_point(data = dat, aes(x = bloom_z, y = survival)) +
   ggsidekick::theme_sleek() +
   facet_wrap(~stock) +
   labs(x = "Harbour Seal Abundance", y = "Predicted Age-2 Survival")
@@ -296,8 +374,8 @@ heat_plot
 dev.off()
 
 png(here::here("figs", "gam", "surv_gam", "herr_seal_fe_splines.png"), 
-    height = 3, width = 5.5, res = 300, units = "in")
-ggpubr::ggarrange(h_plot, s_plot, nrow = 1, ncol = 2)
+    height = 3, width = 7, res = 300, units = "in")
+fixed_eff_plot
 dev.off()
 
 png(here::here("figs", "gam", "surv_gam", "herr_RE.png"), 
@@ -308,6 +386,11 @@ dev.off()
 png(here::here("figs", "gam", "surv_gam", "seal_RE.png"), 
     height = 4.25, width = 6.5, res = 300, units = "in")
 seal_rand
+dev.off()
+
+png(here::here("figs", "gam", "surv_gam", "bloom_RE.png"), 
+    height = 4.25, width = 6.5, res = 300, units = "in")
+bloom_rand
 dev.off()
 
 

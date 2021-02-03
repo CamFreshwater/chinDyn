@@ -10,6 +10,7 @@
 # 4. Various basin-scale oceanographic drivers (PDO, SSTarc, NPGO)
 # 5. Sea surface temperature and salinity data from Entrance Island lighthouse
 # 6. Herring age-2 recruit index from Jaclyn Cleary
+# 7. SoG bloom timing from Susan Allen
 # -----
 
 library(tidyverse); library(here); library(ggplot2); library(viridis)
@@ -58,6 +59,7 @@ biIndex <- read.csv(here("data/salmonData/bifurcation-index.csv")) %>%
   mutate(bi_stnd = scale(bifurcation_index)[, 1])
 
 
+# herring data
 # helper function to rename herring data
 split_bind <- function(x) {
   strsplit(x, "_") %>% 
@@ -84,6 +86,7 @@ herring <- read.csv(here::here("data/salmonData/herring_r.csv")) %>%
   ) %>%
   select(year = Year, stock, median, lo_ci, up_ci) 
 
+
 # Entrance Island data
 sog_sst_wide <- read.csv(here::here("data/salmonData/entrance_island_sst.csv"))
 colnames(sog_sst_wide) <- tolower(colnames(sog_sst_wide))
@@ -109,7 +112,14 @@ sog_ocean <- left_join(sog_sst, sog_salinity, by = c("year", "month")) %>%
   filter(!is.na(entrance_sst),
          !is.na(entrance_salinity))
 
+
+# Bloom timing data
+bloom_path <- here::here("data/salmonData/bloomdates_29mar2019.dat")
+# skip first three lines which are metadata
+bloom <- read.table(bloom_path, header = TRUE, skip = 3) %>% 
+  rename(year = Year, bloom_day = YearDay)
   
+
 #-------------------------------------------------------------------------------
 
 ### Plot each TS
@@ -309,7 +319,8 @@ juv_cov <- herring %>%
               pivot_wider(., -c(prime_anom, annual_anom, annual_mean), 
                           names_from = "index", values_from = "prime_mean",
                           names_prefix = "prime_"),
-            by = "year") 
+            by = "year") %>% 
+  left_join(., bloom, by = "year") 
 
 saveRDS(juv_cov, here::here("data/salmonData/cov_subset_juv.rds"))
 

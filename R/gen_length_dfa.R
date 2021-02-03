@@ -144,6 +144,9 @@ saveRDS(marss_list, here::here("data", "generation_fits",
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
 
+marss_aic_tab <- readRDS(here::here("data", "generation_fits",
+                                  "marss_aic_tab.RDS"))
+
 
 ## Bayesian DFA ----------------------------------------------------------------
 

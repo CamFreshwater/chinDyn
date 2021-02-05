@@ -84,6 +84,8 @@ rkw <- expand.grid(stock = sog_stks$stock,
   mutate(
     #calculate rolling mean based on the maximum ocean age of each stock
     rollmean_rkw = zoo::rollmean(relevant_rkw, max_ocean_age, fill = NA, 
+                                 align = "right"),
+    rollmean_rkw2 = zoo::rollmean(total_n, max_ocean_age, fill = NA, 
                                  align = "right")
   ) %>% 
   ungroup() 
@@ -123,19 +125,21 @@ dat <- gen %>%
   # rkw abundance
   left_join(., 
             rkw %>% 
-              select(stock, brood_year, rollmean_rkw), 
+              select(stock, brood_year, rollmean_rkw, rollmean_rkw2), 
             by = c("brood_year", "stock")) %>% 
   # scale covariates
   mutate(
     herr_OEY_z = as.numeric(scale(herr_abund_OEY)),
     herr_OEY1_z = as.numeric(scale(herr_abund_OEY1)),
     rkw_z = as.numeric(scale(rollmean_rkw)),
+    rkw_z2 = as.numeric(scale(rollmean_rkw2)),
     sst_z = as.numeric(scale(prime_entrance_sst)),
-    sal_z = as.numeric(scale(prime_entrance_salinity))
+    sal_z = as.numeric(scale(prime_entrance_salinity)),
+    bloom_z = as.numeric(scale(bloom_day))
   ) %>% 
   select(stock, stock_name, brood_year, a_group2, gen_length, gen_z, 
          herr_abund_OEY, herr_abund_OEY1, rollmean_rkw, herr_OEY_z, herr_OEY1_z,
-         rkw_z, sst_z, sal_z) %>% 
+         rkw_z, rkw_z2, sst_z, sal_z, bloom_z) %>% 
   # remove missing data
   filter(!is.na(rkw_z)#,
          # !is.na(sst_z)
@@ -144,7 +148,8 @@ dat <- gen %>%
 
 # look at correlations among covariates (minimal)
 dat %>%
-  select(brood_year, herr_OEY_z, herr_OEY1_z, rkw_z, sst_z, sal_z) %>% 
+  filter(!is.na(sst_z)) %>% 
+  select(brood_year, herr_OEY_z, herr_OEY1_z, rkw_z, sst_z, sal_z, bloom_z) %>% 
   as.matrix() %>% 
   cor() %>% 
   corrplot::corrplot(., method = "number", "upper")
@@ -180,6 +185,11 @@ dat %>%
 # between herring (various lags) and RKW with the potential for stratification
 # by adult rearing location
 
+# null model with only intercepts for life history groupings
+cat_mod <- gam(gen_length ~ a_group2,
+               data = dat, method = "REML", family=Gamma(link="log"))
+
+
 # Herring at one year lags: model structure supports model 2 based on parsimony
 h_mod1 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
                 s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
@@ -200,7 +210,7 @@ h_mod2 <- gam(gen_length ~ s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
 #                 a_group2 +
 #                 s(stock, bs = "re"),
 #               data = dat, method = "REML", family=Gamma(link="log"))
-AIC(h_mod1, h_mod2)
+AIC(cat_mod, h_mod1, h_mod2)
 
 
 # Herring at entry - global smooth for juveniles strongly supported
@@ -212,7 +222,7 @@ hj_mod1 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
 hj_mod2 <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 4) +
                   s(stock, bs = "re"),
                data = dat, method = "REML", family=Gamma(link="log"))
-AIC(hj_mod1, hj_mod2)
+AIC(cat_mod, hj_mod1, hj_mod2)
 
 
 # SST at entry - global smooth for juveniles strongly supported
@@ -224,18 +234,30 @@ sst_mod1 <- gam(gen_length ~ s(sst_z, m = 2, bs = "tp", k = 4) +
 sst_mod2 <- gam(gen_length ~ s(sst_z, m = 2, bs = "tp", k = 4) +
                  s(stock, bs = "re"),
                data = dat, method = "REML", family=Gamma(link="log"))
-AIC(sst_mod1, sst_mod2)
+AIC(cat_mod, sst_mod1, sst_mod2)
+
+
+# Salinity at entry - global smooth for juveniles strongly supported
+# No region effect because all common
+bloom_mod1 <- gam(gen_length ~ s(bloom_z, m = 2, bs = "tp", k = 4) +
+                 s(bloom_z, by = stock, m = 1, bs = "tp", k = 4) +
+                 s(stock, bs = "re"),
+               data = dat, method = "REML", family=Gamma(link="log"))
+bloom_mod2 <- gam(gen_length ~ s(bloom_z, m = 2, bs = "tp", k = 4) +
+                 s(stock, bs = "re"),
+               data = dat, method = "REML", family=Gamma(link="log"))
+AIC(cat_mod, bloom_mod1, bloom_mod2)
 
 
 # Salinity at entry - global smooth for juveniles strongly supported
 # No region effect because all common
 sal_mod1 <- gam(gen_length ~ s(sal_z, m = 2, bs = "tp", k = 4) +
-                 s(sal_z, by = stock, m = 1, bs = "tp", k = 4) +
-                 s(stock, bs = "re"),
-               data = dat, method = "REML", family=Gamma(link="log"))
+                  s(sal_z, by = stock, m = 1, bs = "tp", k = 4) +
+                  s(stock, bs = "re"),
+                data = dat, method = "REML", family=Gamma(link="log"))
 sal_mod2 <- gam(gen_length ~ s(sal_z, m = 2, bs = "tp", k = 4) +
-                 s(stock, bs = "re"),
-               data = dat, method = "REML", family=Gamma(link="log"))
+                  s(stock, bs = "re"),
+                data = dat, method = "REML", family=Gamma(link="log"))
 AIC(sal_mod1, sal_mod2)
 
 
@@ -260,52 +282,66 @@ k_mod2 <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 4) +
 #                 s(rkw_z, by = stock, m = 1, bs = "tp", k = 4) +
 #                 s(stock, bs = "re"),
               # data = dat, method = "REML", family=Gamma(link="log"))
-AIC(k_mod1, k_mod2)
+
+# compare model that fits total RKW abundance with group smooths or abundance
+# as a function of rearing location (above)
+k_modB <- gam(gen_length ~ s(rkw_z2, by = a_group2, m = 2, bs = "tp", k = 4) +
+                s(rkw_z2, by = stock, m = 1, bs = "tp", k = 4) +
+                s(stock, bs = "re"),
+              data = dat, method = "REML", family=Gamma(link="log"))
+
+AIC(k_mod1, k_mod2, k_modB)
 
 
 # Combined models to resolve whether relationships are additive
 n_stks <- length(unique(dat$stock))
-cat_mod <- gam(gen_length ~ a_group2 ,
-                data = dat, method = "REML", family=Gamma(link="log"))
 h_hj_mod <- gam(gen_length ~ s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
                   s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
                   s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
                   s(stock, bs = "re") +
                   a_group2 ,
                 data = dat, method = "REML", family=Gamma(link="log"))
-k_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-                   s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+k_hj_mod <- gam(gen_length ~ s(rkw_z2, by = a_group2,  m = 2, bs = "tp", k = 3) +
+                   s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
                    s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
                    s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
                    s(stock, bs = "re"),
               data = dat, method = "REML", family=Gamma(link="log"))
-k_hj_int_mod <- gam(gen_length ~ te(herr_OEY_z, rkw_z, 
+k_hj_int_mod <- gam(gen_length ~ te(herr_OEY_z, rkw_z2, 
                                    bs = c("tp", "tp"), k = c(3, 3), m = 2) +
-                     t2(herr_OEY_z, rkw_z, stock, m = 2,
+                     t2(herr_OEY_z, rkw_z2, stock, m = 2,
                         bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
               data = dat, method = "REML", family=Gamma(link="log"))
-k_sst_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-                 s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+k_sst_mod <- gam(gen_length ~ s(rkw_z2, by = a_group2, m = 2, bs = "tp", k = 3) +
+                 s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
                  s(sst_z, m = 2, bs = "tp", k = 3) +
                  s(stock, bs = "re") ,
                data = dat, method = "REML", family=Gamma(link="log"))
-k_sal_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-                 s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+k_bloom_mod <- gam(gen_length ~ s(rkw_z2,  by = a_group2, m = 2, bs = "tp", 
+                                  k = 3) +
+                   s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
+                     s(bloom_z, m = 2, bs = "tp", k = 3) +
+                     s(bloom_z, by = stock, m = 1, bs = "tp", k = 3) +
+                   s(stock, bs = "re") ,
+                 data = dat, method = "REML", family=Gamma(link="log"))
+k_sal_mod <- gam(gen_length ~ s(rkw_z2, by = a_group2, m = 2, bs = "tp", 
+                                k = 3) +
+                 s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
                  s(sal_z, m = 2, bs = "tp", k = 3) +
                  s(stock, bs = "re") ,
                data = dat, method = "REML", family=Gamma(link="log"))
-k_h_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-                  s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+k_h_mod <- gam(gen_length ~ s(rkw_z2,  by = a_group2, m = 2, bs = "tp", k = 3) +
+                  s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
                   s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
                   s(stock, bs = "re") ,
               data = dat, method = "REML", family=Gamma(link="log"))
-k_h_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z, 
+k_h_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z2, 
                                   bs = c("tp", "tp"), k = c(3, 3), m = 2) +
-                     t2(herr_OEY1_z, rkw_z, stock, m = 2,
+                     t2(herr_OEY1_z, rkw_z2, stock, m = 2,
                        bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
               data = dat, method = "REML", family=Gamma(link="log"))
-k_h_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+k_h_hj_mod <- gam(gen_length ~ s(rkw_z2, m = 2, bs = "tp", k = 3) +
+             s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
              s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
              s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
              s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
@@ -313,18 +349,32 @@ k_h_hj_mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
            data = dat,
            method = "REML",
            family=Gamma(link="log"))
-k_h_hj_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z, 
+k_h_hj_bloom_mod <- gam(gen_length ~ s(rkw_z2, by = a_group2, m = 2, bs = "tp", 
+                                       k = 3) +
+                    s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
+                    s(bloom_z, m = 2, bs = "tp", k = 3) +
+                    s(bloom_z, by = stock, m = 1, bs = "tp", k = 3) +
+                    s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
+                    s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
+                    s(herr_OEY1_z, by = stock, m = 1, bs = "tp", k = 3) +
+                    s(stock, bs = "re"),
+                  data = dat,
+                  method = "REML",
+                  family=Gamma(link="log"))
+k_h_hj_int_mod <- gam(gen_length ~ te(herr_OEY1_z, rkw_z2, 
                                       bs = c("tp", "tp"), k = c(3, 3), m = 2) +
-                        t2(herr_OEY1_z, rkw_z, stock, m = 2,
+                        t2(herr_OEY1_z, rkw_z2, stock, m = 2,
                            bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)) +
-                        te(herr_OEY_z, rkw_z, 
+                        te(herr_OEY_z, rkw_z2, 
                            bs = c("tp", "tp"), k = c(3, 3), m = 2) +
-                        t2(herr_OEY_z, rkw_z, stock, m = 2,
+                        t2(herr_OEY_z, rkw_z2, stock, m = 2,
                            bs = c("tp", "tp", "re"), k = c(3, 3, n_stks)),
                       data = dat,
                       method = "REML", family=Gamma(link="log"))
 AIC(cat_mod, h_mod2, hj_mod1, k_mod1, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod, 
-    k_h_hj_mod, k_hj_int_mod, k_h_hj_int_mod, k_sst_mod, k_sal_mod)
+    k_h_hj_mod, k_hj_int_mod, k_h_hj_int_mod, k_sst_mod, k_sal_mod, 
+    k_bloom_mod, k_bloom_mod2, k_h_hj_bloom_mod) %>% 
+  arrange(-AIC)
 # top supported model is most complex additive (i.e. no support for 
 # interactions)
 
@@ -332,8 +382,8 @@ AIC(cat_mod, h_mod2, hj_mod1, k_mod1, h_hj_mod, k_hj_mod, k_h_mod, k_h_int_mod,
 # GAM PREDICTIONS --------------------------------------------------------------
 
 # equivalent model to k_h_hj_mod
-mod <- gam(gen_length ~ s(rkw_z, m = 2, bs = "tp", k = 3) +
-             s(rkw_z, by = stock, m = 1, bs = "tp", k = 3) +
+mod <- gam(gen_length ~ s(rkw_z2, by = a_group2, m = 2, bs = "tp", k = 3) +
+             s(rkw_z2, by = stock, m = 1, bs = "tp", k = 3) +
              s(herr_OEY1_z, m = 2, bs = "tp", k = 3) +
              s(herr_OEY_z, m = 2, bs = "tp", k = 3) +
              s(herr_OEY_z, by = stock, m = 1, bs = "tp", k = 3) +
@@ -350,16 +400,18 @@ fit_preds <- predict(mod, newdata = dat, se.fit = TRUE,
 fit_dat <- dat %>% 
   mutate(link_fit = as.numeric(fit_preds$fit),
          link_se = as.numeric(fit_preds$se.fit),
+         link_lo = link_fit + (qnorm(0.025) * link_se),
+         link_up = link_fit + (qnorm(0.975) * link_se),
          pred_gen = exp(link_fit),
          pred_gen_lo = exp(link_fit + (qnorm(0.025) * link_se)),
          pred_gen_up = exp(link_fit + (qnorm(0.975) * link_se))
   )
 
-ggplot(data = fit_dat, aes(x = gen_length, y = pred_gen)) +
+ggplot(data = fit_dat, aes(x = log(gen_length), y = link_fit)) +
   geom_abline(linetype = 2, color = "grey50", size = .5) +
   geom_point(aes(color = brood_year), size = 1.5, alpha = 3/4) +
-  geom_linerange(aes(ymin = pred_gen_lo, 
-                     ymax = pred_gen_up),
+  geom_linerange(aes(ymin = link_lo, 
+                     ymax = link_up),
                  size = 1/2, color = "firebrick4") +
   labs(x = "Observed Generation Length", 
        y = "Predicted Generation Length") +
@@ -395,19 +447,19 @@ gen_pred <- function(mod_in, dat_in, random = FALSE) {
   return(dat_out)
 }
 
-
 # input vectors
 excl_pars <- map(mod$smooth, function(x) x$label) %>% unlist
-herr0_seq <- seq(min(dat$herr_OEY_z), max(dat$herr_OEY_z), length.out = 75)
-herr1_seq <- seq(min(dat$herr_OEY1_z), max(dat$herr_OEY1_z), length.out = 75)
-rkw_seq <- seq(min(dat$rkw_z), max(dat$rkw_z), length.out = 75)
+herr0_seq <- herr1_seq <- rkw_seq <- seq(-2, 2, length.out = 99)
+# herr0_seq <- seq(min(dat$herr_OEY_z), max(dat$herr_OEY_z), length.out = 75)
+# herr1_seq <- seq(min(dat$herr_OEY1_z), max(dat$herr_OEY1_z), length.out = 75)
+# rkw_seq <- seq(min(dat$rkw_z2), max(dat$rkw_z2), length.out = 75)
 
 # stock-specific averages for each covariate
 stock_means <- dat %>% 
-  group_by(stock) %>% 
+  group_by(stock, a_group2) %>% 
   summarize(herr_OEY_z = mean(herr_OEY_z),
             herr_OEY1_z = mean(herr_OEY1_z),
-            rkw_z = mean(rkw_z),
+            rkw_z2 = mean(rkw_z2),
             .groups = "drop") %>% 
   ungroup()
 
@@ -417,56 +469,87 @@ mixed_preds_herr0 <- expand.grid(herr_OEY_z = herr0_seq,
                                  stock = unique(dat$stock),
                                  var = "herr0") %>% 
   left_join(., stock_means %>% select(-herr_OEY_z), by = "stock") %>% 
-  select(herr_OEY_z, herr_OEY1_z, rkw_z, stock, var)
+  select(herr_OEY_z, herr_OEY1_z, rkw_z2, stock, var, a_group2)
 mixed_preds_herr1 <- expand.grid(herr_OEY1_z = herr1_seq,
                                  stock = unique(dat$stock),
                                  var = "herr1") %>% 
   left_join(., stock_means %>% select(-herr_OEY1_z), by = "stock") %>% 
-  select(herr_OEY1_z, herr_OEY_z, rkw_z, stock, var)
-mixed_preds_rkw <- expand.grid(rkw_z = rkw_seq,
+  select(herr_OEY1_z, herr_OEY_z, rkw_z2, stock, var, a_group2)
+mixed_preds_rkw <- expand.grid(rkw_z2 = rkw_seq,
                                stock = unique(dat$stock),
                                var = "rkw") %>% 
-  left_join(., stock_means %>% select(-rkw_z), by = "stock") %>% 
-  select(rkw_z, herr_OEY_z, herr_OEY1_z, stock, var)
+  left_join(., stock_means %>% select(-rkw_z2), by = "stock") %>% 
+  select(rkw_z2, herr_OEY_z, herr_OEY1_z, stock, var, a_group2)
 mixed_pred_list1 <- list(herr0 = mixed_preds_herr0,
                          herr1 = mixed_preds_herr1,
                          rkw = mixed_preds_rkw)
-fixed_pred_list1 <- map(mixed_pred_list1, function(x) {
-  #replace stock-specific covariates with 0s 
-  x[, 2] <- 0
-  x[, 3] <- 0 
-  x %>% select(-stock) %>% distinct()
-})
 
+## mixed effects predictions for plotting
 mixed_pred_dat <- map(mixed_pred_list1, function (x) {
   gen_pred(mod, x, random = TRUE) 
 }) %>% 
   bind_rows() %>% 
-  left_join(., dat %>% select(stock, a_group2), by = "stock") %>% 
+  # left_join(., dat %>% select(stock, a_group2), by = "stock") %>% 
   mutate(a_group2 = fct_relevel(a_group2, "offshore", "north", "broad", 
                                 "south"))
+
+fixed_pred_list1 <- map(mixed_pred_list1, function(x) {
+  #replace stock-specific covariates with 0s 
+  x[, 2] <- 0
+  x[, 3] <- 0 
+  x %>%
+    select(-stock) %>% 
+    # adult grouping predictions only relevant for rkw
+    mutate(a_group2 = ifelse(var == "rkw", as.character(a_group2), "south")) %>% 
+    distinct()
+})
+
 fixed_pred_dat <- map(fixed_pred_list1, function (x) {
   gen_pred(mod, x, random = FALSE) 
 }) %>% 
-  bind_rows()
+  bind_rows() %>% 
+  distinct() %>% 
+  mutate(a_group2 = fct_relevel(a_group2, "offshore", "north", "south"))
 
-# plot fixed effects
-fe_splines <- ggplot(fixed_pred_dat, aes(x = cov1)) +
+# plot fixed effects (separate panels because rkw need to be plotted by
+# a_group)
+fe_splines1 <- fixed_pred_dat %>% 
+  filter(var %in% c("herr0", "herr1")) %>% 
+  ggplot(., aes(x = cov1)) +
   geom_line(aes(y = pred_gen)) +
   geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up), 
               alpha = 0.3) +
   ggsidekick::theme_sleek() +
-  labs(x = "Standardized Abundance", y = "Predicted Generation Length") +
-  facet_wrap(~var)
-  
+  facet_wrap(~var) +
+  lims(y = c(min(fixed_pred_dat$pred_gen_lo), 
+             max(fixed_pred_dat$pred_gen_up))) +
+  theme(axis.title.x=element_blank(),
+        axis.title.y=element_blank())
+fe_splines2 <- fixed_pred_dat %>% 
+  filter(var == "rkw") %>% 
+  mutate(rkw_eff = paste(var, a_group2, sep = "_")) %>% 
+  ggplot(., aes(x = cov1)) +
+  geom_line(aes(y = pred_gen, colour = a_group2)) +
+  geom_ribbon(aes(ymin = pred_gen_lo, ymax = pred_gen_up, fill = a_group2), 
+              alpha = 0.3) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~fct_reorder(rkw_eff, as.numeric(a_group2))) +
+  lims(y = c(min(fixed_pred_dat$pred_gen_lo), 
+             max(fixed_pred_dat$pred_gen_up))) + 
+  theme(legend.position = "none",
+        axis.title.x=element_blank(),
+        axis.title.y=element_blank())
+
+p <- ggpubr::ggarrange(fe_splines1, fe_splines2, nrow = 2)
 
 # heat plots
 new_heat_dat <- expand.grid(herr_OEY_z = herr0_seq,
-                            herr_OEY1_z = herr1_seq,
-                            rkw_z = rkw_seq)
+                            herr_OEY1_z = 0,
+                            rkw_z2 = rkw_seq,
+                            a_group2 = unique(dat$a_group2))
 heat_preds <- predict(mod, new_heat_dat, se.fit = TRUE, 
-                   exclude = excl_pars[grepl("stock", excl_pars)],
-                   newdata.guaranteed = TRUE)
+                      exclude = excl_pars[grepl("stock", excl_pars)],
+                      newdata.guaranteed = TRUE)
 heat_dat <- new_heat_dat %>% 
   mutate(link_fit = as.numeric(heat_preds$fit),
          link_se = as.numeric(heat_preds$se.fit),
@@ -476,25 +559,25 @@ heat_dat <- new_heat_dat %>%
   )
 
 heat_plot <- heat_dat %>%
-  filter(herr_OEY1_z == median(herr1_seq)) %>% 
+  filter(a_group2 == "north") %>%
   distinct() %>% 
-  ggplot(., aes(x = rkw_z, y = herr_OEY_z)) +
+  ggplot(., aes(x = rkw_z2, y = herr_OEY_z)) +
   geom_raster(aes(fill = pred_gen)) +
   scale_fill_viridis_c(name = "Predicted\nGeneration\nLength") +
   labs(x = "RKW Anomaly", y = "SoG Herring Anomaly") +
-  ggsidekick::theme_sleek()
+  ggsidekick::theme_sleek() 
 
 
 
 # plot mixed effects w/ observations
 obs_dat <- dat %>% 
-  select(stock, a_group2, gen_length, herr_OEY_z, herr_OEY1_z, rkw_z) %>% 
-  pivot_longer(., cols = c(herr_OEY_z, herr_OEY1_z, rkw_z), 
+  select(stock, a_group2, gen_length, herr_OEY_z, herr_OEY1_z, rkw_z2) %>% 
+  pivot_longer(., cols = c(herr_OEY_z, herr_OEY1_z, rkw_z2), 
                names_to = "var", values_to = "z_value") %>% 
   mutate(var = fct_recode(as.factor(var), 
                           herr0 = "herr_OEY_z",
                           herr1 = "herr_OEY1_z",
-                          rkw = "rkw_z"))
+                          rkw = "rkw_z2"))
 
 mixed_splines <- ggplot(mixed_pred_dat, aes(x = cov1)) +
   geom_line(aes(y = pred_gen)) +
@@ -515,8 +598,9 @@ heat_plot
 dev.off()
 
 png(here::here("figs", "gam", "gen_gam", "herr_rkw_fe_splines.png"), 
-    height = 2.5, width = 6, res = 300, units = "in")
-fe_splines
+    height = 5.5, width = 7.5, res = 300, units = "in")
+ggpubr::annotate_figure(p, bottom = "Z-Scaled Predictor", 
+                        left = "Predicted Generation Length")
 dev.off()
 
 png(here::here("figs", "gam", "gen_gam", "herr_rkw_mixed_splines.png"), 

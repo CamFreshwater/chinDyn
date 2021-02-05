@@ -342,7 +342,8 @@ adult_cov <- list(herring = herring %>%
                            !is.na(prime_mean)) %>% 
                     pivot_wider(., -c(prime_anom, annual_anom, annual_mean), 
                                 names_from = "index", values_from = "prime_mean",
-                                names_prefix = "prime_")
+                                names_prefix = "prime_") %>% 
+                    left_join(., bloom, by = "year") 
 )
 
 saveRDS(adult_cov, here::here("data/salmonData/cov_subset_adult.rds"))

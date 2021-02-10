@@ -103,7 +103,13 @@ by_dat <- metadata %>%
            j_group == "salish" ~ "sog",
            TRUE ~ j_group
          ),
-         j_group3 = paste(j_group2, smoltType, sep = "_"),
+         # split columbia and other California Current stocks
+         j_group3 = case_when(
+           grepl("COLR", region) ~ "col",
+           TRUE ~ j_group2
+         ),
+         # split by life histories
+         j_group4 = paste(j_group2, smoltType, sep = "_"),
          # split salish resident stocks from non
          a_group3 = case_when(
            stock_name %in% c("Big Qualicum River Fall", "Chilliwack River Fall",
@@ -115,7 +121,7 @@ by_dat <- metadata %>%
          ) %>% 
   select(stock, stock_name, brood_year, survival, M, gen_length,
          jurisdiction, smolt = smoltType, run, 
-         region:long, j_group, j_group2, j_group3, a_group, a_group2, 
+         region:long, j_group, j_group2, j_group3, j_group4, a_group, a_group2, 
          a_group3) %>% 
   mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
@@ -124,12 +130,22 @@ by_dat <- metadata %>%
          j_group = as.factor(j_group),
          j_group2 = as.factor(j_group2),
          j_group3 = as.factor(j_group3),
+         j_group4 = as.factor(j_group4),
          a_group =  as.factor(a_group),
          a_group2 = as.factor(a_group2),
          a_group3 = as.factor(a_group3)) 
 
 saveRDS(by_dat,
         here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))
+
+groupings_table <- by_dat %>% 
+  select(stock, stock_name, smolt, run, juvenile_grouping = j_group3,
+         adult_grouping = a_group2) %>% 
+  distinct() %>% 
+  arrange(juvenile_grouping)
+write.csv(groupings_table, here::here("data", "salmonData", 
+                                      "groupings_table.csv"),
+          row.names = FALSE)
 
 # How many stocks per region?
 by_dat %>% 

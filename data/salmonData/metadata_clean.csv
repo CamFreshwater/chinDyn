@@ -1,6 +1,6 @@
 stock,stock_name,jurisdiction,smoltType,adultRunTiming,region,lat,long
 AKB,Alaska Hatchery Springs - Behm Canal,AK,streamtype,Spring,SEAK,55.962925,-131.219612
-AKS,Alaska Spring,AK,streamtype,Spring,SEAK,NA,NA
+AKS,Alaska Spring,AK,streamtype,Spring,SEAK,55.962925,-131.219612
 ATN,Atnarko River,BC,oceantype,Summer,CBC,52.376631,-126.093529
 ATS,Atnarko Yearling,BC,streamtype,Spring,CBC,52.376631,-126.093529
 BQR,Big Qualicum River Fall,BC,oceantype,Fall,ECVI,49.39884,-124.609144

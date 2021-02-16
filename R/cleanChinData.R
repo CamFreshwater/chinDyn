@@ -71,54 +71,57 @@ by_dat <- metadata %>%
             by = "stock") %>% 
   left_join(., by_dat1, by = c("stock", "stock_name", "brood_year")) %>% 
   full_join(., gen1, by = c("stock", "brood_year")) %>%
-  mutate(lat = as.numeric(lat),
-         long = as.numeric(long),
-         M = -log(survival),
-         # change Elwha's region given catch dist similar to Puget
-         region = ifelse(stock == "ELW", "NPGSD", region),
-         j_group = case_when(
-           (lat > 52 & !region == "UFR") ~ "north",
-           stock_name == "Transboundary Rivers" ~ "north",
-           region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
-                          "WCVI") ~ "south",
-           TRUE ~ "salish"
-         ),
-         a_group2 = case_when(
-           #subset of ECVI stocks are north-migrating
-           stock_name %in% c("Puntledge River Summer", "Quinsam River Fall") ~
-             "north",
-           region %in% c("ECVI", "LFR", "HOODC", "SPGSD", "NPGSD") ~ "south",
-           smoltType == "streamtype" ~ "offshore",
-           region == "LCOLR" ~ "broad",
-           TRUE ~ "north"
-         ),
-         a_group = case_when(
-           a_group2 == "offshore" ~ "offshore",
-           TRUE ~ "shelf"
-         ),
-         run = tolower(adultRunTiming),
-         # split sog and puget
-         j_group2 = case_when(
-           region %in% c("HOODC", "SPGSD", "NPGSD") ~ "puget",
-           j_group == "salish" ~ "sog",
-           TRUE ~ j_group
-         ),
-         # split columbia and other California Current stocks
-         j_group3 = case_when(
-           grepl("COLR", region) ~ "col",
-           TRUE ~ j_group2
-         ),
-         # split by life histories
-         j_group4 = paste(j_group2, smoltType, sep = "_"),
-         # split salish resident stocks from non
-         a_group3 = case_when(
-           stock_name %in% c("Big Qualicum River Fall", "Chilliwack River Fall",
-                             "Cowichan River Fall", "Nanaimo River Fall", 
-                             "Harrison River") ~ "sog",
-           j_group2 == "puget" ~ "puget",
-           TRUE ~ a_group2
-         )
-         ) %>% 
+  mutate(
+    lat = as.numeric(lat),
+    long = as.numeric(long),
+    M = -log(survival),
+    # change Elwha's region given catch dist similar to Puget
+    region = ifelse(stock == "ELW", "NPGSD", region),
+    j_group = case_when(
+      (lat > 52 & !region == "UFR") ~ "north",
+      stock_name == "Transboundary Rivers" ~ "north",
+      region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
+                    "WCVI") ~ "south",
+      TRUE ~ "salish"
+    ),
+    a_group2 = case_when(
+      #subset of ECVI stocks are north-migrating
+      stock_name %in% c("Puntledge River Summer", "Quinsam River Fall",
+                        "Lyons Ferry Yearling", "Willamette Spring", 
+                        "Atnarko Yearling", "Kitsumkalum Yearling") ~ "north",
+      region %in% c("ECVI", "LFR", "HOODC", "SPGSD", "NPGSD") ~ "south",
+      smoltType == "streamtype" ~ "offshore",
+      region == "LCOLR" ~ "broad",
+      TRUE ~ "north"
+    ),
+    a_group = case_when(
+      a_group2 == "offshore" ~ "offshore",
+      TRUE ~ "shelf"
+    ),
+    run = tolower(adultRunTiming),
+    # split sog and puget
+    j_group2 = case_when(
+      region %in% c("HOODC", "SPGSD", "NPGSD") ~ "puget",
+      j_group == "salish" ~ "sog",
+      TRUE ~ j_group
+    ),
+    # split columbia and other California Current stocks
+    j_group3 = case_when(
+      grepl("COLR", region) ~ "col",
+      TRUE ~ j_group2
+    ),
+    # split by life histories
+    j_group4 = paste(j_group2, smoltType, sep = "_"),
+    # split salish resident stocks from non
+    a_group3 = case_when(
+      stock_name %in% c("Big Qualicum River Fall", "Chilliwack River Fall",
+                        "Cowichan River Fall", "Nanaimo River Fall", 
+                        "Harrison River") ~ "sog",
+      j_group2 == "puget" ~ "puget",
+      TRUE ~ a_group2
+    )
+    
+  ) %>% 
   select(stock, stock_name, brood_year, survival, M, gen_length,
          jurisdiction, smolt = smoltType, run, 
          region:long, j_group, j_group2, j_group3, j_group4, a_group, a_group2, 

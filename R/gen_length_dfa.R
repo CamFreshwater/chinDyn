@@ -3,6 +3,7 @@
 # Update on surv_bayesDFA; instead of deciding groupings a priori, first perform
 # model selection for groupings with MARSS (faster to converge than bayesDFA), 
 # then fit group specific models with bayesdfa
+# Updated Feb 23 with groupings edited by AVE
 
 library(MARSS)
 library(tidyverse)
@@ -53,7 +54,7 @@ gen %>%
 
 ## MARSS MODEL RUNS ------------------------------------------------------------
 
-# make matrix of natural mortality rates
+# make matrix
 gen_mat1 <- gen %>% 
   select(year, stock, gen_length) %>% 
   pivot_wider(names_from = stock, values_from = gen_length) %>% 
@@ -67,7 +68,7 @@ n_ts <- nrow(gen_mat)
 tt <- ncol(gen_mat)
 
 
-## Generic MARSS approach
+## Generic MARSS approach (model selection)
 
 # specify the z models based on different groups
 z1 <- factor(stk_tbl$run)
@@ -126,6 +127,9 @@ mod_tbl <- tibble(
 )
 
 # fit generic MARSS models
+ncores <- parallel::detectCores() 
+future::plan(future::multisession, workers = ncores - 2)
+
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models,
                                       q_in = mod_tbl$q_models),

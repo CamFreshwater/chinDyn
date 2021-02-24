@@ -3,6 +3,7 @@
 # Update on surv_bayesDFA; instead of deciding groupings a priori, first perform
 # model selection for groupings with MARSS (faster to converge than bayesDFA), 
 # then fit group specific models with bayesdfa
+# Updated Feb 23 2020 with Columbia split from other juveniles
 
 library(MARSS)
 library(tidyverse)
@@ -16,7 +17,7 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
 
 # dataframe of only stocks and juvenile groupings
 stk_tbl <- surv %>% 
-  select(stock, stock_name, smolt, j_group:j_group3) %>% 
+  select(stock, stock_name, smolt, j_group:j_group4) %>% 
   distinct()
 
 # subset of stocks for test run
@@ -71,8 +72,9 @@ z1 <- factor(stk_tbl$smolt)
 z2 <- factor(stk_tbl$j_group)
 z3 <- factor(stk_tbl$j_group2)
 z4 <- factor(stk_tbl$j_group3)
-z_models <- list(z1, z2, z3, z4)
-names(z_models) <- c("smolt", "region", "region2", "region2-smolt")
+z5 <- factor(stk_tbl$j_group4)
+z_models <- list(z1, z2, z3, z4, z5)
+names(z_models) <- c("smolt", "region", "region2", "region3", "region2-smolt")
 
 q_models <- c("diagonal and equal", 
               "diagonal and unequal", 
@@ -110,17 +112,21 @@ fit_marss <- function(z_name, z_in, q_in) {
 }
 
 # tibble containing model combinations
-mod_names = expand.grid(q = q_models, z = names(z_models)) %>% 
+mod_names = expand.grid(q = q_models, 
+                        z = names(z_models)) %>% 
   mutate(name = paste(z, q, sep = "-"))
 mod_tbl <- tibble(
   mod_name = mod_names$name,
   z_name = mod_names$z,
   q_name = mod_names$q,
   z_models = rep(z_models, each = 4),
-  q_models = rep(q_models, times = 4)
+  q_models = rep(q_models, times = 5)
 )
 
 # fit generic MARSS models
+ncores <- parallel::detectCores() 
+future::plan(future::multisession, workers = ncores - 2)
+
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models,
                                       q_in = mod_tbl$q_models),
@@ -139,7 +145,6 @@ saveRDS(marss_list, here::here("data", "mortality_fits",
 saveRDS(marss_aic_tab, here::here("data", "mortality_fits",
                                "marss_aic_tab.RDS"))
 
-top_model <- marss_list[[14]]$fit
 
 
 ## Bayesian DFA ----------------------------------------------------------------

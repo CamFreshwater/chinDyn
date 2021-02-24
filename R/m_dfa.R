@@ -8,16 +8,23 @@
 library(MARSS)
 library(tidyverse)
 
+ncores <- parallel::detectCores() 
+future::plan(future::multisession, workers = ncores - 2)
+
 surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>% 
   #remove stocks that are aggregates of others on CP's advice
   # TST combines STI/TAK and AKS combines SSA and NSA
   filter(!stock %in% c("TST", "AKS"),
-         year < 2017)
+         year < 2017,
+         !j_group3 %in% c("col_streamtype", "north_oceantype", 
+                          "sog_streamtype"),
+         !a_group3 == "north_streamtype") %>% 
+  droplevels()
   
 
 # dataframe of only stocks and juvenile groupings
 stk_tbl <- surv %>% 
-  select(stock, stock_name, smolt, j_group:j_group4) %>% 
+  select(stock, stock_name, smolt, j_group:j_group3, run, a_group:a_group3) %>% 
   distinct()
 
 # subset of stocks for test run
@@ -68,13 +75,18 @@ tt <- ncol(m_mat)
 ## Generic MARSS approach
 
 # specify the z models based on different groups
-z1 <- factor(stk_tbl$smolt)
-z2 <- factor(stk_tbl$j_group)
-z3 <- factor(stk_tbl$j_group2)
-z4 <- factor(stk_tbl$j_group3)
-z5 <- factor(stk_tbl$j_group4)
-z_models <- list(z1, z2, z3, z4, z5)
-names(z_models) <- c("smolt", "region", "region2", "region3", "region2-smolt")
+z1 <- factor(stk_tbl$run)
+z2 <-  factor(stk_tbl$a_group)
+z3 <- factor(stk_tbl$a_group2)
+z4 <- factor(stk_tbl$a_group3)
+#juvenile groupings
+z5 <- factor(stk_tbl$smolt)
+z6 <- factor(stk_tbl$j_group)
+z7 <- factor(stk_tbl$j_group2)
+z8 <- factor(stk_tbl$j_group3)
+z_models <- list(z1, z2, z3, z4, z5, z6, z7, z8)
+names(z_models) <- c("run", "off-shelf", "a_region", "a_region2", "smolt",
+                     "j_region", "j_region2", "j_region3")
 
 q_models <- c("diagonal and equal", 
               "diagonal and unequal", 
@@ -119,14 +131,11 @@ mod_tbl <- tibble(
   mod_name = mod_names$name,
   z_name = mod_names$z,
   q_name = mod_names$q,
-  z_models = rep(z_models, each = 4),
-  q_models = rep(q_models, times = 5)
+  z_models = rep(z_models, each = length(unique(q_models))),
+  q_models = rep(q_models, length.out = length(mod_names$name))
 )
 
 # fit generic MARSS models
-ncores <- parallel::detectCores() 
-future::plan(future::multisession, workers = ncores - 2)
-
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models,
                                       q_in = mod_tbl$q_models),
@@ -144,7 +153,6 @@ saveRDS(marss_list, here::here("data", "mortality_fits",
                                "marss_selection_fits.RDS"))
 saveRDS(marss_aic_tab, here::here("data", "mortality_fits",
                                "marss_aic_tab.RDS"))
-
 
 
 ## Bayesian DFA ----------------------------------------------------------------
@@ -183,11 +191,7 @@ surv_tbl <- tibble(group = levels(surv$j_group3)) %>%
       filter(!is.na(M)) %>% 
       group_split(j_group3) %>% 
       map(., make_mat)
-  ) %>% 
-  # remove groups with less than three time series
-  filter(
-    group %in% kept_grps$j_group3
-  )
+  ) 
 surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),
@@ -198,19 +202,18 @@ surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
 })
 
 # fit bayesdfa
-# dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa, 
-#                               num_trends = 2, zscore = TRUE, 
-#                               iter = 2250, chains = 4, thin = 1, 
-#                               control = list(adapt_delta = 0.90,
-#                                              max_treedepth =20),
-#                               .progress = TRUE,
-#                               seed = TRUE)
-# # saveRDS(dfa_fits, here::here("data", "mortality_fits", "bayesdfa_by_group.RDS"))
-# 
-# map2(dfa_fits, surv_tbl$group, function(x, y) {
-#   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
-#   saveRDS(x, here::here("data", "mortality_fits", f_name))
-# })
+dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa,
+                              num_trends = 2, zscore = TRUE,
+                              iter = 2500, chains = 4, thin = 1,
+                              control = list(adapt_delta = 0.92,
+                                             max_treedepth = 20),
+                              .progress = TRUE,
+                              seed = TRUE)
+
+map2(dfa_fits, surv_tbl$group, function(x, y) {
+  f_name <- paste(y, "bayesdfa.RDS", sep = "_")
+  saveRDS(x, here::here("data", "mortality_fits", f_name))
+})
 
 # read outputs
 dfa_fits2 <- map(surv_tbl$group, function(y) {

@@ -77,66 +77,79 @@ by_dat <- metadata %>%
     M = -log(survival),
     # change Elwha's region given catch dist similar to Puget
     region = ifelse(stock == "ELW", "NPGSD", region),
-    j_group = case_when(
+    j_group4 = case_when(
+      grepl("COLR", region) ~ "col",
+      region %in% c("HOODC", "SPGSD", "NPGSD") ~ "puget",
       (lat > 52 & !region == "UFR") ~ "north",
       stock_name == "Transboundary Rivers" ~ "north",
       region %in% c("JFUCA", "LCOLR", "MCOLR", "ORCST", "UCOLR", "WACST",
                     "WCVI") ~ "south",
-      TRUE ~ "salish"
+      TRUE ~ "sog"
     ),
-    a_group2 = case_when(
+    j_group3 = case_when(
+      j_group4 %in% c("south", "col") ~ "south",
+      TRUE ~ j_group4
+    ),
+    j_group2 = case_when(
+      j_group3 %in% c("puget", "sog") ~ "salish",
+      TRUE ~ j_group3
+    ),
+    j_group1 = case_when(
+      j_group2 %in% c("south", "north") ~ "shelf",
+      TRUE ~ j_group2
+    ),
+    a_group4 = case_when(
       #subset of ECVI stocks are north-migrating
       stock_name %in% c("Puntledge River Summer", "Quinsam River Fall",
                         "Lyons Ferry Yearling", "Willamette Spring", 
                         "Atnarko Yearling", "Kitsumkalum Yearling") ~ "north",
-      region %in% c("ECVI", "LFR", "HOODC", "SPGSD", "NPGSD") ~ "south",
-      smoltType == "streamtype" ~ "offshore",
-      region == "LCOLR" ~ "broad",
-      TRUE ~ "north"
-    ),
-    a_group = case_when(
-      a_group2 == "offshore" ~ "offshore",
-      TRUE ~ "shelf"
-    ),
-    run = tolower(adultRunTiming),
-    # split sog and puget
-    j_group2 = case_when(
-      region %in% c("HOODC", "SPGSD", "NPGSD") ~ "puget",
-      j_group == "salish" ~ "sog",
-      TRUE ~ j_group
-    ),
-    # split columbia and other California Current stocks
-    j_group3 = case_when(
-      grepl("COLR", region) ~ "col",
-      TRUE ~ j_group2
-    ),
-    # split by life histories
-    j_group4 = paste(j_group2, smoltType, sep = "_"),
-    # split salish resident stocks from non
-    a_group3 = case_when(
       stock_name %in% c("Big Qualicum River Fall", "Chilliwack River Fall",
                         "Cowichan River Fall", "Nanaimo River Fall", 
                         "Harrison River") ~ "sog",
-      j_group2 == "puget" ~ "puget",
+      j_group4 == "puget" ~ "puget",
+      region == "LCOLR" ~ "broad",
+      smoltType == "streamtype" ~ "offshore",
+      TRUE ~ "north"
+    ),
+    a_group3 = case_when(
+      a_group4 %in% c("sog", "puget") ~ "south",
+      TRUE ~ a_group4
+    ),
+    a_group2 = case_when(
+      a_group3 %in% c("south", "broad") ~ "south",
+      TRUE ~ a_group3
+    ),
+    a_group1 = case_when(
+      a_group2 %in% c("south", "north") ~ "shelf",
       TRUE ~ a_group2
-    )
-    
+    ),
+    run = tolower(adultRunTiming)
   ) %>% 
   select(stock, stock_name, brood_year, survival, M, gen_length,
          jurisdiction, smolt = smoltType, run, 
-         region:long, j_group, j_group2, j_group3, j_group4, a_group, a_group2, 
-         a_group3) %>% 
+         region:long, j_group1, j_group2, j_group3, j_group4, a_group1, 
+         a_group2, a_group3, a_group4) %>% 
   mutate_at(vars(stock), list(~ factor(., levels = unique(.)))) %>% 
   mutate(year = ifelse(smolt == "streamtype", brood_year + 2, 
                        brood_year + 1),
          smolt = as.factor(smolt),
-         j_group = as.factor(j_group),
-         j_group2 = as.factor(j_group2),
-         j_group3 = as.factor(j_group3),
          j_group4 = as.factor(j_group4),
-         a_group =  as.factor(a_group),
-         a_group2 = as.factor(a_group2),
-         a_group3 = as.factor(a_group3)) 
+         j_group3 = as.factor(j_group3),
+         j_group2 = as.factor(j_group2),
+         j_group1 = as.factor(j_group1),
+         j_group4b  = as.factor(paste(j_group4, smolt, sep = "_")),
+         j_group3b  = as.factor(paste(j_group3, smolt, sep = "_")),
+         j_group2b  = as.factor(paste(j_group2, smolt, sep = "_")),
+         j_group1b = as.factor(paste(j_group1, smolt, sep = "_")),
+         a_group4b  = as.factor(paste(a_group4, smolt, sep = "_")),
+         a_group3b  = as.factor(paste(a_group3, smolt, sep = "_")),
+         a_group2b  = as.factor(paste(a_group2, smolt, sep = "_")),
+         a_group1b = as.factor(paste(a_group1, smolt, sep = "_")),
+         a_group4c  = as.factor(paste(a_group4, run, sep = "_")),
+         a_group3c  = as.factor(paste(a_group3, run, sep = "_")),
+         a_group2c  = as.factor(paste(a_group2, run, sep = "_")),
+         a_group1c = as.factor(paste(a_group1, run, sep = "_"))
+         )
 
 saveRDS(by_dat,
         here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))

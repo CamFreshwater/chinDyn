@@ -8,13 +8,32 @@
 library(MARSS)
 library(tidyverse)
 
-gen_raw <- readRDS(here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS")) 
+# prep multisession
+ncores <- parallel::detectCores() 
+future::plan(future::multisession, workers = ncores - 2)
 
-#remove stocks with no gen_length data
+
+gen_raw <- readRDS(here::here("data", "salmonData", 
+                              "cwt_indicator_surv_clean.RDS")) 
+
+#remove stocks with no gen_length data and rare life history types (n_stk < 2)
 gen <- gen_raw %>% 
-  filter(!is.na(gen_length)) %>% 
-  mutate(gen_z = as.numeric(scale(gen_length)))
-  
+  filter(!is.na(gen_length),
+         #!j_group3 %in% c("col_streamtype", "north_oceantype", 
+                          # "sog_streamtype"),
+         #!a_group3 == "north_streamtype"
+         ) %>% 
+  mutate(gen_z = as.numeric(scale(gen_length))) %>% 
+  droplevels()
+
+# map(colnames(gen)[c(13:20, 22:33)], function(x) {
+#   gen %>% 
+#     select(stock_name, .data[[x]]) %>% 
+#     distinct() %>% 
+#     group_by(.data[[x]]) %>% 
+#     tally()
+# })
+
 # dataframe of only stocks and adult groupings
 stk_tbl <- gen %>% 
   group_by(stock) %>% 
@@ -22,8 +41,8 @@ stk_tbl <- gen %>%
          max_ocean_age = ifelse(smolt == "oceantype", max_age - 1, 
                                 max_age - 2)) %>% 
   ungroup() %>% 
-  select(stock, stock_name, smolt, run, j_group2, a_group:a_group3,
-         max_age, max_ocean_age) %>% 
+  select(stock, stock_name, max_age, max_ocean_age, smolt, run, 
+         j_group1:j_group4, a_group1:a_group4, j_group4b:a_group1c) %>% 
   distinct() 
 
 
@@ -70,17 +89,19 @@ tt <- ncol(gen_mat)
 
 ## Generic MARSS approach (model selection)
 
-# specify the z models based on different groups
-z1 <- factor(stk_tbl$run)
-z2 <-  factor(stk_tbl$a_group)
-z3 <- factor(stk_tbl$a_group2)
-z4 <- factor(stk_tbl$a_group3)
-z_models <- list(z1, z2, z3, z4)
-names(z_models) <- c("run", "off-shelf", "region", "region2")
+# specify the z models based on different groupings (smolt, run, a dist, j dist)
+z_model_inputs <- colnames(gen)[which(colnames(gen) %in% c("smolt", "run") |
+                                        str_detect(colnames(gen), "group"))]
+z_models <- map(z_model_inputs, function (x) {
+  stk_tbl %>% 
+    pull(.data[[x]]) %>% 
+    factor()
+})
+names(z_models) <- z_model_inputs
 
-q_models <- c("diagonal and equal", 
+q_models <- c(#"diagonal and equal", 
               "diagonal and unequal", 
-              "equalvarcov",
+              #"equalvarcov",
               "unconstrained")
 
 U <- "unequal"
@@ -90,7 +111,6 @@ B <- "identity"
 x0 <- "unequal"
 V0 <- "zero"
 model_constants <- list(U = U, R = R, A = A, B = B, x0 = x0, V0 = V0)
-
 
 # function to fit models
 fit_marss <- function(z_name, z_in, q_in) {
@@ -116,20 +136,18 @@ fit_marss <- function(z_name, z_in, q_in) {
 }
 
 # tibble containing model combinations
-mod_names = expand.grid(q = q_models, z = names(z_models)) %>% 
+mod_names = expand.grid(q = q_models, 
+                        z = names(z_models)) %>% 
   mutate(name = paste(z, q, sep = "-"))
 mod_tbl <- tibble(
   mod_name = mod_names$name,
   z_name = mod_names$z,
   q_name = mod_names$q,
-  z_models = rep(z_models, each = 4),
-  q_models = rep(q_models, times = 4)
+  z_models = rep(z_models, each = length(unique(q_models))),
+  q_models = rep(q_models, length.out = length(mod_names$name))
 )
 
 # fit generic MARSS models
-ncores <- parallel::detectCores() 
-future::plan(future::multisession, workers = ncores - 2)
-
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models,
                                       q_in = mod_tbl$q_models),
@@ -143,13 +161,12 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          rel_like = exp(-1 * deltaAICc / 2),
          aic_weight = rel_like / sum(rel_like))
 
-saveRDS(marss_list, here::here("data", "generation_fits",
-                               "marss_selection_fits.RDS"))
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
 
 marss_aic_tab <- readRDS(here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
+
 
 
 ## Bayesian DFA ----------------------------------------------------------------
@@ -160,8 +177,8 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-a_palette <- disco::disco("muted", n = length(unique(gen$a_group2)))
-names(a_palette) <- unique(gen$a_group2)
+a_palette <- disco::disco("muted", n = length(unique(gen$j_region)))
+names(a_palette) <- unique(gen$j_region)
 
 #helper function to spread and label input matrices for bayesdfa
 make_mat <- function(x) {
@@ -175,10 +192,10 @@ make_mat <- function(x) {
 }
 
 # number of stocks per group
-kept_grps <- stk_tbl %>% 
-  group_by(a_group2) %>% 
-  tally() %>% 
-  filter(n > 2)
+# kept_grps <- stk_tbl %>% 
+#   group_by(a_group2) %>% 
+#   tally() %>% 
+#   filter(n > 2)
 
 #generate tbl by group
 gen_tbl <- tibble(group = levels(gen$a_group2)) %>% 
@@ -187,11 +204,7 @@ gen_tbl <- tibble(group = levels(gen$a_group2)) %>%
       filter(!is.na(gen_length)) %>% 
       group_split(a_group2) %>% 
       map(., make_mat)
-  ) %>% 
-  # remove groups with less than three time series
-  filter(
-    group %in% kept_grps$a_group2
-  )
+  ) 
 gen_tbl$names <- map(gen_tbl$gen_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., gen %>% select(stock, stock_name) %>% distinct(),
@@ -204,22 +217,23 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
 # specify one trend if there are less than 4 time series, otherwise 2
 n_trend_list <- ifelse(unlist(map(gen_tbl$gen_mat, nrow)) < 4, 1, 2) 
 
-# dfa_fits <- furrr::future_map2(gen_tbl$gen_mat[2:4], 
-#                                n_trend_list[2:4],
-#                                .f = function (y, n_trend) {
-#                                  fit_dfa(y = y, num_trends = n_trend, 
-#                                          zscore = TRUE,
-#                                          iter = 3250, chains = 4, thin = 1,
-#                                          control = list(adapt_delta = 0.9))
-#                                },
-#                               .progress = TRUE,
-#                               .options = furrr::furrr_options(seed = TRUE))
-# 
+dfa_fits <- furrr::future_map2(
+  gen_tbl$gen_mat,
+  n_trend_list,
+  .f = function (y, n_trend) {
+    fit_dfa(y = y, num_trends = n_trend, zscore = TRUE,
+            iter = 4000, chains = 4, thin = 1,
+            control = list(adapt_delta = 0.9, max_treedepth = 15))
+  },
+  .progress = TRUE,
+  .options = furrr::furrr_options(seed = TRUE)
+)
+
 # # save outputs
-# map2(dfa_fits, gen_tbl$group[2:4], function(x, y) {
-#   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
-#   saveRDS(x, here::here("data", "generation_fits", f_name))
-# })
+map2(dfa_fits, gen_tbl$group, function(x, y) {
+  f_name <- paste(y, "bayesdfa.RDS", sep = "_")
+  saveRDS(x, here::here("data", "generation_fits", f_name))
+})
 
 # read outputs
 dfa_fits2 <- map(gen_tbl$group, function(y) {
@@ -269,7 +283,7 @@ loadings_list
 dev.off()
 
 
-# Make 4 panel plot of dominant trends by juvenile grouping
+# Make 4 panel plot of dominant trends by adult grouping
 rot_dat <- pmap(list(rot_list, gen_tbl$group, gen_tbl$years), 
                 function(x, y, z) {
                   data.frame(

@@ -26,13 +26,13 @@ gen <- gen_raw %>%
   mutate(gen_z = as.numeric(scale(gen_length))) %>% 
   droplevels()
 
-# map(colnames(gen)[c(13:20, 22:33)], function(x) {
-#   gen %>% 
-#     select(stock_name, .data[[x]]) %>% 
-#     distinct() %>% 
-#     group_by(.data[[x]]) %>% 
-#     tally()
-# })
+map(colnames(gen)[c(13:20, 22:33)], function(x) {
+  gen %>%
+    select(stock_name, .data[[x]]) %>%
+    distinct() %>%
+    group_by(.data[[x]]) %>%
+    tally()
+})
 
 # dataframe of only stocks and adult groupings
 stk_tbl <- gen %>% 
@@ -88,7 +88,6 @@ tt <- ncol(gen_mat)
 
 
 ## Generic MARSS approach (model selection)
-
 # specify the z models based on different groupings (smolt, run, a dist, j dist)
 z_model_inputs <- colnames(gen)[which(colnames(gen) %in% c("smolt", "run") |
                                         str_detect(colnames(gen), "group"))]
@@ -164,7 +163,7 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
 
-marss_aic_tab <- readRDS(here::here("data", "generation_fits",
+marss_aic_tab2 <- readRDS(here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
 
 
@@ -177,8 +176,8 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-a_palette <- disco::disco("muted", n = length(unique(gen$j_region)))
-names(a_palette) <- unique(gen$j_region)
+a_palette <- disco::disco("muted", n = length(unique(gen$j_group3b)))
+names(a_palette) <- unique(gen$j_group3b)
 
 #helper function to spread and label input matrices for bayesdfa
 make_mat <- function(x) {
@@ -192,19 +191,20 @@ make_mat <- function(x) {
 }
 
 # number of stocks per group
-# kept_grps <- stk_tbl %>% 
-#   group_by(a_group2) %>% 
-#   tally() %>% 
-#   filter(n > 2)
+kept_grps <- stk_tbl %>%
+  group_by(a_group2) %>%
+  tally() %>%
+  filter(n > 2)
 
 #generate tbl by group
 gen_tbl <- tibble(group = levels(gen$a_group2)) %>% 
   mutate(
     gen_mat = gen %>% 
       filter(!is.na(gen_length)) %>% 
-      group_split(a_group2) %>% 
+      group_split(j_group3b) %>% 
       map(., make_mat)
-  ) 
+  ) %>% 
+  filter(group %in% kept_grps$j_group3b)
 gen_tbl$names <- map(gen_tbl$gen_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., gen %>% select(stock, stock_name) %>% distinct(),

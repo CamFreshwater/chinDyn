@@ -15,17 +15,20 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
   #remove stocks that are aggregates of others on CP's advice
   # TST combines STI/TAK and AKS combines SSA and NSA
   filter(!stock %in% c("TST", "AKS"),
-         year < 2017,
-         !j_group3 %in% c("col_streamtype", "north_oceantype", 
-                          "sog_streamtype"),
-         !a_group3 == "north_streamtype") %>% 
+         year < 2017#,
+         # !j_group3 %in% c("col_streamtype", "north_oceantype", 
+         #                  "sog_streamtype"),
+         # !a_group3 == "north_streamtype"
+         ) %>% 
   droplevels()
   
 
 # dataframe of only stocks and juvenile groupings
 stk_tbl <- surv %>% 
-  select(stock, stock_name, smolt, j_group:j_group3, run, a_group:a_group3) %>% 
-  distinct()
+  ungroup() %>% 
+  select(stock, stock_name, smolt, run, 
+         j_group1:j_group4, a_group1:a_group4, j_group4b:a_group1c) %>% 
+  distinct() 
 
 # subset of stocks for test run
 # keep_stks <- surv %>% 
@@ -74,24 +77,20 @@ tt <- ncol(m_mat)
 
 ## Generic MARSS approach
 
-# specify the z models based on different groups
-z1 <- factor(stk_tbl$run)
-z2 <-  factor(stk_tbl$a_group)
-z3 <- factor(stk_tbl$a_group2)
-z4 <- factor(stk_tbl$a_group3)
-#juvenile groupings
-z5 <- factor(stk_tbl$smolt)
-z6 <- factor(stk_tbl$j_group)
-z7 <- factor(stk_tbl$j_group2)
-z8 <- factor(stk_tbl$j_group3)
-z_models <- list(z1, z2, z3, z4, z5, z6, z7, z8)
-names(z_models) <- c("run", "off-shelf", "a_region", "a_region2", "smolt",
-                     "j_region", "j_region2", "j_region3")
+# specify the z models based on different groupings (smolt, run, a dist, j dist)
+z_model_inputs <- colnames(surv)[which(colnames(surv) %in% c("smolt", "run") |
+                                        str_detect(colnames(surv), "group"))]
+z_models <- map(z_model_inputs, function (x) {
+  stk_tbl %>% 
+    pull(.data[[x]]) %>% 
+    factor()
+})
+names(z_models) <- z_model_inputs
 
-q_models <- c("diagonal and equal", 
-              "diagonal and unequal", 
-              "equalvarcov",
-              "unconstrained")
+q_models <- c(#"diagonal and equal", 
+  "diagonal and unequal", 
+  #"equalvarcov",
+  "unconstrained")
 
 U <- "unequal"
 R <- "diagonal and equal"
@@ -163,8 +162,8 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-j_palette <- disco::disco("muted", n = length(unique(surv$j_group3)))
-names(j_palette) <- unique(surv$j_group3)
+j_palette <- disco::disco("muted", n = length(unique(surv$j_group3b)))
+names(j_palette) <- unique(surv$j_group3b)
 
 #helper function to spread and label input matrices for bayesdfa
 make_mat <- function(x) {
@@ -179,19 +178,20 @@ make_mat <- function(x) {
 
 # number of stocks per group
 kept_grps <- stk_tbl %>% 
-  group_by(j_group3) %>% 
+  group_by(j_group3b) %>% 
   tally() %>% 
   filter(n > 2) %>% 
   droplevels()
 
 #generate tbl by group
-surv_tbl <- tibble(group = levels(surv$j_group3)) %>% 
+surv_tbl <- tibble(group = levels(surv$j_group3b)) %>% 
   mutate(
     m_mat = surv %>% 
       filter(!is.na(M)) %>% 
-      group_split(j_group3) %>% 
+      group_split(j_group3b) %>% 
       map(., make_mat)
-  ) 
+  ) %>% 
+  filter(group %in% kept_grps$j_group3b)
 surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),

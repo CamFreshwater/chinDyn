@@ -140,15 +140,15 @@ by_dat <- metadata %>%
          j_group4b  = as.factor(paste(j_group4, smolt, sep = "_")),
          j_group3b  = as.factor(paste(j_group3, smolt, sep = "_")),
          j_group2b  = as.factor(paste(j_group2, smolt, sep = "_")),
-         j_group1b = as.factor(paste(j_group1, smolt, sep = "_")),
-         a_group4b  = as.factor(paste(a_group4, smolt, sep = "_")),
-         a_group3b  = as.factor(paste(a_group3, smolt, sep = "_")),
-         a_group2b  = as.factor(paste(a_group2, smolt, sep = "_")),
-         a_group1b = as.factor(paste(a_group1, smolt, sep = "_")),
-         a_group4c  = as.factor(paste(a_group4, run, sep = "_")),
-         a_group3c  = as.factor(paste(a_group3, run, sep = "_")),
-         a_group2c  = as.factor(paste(a_group2, run, sep = "_")),
-         a_group1c = as.factor(paste(a_group1, run, sep = "_"))
+         j_group1b = as.factor(paste(j_group1, smolt, sep = "_"))#,
+         # a_group4b  = as.factor(paste(a_group4, smolt, sep = "_")),
+         # a_group3b  = as.factor(paste(a_group3, smolt, sep = "_")),
+         # a_group2b  = as.factor(paste(a_group2, smolt, sep = "_")),
+         # a_group1b = as.factor(paste(a_group1, smolt, sep = "_")),
+         # a_group4c  = as.factor(paste(a_group4, run, sep = "_")),
+         # a_group3c  = as.factor(paste(a_group3, run, sep = "_")),
+         # a_group2c  = as.factor(paste(a_group2, run, sep = "_")),
+         # a_group1c = as.factor(paste(a_group1, run, sep = "_"))
          )
 
 saveRDS(by_dat,

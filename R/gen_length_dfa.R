@@ -23,7 +23,11 @@ gen <- gen_raw %>%
                           # "sog_streamtype"),
          #!a_group3 == "north_streamtype"
          ) %>% 
-  mutate(gen_z = as.numeric(scale(gen_length))) %>% 
+  group_by(stock) %>% 
+  mutate(gen_z = as.numeric(scale(gen_length)),
+         gen_scale = as.numeric(scale(gen_length, center = TRUE, 
+                                      scale = FALSE))) %>% 
+  ungroup() %>% 
   droplevels()
 
 map(colnames(gen)[c(13:20, 22:33)], function(x) {
@@ -68,6 +72,15 @@ gen %>%
   geom_histogram(aes(x = log(gen_length), fill = a_group)) +
   facet_wrap(~ fct_reorder(stock, as.numeric(a_group))) +
   theme(legend.position = "top") +
+  ggsidekick::theme_sleek()
+
+gen %>% 
+  ggplot(.) +
+  geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
+  geom_point(aes(x = year, y = gen_scale, fill = a_group2), shape = 24) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
+  theme(legend.position = "top") +
+  labs(y = "Mean Generation Length") +
   ggsidekick::theme_sleek()
 
 
@@ -163,12 +176,141 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab.RDS"))
 
-marss_aic_tab2 <- readRDS(here::here("data", "generation_fits",
-                                  "marss_aic_tab.RDS"))
+marss_aic_tab <- readRDS(here::here("data", "generation_fits", 
+                                    "marss_aic_tab.RDS"))
+
+
+## FIT ML DFA ------------------------------------------------------------------
+
+# specify other MARSS parameters
+m <- 2
+x0 <- A <- "zero"
+Q <- B <- "identity"
+R <- "diagonal and unequal"
+V0 <- diag(5, m)
+
+# z-score input matrix
+gen_mat_in <- zscore(gen_tbl$gen_mat[[2]])
+
+model.list <- list(A=A, x0=x0, Q=Q, B=B,
+                   R=R, m = m, V0=V0)
+fit <- MARSS(gen_mat_in, model = model.list, form = "dfa", z.score = TRUE,
+                    control=list(minit=1000, maxit=3000, trace=1,
+                                 conv.test.slope.tol=0.1))
+while(fit$convergence != 0){
+  fit <- MARSS(gen_mat_in,
+               model=fit.model,
+               form = "dfa", z.score = TRUE,
+               control=list(maxit=2000, trace=1),
+               inits=as.matrix(coef(fit)[1]),
+               method="BFGS")
+}
+
+
+estZ <- coef(fit, type = "matrix")$Z
+#retrieve rotated matrix
+invH <- if (ncol(estZ) > 1) {
+  varimax(estZ)$rotmat
+} else if (ncol(estZ) == 1) {
+  1
+}
+
+# Loadings
+rotZ <- (estZ %*% invH) %>% 
+  as.data.frame() %>% 
+  mutate(stock = row.names(gen_mat_in)) %>% 
+  left_join(., gen_tbl$names[[2]], by = "stock") %>% 
+  gather(key = "trend", value = "loading", -stock, -stock_name) %>% 
+  mutate(trend = as.numeric(as.factor(trend)),
+         stock = factor(stock, unique(stock))) %>% 
+  distinct() %>% 
+  mutate(stock = factor(stock, unique(stock))#,
+         # #invert T1 and T2 to make more intuitive
+         # loadingT = case_when(
+         #   trend %in% c("1", "2", "4") ~ (loading * -1), 
+         #   TRUE ~ loading
+         # )
+         )
+
+ggplot(rotZ, aes(x = stock, y = loading)) +
+  geom_col() +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  facet_wrap(~trend)
+
+rotTrends <- (solve(invH) %*% fit$states) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(year = gen_tbl$years[[2]]) %>% 
+  gather(key = "trend", value = "est", -year) %>% 
+  mutate(trend = as.numeric(as.factor(trend))) #%>% 
+  # mutate(estT = case_when(
+  #   trend %in% c("1", "2", "4") ~ (est * -1), 
+  #   TRUE ~ est
+  # ))
+
+ggplot(rotTrends, aes(x = year, y = est)) +
+  geom_line() +
+  ggsidekick::theme_sleek() +
+  geom_hline(yintercept = 0, colour = "red") +
+  facet_wrap(~trend)
+
+
+## empty list for results
+fits <- list()
+## extra stuff for var() calcs
+Ey <- MARSS:::MARSShatyt(fit)
+## model params
+mod_par <- coef(fit, type="matrix")
+ZZ <- mod_par$Z
+## number of obs ts
+nn <- dim(Ey$ytT)[1]
+## number of time steps
+TT <- dim(Ey$ytT)[2]
+## get the inverse of the rotation matrix
+H_inv <- varimax(ZZ)$rotmat
+## model expectation
+fits$ex <- ZZ %*% H_inv %*% fit$states + matrix(mod_par$A, nn, TT)
+## Var in model fits
+VtT <- MARSSkfss(fit)$VtT
+VV <- NULL
+for(tt in 1:TT) {
+  RZVZ <- mod_par$R - ZZ%*%VtT[,,tt]%*%t(ZZ)
+  SS <- Ey$yxtT[,,tt] - Ey$ytT[,tt,drop=FALSE] %*% t(fit$states[,tt,drop=FALSE])
+  VV <- cbind(VV,diag(RZVZ + SS%*%t(ZZ) + ZZ%*%t(SS)))    
+}
+SE <- sqrt(VV)
+## upper (1-alpha)% CI
+fits$up <- qnorm(1 - 0.05 / 2)*SE + fits$ex    
+## lower (1-alpha)% CI
+fits$lo <- qnorm(0.05 / 2)*SE + fits$ex
+
+temp_fits <- map2(fits, names(fits), function (x, y) {
+  rownames(x) <- gen_tbl$names[[2]]$stock
+  tt <- x %>% 
+    t() %>% 
+    as.data.frame %>% 
+    mutate(year =  gen_tbl$years[[2]], 
+           estimate = y) %>% 
+    gather(key = "stock", value = "value", -year, -estimate)
+}) %>% 
+  bind_rows() %>% 
+  left_join(., gen %>% select(stock, year, obs = gen_z), 
+            by = c("stock", "year")) %>% 
+  pivot_wider(., names_from = "estimate", values_from = "value") %>% 
+  glimpse()
+
+ggplot(temp_fits, aes(x = year)) +
+  geom_line(aes(y = ex)) +
+  geom_point(aes(y = obs), colour = "red") +
+  geom_ribbon(aes(ymin = lo, ymax = up), linetype = 2, 
+              alpha = 0.2) +
+  ggsidekick::theme_sleek() +
+  facet_wrap(~stock)
 
 
 
-## Bayesian DFA ----------------------------------------------------------------
+## FIT BAYESIAN DFA ------------------------------------------------------------
 
 library(bayesdfa)
 library(rstan)
@@ -192,12 +334,12 @@ make_mat <- function(x) {
 
 # number of stocks per group
 kept_grps <- stk_tbl %>%
-  group_by(a_group2) %>%
+  group_by(j_group3b) %>%
   tally() %>%
   filter(n > 2)
 
 #generate tbl by group
-gen_tbl <- tibble(group = levels(gen$a_group2)) %>% 
+gen_tbl <- tibble(group = levels(gen$j_group3b)) %>% 
   mutate(
     gen_mat = gen %>% 
       filter(!is.na(gen_length)) %>% 
@@ -215,31 +357,93 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
 })
 
 # specify one trend if there are less than 4 time series, otherwise 2
-n_trend_list <- ifelse(unlist(map(gen_tbl$gen_mat, nrow)) < 4, 1, 2) 
-
-dfa_fits <- furrr::future_map2(
-  gen_tbl$gen_mat,
-  n_trend_list,
-  .f = function (y, n_trend) {
-    fit_dfa(y = y, num_trends = n_trend, zscore = TRUE,
-            iter = 4000, chains = 4, thin = 1,
-            control = list(adapt_delta = 0.9, max_treedepth = 15))
-  },
-  .progress = TRUE,
-  .options = furrr::furrr_options(seed = TRUE)
-)
-
+# n_trend_list <- ifelse(unlist(map(gen_tbl$gen_mat, nrow)) < 4, 1, 2) 
+# 
+# dfa_fits <- furrr::future_map2(
+#   gen_tbl$gen_mat,
+#   n_trend_list,
+#   .f = function (y, n_trend) {
+#     fit_dfa(y = y, num_trends = n_trend, zscore = TRUE,
+#             iter = 4250, chains = 4, thin = 1,
+#             control = list(adapt_delta = 0.99, max_treedepth = 20))
+#   },
+#   .progress = TRUE,
+#   .options = furrr::furrr_options(seed = TRUE)
+# )
+# 
 # # save outputs
-map2(dfa_fits, gen_tbl$group, function(x, y) {
-  f_name <- paste(y, "bayesdfa.RDS", sep = "_")
-  saveRDS(x, here::here("data", "generation_fits", f_name))
-})
+# map2(dfa_fits, gen_tbl$group, function(x, y) {
+#   f_name <- paste(y, "bayesdfa.RDS", sep = "_")
+#   saveRDS(x, here::here("data", "generation_fits", f_name))
+# })
 
 # read outputs
 dfa_fits2 <- map(gen_tbl$group, function(y) {
   f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
+
+# check diagnostics
+library(bayesplot)
+posterior_m1 <- as.array(dfa_fits[[1]]$samples)
+lp_m1 <- log_posterior(dfa_fits[[1]]$model)
+np_m1 <- nuts_params(dfa_fits[[1]]$model)
+color_scheme_set("darkgray")
+mcmc_parcoord(posterior_m1, np = np_m1)
+
+p_m1 <- posterior_samples(dfa_fits[[1]]$model, add_chain = T) %>% 
+  select(-lp__, -iter, -contains("b_"), -contains("sd_"), 
+         -contains("Intercept_"))
+
+
+
+map(dfa_fits2, function (x) {
+  
+})
+
+
+m1 <- dfa_fits[[2]]$model
+
+tt <- find_dfa_trends(y = gen_tbl$gen_mat[[2]], kmin = 1, kmax = 2, 
+                      zscore = TRUE, iter = 4250, chains = 4, thin = 1, 
+                      convergence_threshold = 1.05, 
+                      variance = c("equal", "unequal"),
+                      control = list(adapt_delta = 0.99, max_treedepth = 20))
+tt1 <- fit_dfa(y = gen_tbl$gen_mat[[2]], num_trends = 1, 
+               est_correlation = FALSE,
+               zscore = FALSE, iter = 4000, chains = 4, thin = 1, 
+               control = list(adapt_delta = 0.99, max_treedepth = 20))
+tt2 <- fit_dfa(y = gen_tbl$gen_mat[[2]], num_trends = 2, 
+               est_correlation = FALSE,
+               zscore = FALSE, iter = 4250, chains = 4, thin = 1, 
+               control = list(adapt_delta = 0.99, max_treedepth = 20))
+
+
+neff_vals <- bayesplot::neff_ratio(tt2$model)
+bayesplot::mcmc_neff_data(neff_vals) %>% 
+  print(n = Inf)
+
+rhat_vals <- bayesplot::rhat(tt2$model)
+bayesplot::mcmc_rhat_data(rhat_vals) %>% 
+  print(n = Inf)
+
+n_eff_list <- map(dfa_fits2, function (x) {
+  neff_vals <- neff_ratio(x$model)
+  mcmc_neff_data(neff_vals) %>% 
+    ggplot(.) +
+    geom_histogram(aes(x = value))
+})
+
+plot_fitted_bayes(tt1, gen_tbl$names[[2]]$stock_name, gen_tbl$years[[2]])
+
+as.data.frame(summary(tt2$model)$summary) %>% 
+  filter(n_eff < 500)
+
+
+
+
+# PLOT BAYESIAN DFA ------------------------------------------------------------
+
 rot_list <- map(dfa_fits2, rotate_trends)
 
 # make plots 

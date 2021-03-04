@@ -155,8 +155,8 @@ saveRDS(by_dat,
         here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))
 
 groupings_table <- by_dat %>% 
-  select(stock, stock_name, smolt, run, juvenile_grouping = j_group3,
-         adult_grouping = a_group2) %>% 
+  select(stock, stock_name, smolt, run, region, j_group1:j_group4, 
+         a_group1:a_group4) %>% 
   distinct() %>% 
   arrange(juvenile_grouping)
 write.csv(groupings_table, here::here("data", "salmonData", 

@@ -15,11 +15,11 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
   #remove stocks that are aggregates of others on CP's advice
   # TST combines STI/TAK and AKS combines SSA and NSA
   filter(!stock %in% c("TST", "AKS"),
-         year < 2017#,
-         # !j_group3 %in% c("col_streamtype", "north_oceantype", 
-         #                  "sog_streamtype"),
-         # !a_group3 == "north_streamtype"
-         ) %>% 
+         year < 2017) %>%
+  group_by(stock) %>% 
+  mutate(M_z = as.numeric(scale(M)),
+         M_cent = as.numeric(scale(M, center = TRUE, scale = FALSE))) %>%
+  ungroup() %>% 
   droplevels()
   
 
@@ -27,7 +27,7 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
 stk_tbl <- surv %>% 
   ungroup() %>% 
   select(stock, stock_name, smolt, run, 
-         j_group1:j_group4, a_group1:a_group4, j_group4b:a_group1c) %>% 
+         j_group1:j_group4, a_group1:a_group4, j_group4b:j_group1b) %>% 
   distinct() 
 
 # subset of stocks for test run
@@ -87,33 +87,31 @@ z_models <- map(z_model_inputs, function (x) {
 })
 names(z_models) <- z_model_inputs
 
-q_models <- c(#"diagonal and equal", 
-  "diagonal and unequal", 
-  #"equalvarcov",
-  "unconstrained")
 
 U <- "unequal"
-R <- "diagonal and equal"
-A <- "scaling"
+R <- "diagonal and unequal"
+A <- "scaling" 
 B <- "identity"
 x0 <- "unequal"
 V0 <- "zero"
-model_constants <- list(U = U, R = R, A = A, B = B, x0 = x0, V0 = V0)
+Q <- "unconstrained"
+model_constants <- list(U = U, B = B, x0 = x0, V0 = V0, Q = Q)
 
 # function to fit models
-fit_marss <- function(z_name, z_in, q_in) {
-  fit_model <- c(list(Z = z_in, Q = q_in), model_constants)
+fit_marss <- function(z_name, z_in) {
+  fit_model <- c(list(Z = z_in), model_constants)
   fit <- MARSS(m_mat, model = fit_model,
-               silent = FALSE, control = list(minit = 100, maxit = 500))
+               silent = FALSE, 
+               control = list(minit = 100, maxit = 500, safe = TRUE))
   if (fit$convergence != 0){
     fit <- MARSS(m_mat, 
                  model = fit_model, 
-                 control = list(maxit=4000, trace=1),
+                 control = list(maxit = 4000, trace = 1),
                  inits = as.matrix(coef(fit)[1]),
                  method = "BFGS")
   }
   out <- data.frame(
-    H = z_name, Q = q_in, U = U,
+    H = z_name, U = U,
     logLik = fit$logLik, AICc = fit$AICc, num.param = fit$num.params,
     m = length(unique(z_in)),
     num.iter = fit$numIter, 
@@ -123,21 +121,17 @@ fit_marss <- function(z_name, z_in, q_in) {
 }
 
 # tibble containing model combinations
-mod_names = expand.grid(q = q_models, 
-                        z = names(z_models)) %>% 
-  mutate(name = paste(z, q, sep = "-"))
+mod_names = expand.grid(z = names(z_models)) %>% 
+  mutate(name = paste(z, sep = "-"))
 mod_tbl <- tibble(
   mod_name = mod_names$name,
   z_name = mod_names$z,
-  q_name = mod_names$q,
-  z_models = rep(z_models, each = length(unique(q_models))),
-  q_models = rep(q_models, length.out = length(mod_names$name))
+  z_models = z_models
 )
 
 # fit generic MARSS models
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
-                                      z_in = mod_tbl$z_models,
-                                      q_in = mod_tbl$q_models),
+                                      z_in = mod_tbl$z_models),
                      .f = fit_marss,
                      .progress = TRUE)
 
@@ -148,8 +142,6 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          rel_like = exp(-1 * deltaAICc / 2),
          aic_weight = rel_like / sum(rel_like))
 
-saveRDS(marss_list, here::here("data", "mortality_fits",
-                               "marss_selection_fits.RDS"))
 saveRDS(marss_aic_tab, here::here("data", "mortality_fits",
                                "marss_aic_tab.RDS"))
 
@@ -161,9 +153,6 @@ library(rstan)
 
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
-
-j_palette <- disco::disco("muted", n = length(unique(surv$j_group3b)))
-names(j_palette) <- unique(surv$j_group3b)
 
 #helper function to spread and label input matrices for bayesdfa
 make_mat <- function(x) {
@@ -183,15 +172,19 @@ kept_grps <- stk_tbl %>%
   filter(n > 2) %>% 
   droplevels()
 
-#generate tbl by group
-surv_tbl <- tibble(group = levels(surv$j_group3b)) %>% 
+#generate tbl by group with up to two trends
+surv_tbl2 <- tibble(group = levels(surv$j_group3b)) %>% 
   mutate(
+    m = 2,
     m_mat = surv %>% 
       filter(!is.na(M)) %>% 
       group_split(j_group3b) %>% 
       map(., make_mat)
   ) %>% 
   filter(group %in% kept_grps$j_group3b)
+surv_tbl1 <- surv_tbl2 %>% 
+  mutate(m = 1)
+surv_tbl <- rbind(surv_tbl2, surv_tbl1)
 surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),
@@ -201,19 +194,66 @@ surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
   as.numeric(colnames(x))
 })
 
-# fit bayesdfa
-dfa_fits <- furrr::future_map(surv_tbl$m_mat, .f = fit_dfa,
-                              num_trends = 2, zscore = TRUE,
-                              iter = 2500, chains = 4, thin = 1,
-                              control = list(adapt_delta = 0.92,
-                                             max_treedepth = 20),
-                              .progress = TRUE,
-                              seed = TRUE)
+m_mat_tibble <- tibble(group = levels(surv$j_group3b)) %>% 
+  mutate(
+    m_mat = surv %>% 
+      filter(!is.na(M)) %>% 
+      group_split(j_group3b) %>% 
+      map(., make_mat)
+  )
+surv_tbl <- expand.grid(group = levels(surv$j_group3b),
+                        m = c(1, 2),
+                        est_ar = c(0, 1),
+                        est_ma = c(0, 1),
+                        est_nu = c(0, 1)) %>% 
+  as_tibble() %>% 
+  left_join(., m_mat_tibble, by = "group") %>% 
+  filter(group %in% kept_grps$j_group3b,
+         group == "sog_oceantype",
+         m == "2")
 
-map2(dfa_fits, surv_tbl$group, function(x, y) {
-  f_name <- paste(y, "bayesdfa.RDS", sep = "_")
-  saveRDS(x, here::here("data", "mortality_fits", f_name))
-})
+test_fits <- furrr::future_pmap(
+    list(surv_tbl$m_mat, surv_tbl$m, surv_tbl$group, 
+         surv_tbl$est_ar, 
+         surv_tbl$est_ma, surv_tbl$est_nu),
+    .f = function(y, m, z, 
+                  est_ar, est_ma, est_nu) {
+      dfa_fits = fit_dfa(y = y, num_trends = m, estimate_nu = est_nu,
+                         estimate_trend_ar = est_ar, estimate_trend_ma = est_ma,
+                         zscore = FALSE, #only center don't scale
+                         iter = 2000, chains = 4, thin = 1,
+                         control = list(adapt_delta = 0.99, max_treedepth = 20))
+    },
+    .progress = TRUE,
+    .options = furrr::furrr_options(seed = TRUE)
+  )
+
+loo_list <- map(test_fits, bayesdfa::loo)
+surv_tbl$looic <- map(loo_list, function(x) x$estimates["looic", "Estimate"]) %>%
+  unlist()
+
+
+# fit bayesdfa
+furrr::future_pmap(
+  list(surv_tbl$m_mat, surv_tbl$m, surv_tbl$group),
+  .f = function(y, m, z) {
+    dfa_fits = fit_dfa(y = y, num_trends = m,
+                       zscore = FALSE, #only center don't scale
+                       iter = 2800, chains = 4, thin = 1,
+                       control = list(adapt_delta = 0.98, max_treedepth = 20))
+    f_name <- paste(z, 
+                    paste(m, "trend", sep = ""),
+                    "bayesdfa.RDA", sep = "_")
+    saveRDS(dfa_fits, here::here("data", "mortality_fits", f_name))
+  },
+  .progress = TRUE,
+  .options = furrr::furrr_options(seed = TRUE)
+)
+
+# map2(dfa_fits, surv_tbl$group, function(x, y) {
+#   f_name <- paste(y, "bayesdfa.RDS", sep = "_")
+#   saveRDS(x, here::here("data", "mortality_fits", f_name))
+# })
 
 # read outputs
 dfa_fits2 <- map(surv_tbl$group, function(y) {

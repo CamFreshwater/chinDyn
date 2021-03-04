@@ -16,7 +16,6 @@ future::plan(future::multisession, workers = ncores - 2)
 gen_raw <- readRDS(here::here("data", "salmonData", 
                               "cwt_indicator_surv_clean.RDS")) 
 
-#remove stocks with no gen_length data and rare life history types (n_stk < 2)
 gen <- gen_raw %>% 
   filter(!is.na(gen_length),
          #!j_group3 %in% c("col_streamtype", "north_oceantype", 
@@ -25,7 +24,7 @@ gen <- gen_raw %>%
   ) %>% 
   group_by(stock) %>% 
   mutate(gen_z = as.numeric(scale(gen_length)),
-         gen_scale = as.numeric(scale(gen_length, center = TRUE, 
+         gen_cent = as.numeric(scale(gen_length, center = TRUE, 
                                       scale = FALSE))) %>% 
   ungroup() %>% 
   droplevels()
@@ -79,7 +78,7 @@ gen %>%
 gen %>% 
   ggplot(.) +
   geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
-  geom_point(aes(x = year, y = gen_scale, fill = a_group2), shape = 24) +
+  geom_point(aes(x = year, y = gen_cent, fill = a_group2), shape = 24) +
   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
   theme(legend.position = "top") +
   labs(y = "Mean Generation Length") +
@@ -90,8 +89,8 @@ gen %>%
 
 # make matrix
 gen_mat1 <- gen %>% 
-  select(year, stock, gen_scale) %>% 
-  pivot_wider(names_from = stock, values_from = gen_scale) %>% 
+  select(year, stock, gen_length) %>% 
+  pivot_wider(names_from = stock, values_from = gen_length) %>% 
   arrange(year) %>% 
   as.matrix() %>% 
   t()
@@ -113,26 +112,25 @@ z_models <- map(z_model_inputs, function (x) {
 })
 names(z_models) <- z_model_inputs
 
-q_models <- c(#"diagonal and equal", 
-  "diagonal and unequal", 
-  #"equalvarcov",
-  "unconstrained")
+# q_models <- c("diagonal and unequal", "unconstrained")
+# a_models <- c("scaling", "zero")
 
 U <- "unequal"
-R <- "diagonal and equal"
+R <- "diagonal and unequal"
 A <- "scaling"
 B <- "identity"
 x0 <- "unequal"
 V0 <- "zero"
-model_constants <- list(U = U, R = R, A = A, B = B, x0 = x0, V0 = V0)
+Q <- 'unconstrained'
+model_constants <- list(U = U, B = B, x0 = x0, A = A, V0 = V0, Q = Q)
 
 # function to fit models
-fit_marss <- function(z_name, z_in, q_in) {
-  fit_model <- c(list(Z = z_in, Q = q_in), model_constants)
+fit_marss <- function(z_name, z_in) {
+  fit_model <- c(list(Z = z_in), model_constants)
   fit <- MARSS(gen_mat, model = fit_model,
                silent = FALSE, control = list(minit = 100, maxit = 500))
   #use BFGS except when equalvarcov (can't fit)
-  if (fit$convergence != 0 & q_in != "equalvarcov"){
+  if (fit$convergence != 0){
     fit <- MARSS(gen_mat, 
                  model = fit_model, 
                  control = list(maxit=4000, trace=1),
@@ -140,7 +138,7 @@ fit_marss <- function(z_name, z_in, q_in) {
                  method = "BFGS")
   }
   out <- data.frame(
-    H = z_name, Q = q_in, U = U,
+    H = z_name, U = U,
     logLik = fit$logLik, AICc = fit$AICc, num.param = fit$num.params,
     m = length(unique(z_in)),
     num.iter = fit$numIter, 
@@ -150,21 +148,17 @@ fit_marss <- function(z_name, z_in, q_in) {
 }
 
 # tibble containing model combinations
-mod_names = expand.grid(q = q_models, 
-                        z = names(z_models)) %>% 
-  mutate(name = paste(z, q, sep = "-"))
+mod_names = expand.grid(z = names(z_models)) %>% 
+  mutate(name = paste(z, sep = "-"))
 mod_tbl <- tibble(
   mod_name = mod_names$name,
   z_name = mod_names$z,
-  q_name = mod_names$q,
-  z_models = rep(z_models, each = length(unique(q_models))),
-  q_models = rep(q_models, length.out = length(mod_names$name))
+  z_models = z_models
 )
 
 # fit generic MARSS models
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
-                                      z_in = mod_tbl$z_models,
-                                      q_in = mod_tbl$q_models),
+                                      z_in = mod_tbl$z_models),
                                  .f = fit_marss,
                                  .progress = TRUE)
 
@@ -176,10 +170,14 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          aic_weight = rel_like / sum(rel_like))
 
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
-                                  "marss_aic_tab.RDS"))
+                                  "marss_aic_tab_scalingA_raw.RDS"))
 
-marss_aic_tab <- readRDS(here::here("data", "generation_fits", 
-                                    "marss_aic_tab.RDS"))
+# marss_aic_tab1 <- readRDS(here::here("data", "generation_fits", 
+#                                     "marss_aic_tab_scalingA_centered.RDS"))
+# marss_aic_tab2 <- readRDS(here::here("data", "generation_fits", 
+#                                      "marss_aic_tab_zeroA_centered.RDS"))
+# marss_aic_tab3 <- readRDS(here::here("data", "generation_fits", 
+#                                      "marss_aic_tab_scalingA_raw.RDS"))
 
 
 ## FIT BAYESIAN DFA ------------------------------------------------------------
@@ -284,7 +282,7 @@ map2(dfa_fits2, gen_tbl$group, function (x, y) {
   geom_histogram(aes(x = neff_ratio)) +
   facet_wrap(~group)
 
-map(dfa_fits2, function (x, y) {
+map(dfa_fits2, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
     filter(n_eff < 500 | Rhat > 1.05)
 })

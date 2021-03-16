@@ -89,8 +89,8 @@ gen %>%
 
 # make matrix
 gen_mat1 <- gen %>% 
-  select(year, stock, gen_length) %>% 
-  pivot_wider(names_from = stock, values_from = gen_length) %>% 
+  select(year, stock, gen_cent) %>% 
+  pivot_wider(names_from = stock, values_from = gen_cent) %>% 
   arrange(year) %>% 
   as.matrix() %>% 
   t()
@@ -170,9 +170,9 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          aic_weight = rel_like / sum(rel_like))
 
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
-                                  "marss_aic_tab_scalingA_raw.RDS"))
+                                  "marss_aic_tab_scalingA_centered.RDS"))
 
-# marss_aic_tab1 <- readRDS(here::here("data", "generation_fits", 
+# marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
 #                                     "marss_aic_tab_scalingA_centered.RDS"))
 # marss_aic_tab2 <- readRDS(here::here("data", "generation_fits", 
 #                                      "marss_aic_tab_zeroA_centered.RDS"))
@@ -223,35 +223,32 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
   as.numeric(colnames(x))
 })
 
-# specify one trend if there are less than 4 time series, otherwise 2
-# n_trend_list <- ifelse(unlist(map(gen_tbl$gen_mat, nrow)) < 4, 1, 2)
+# export
+saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl.RDS"))
 
-# dfa_fits <- furrr::future_map2(
-#   gen_tbl$gen_mat,
-#   n_trend_list,
-#   .f = function (y, n_trend) {
-#     fit_dfa(y = y, num_trends = 1, zscore = FALSE, 
-#             # zscore = TRUE,
-#             iter = 4250, chains = 4, thin = 1,
-#             control = list(adapt_delta = 0.99, max_treedepth = 20))
-#   },
-#   .progress = TRUE,
-#   .options = furrr::furrr_options(seed = TRUE)
-# )
-# 
-# # save outputs
-# map2(dfa_fits, gen_tbl$group, function(x, y) {
-#   f_name <- paste(y, "one-trend", "bayesdfa_c.RDS", sep = "_")
-#   saveRDS(x, here::here("data", "generation_fits", f_name))
-# })
+
+furrr::future_map2(
+  gen_tbl$gen_mat,
+  gen_tbl$group,
+  .f = function (y, group) {
+    fit <- fit_dfa(
+      y = y, num_trends = 2, zscore = FALSE, 
+      estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
+      # zscore = TRUE,
+      iter = 3000, chains = 4, thin = 1,
+      control = list(adapt_delta = 0.99, max_treedepth = 20)
+    )
+    f_name <- paste(group, "one-trend", "bayesdfa_c.RDS", sep = "_")
+    saveRDS(fit, here::here("data", "generation_fits", f_name))
+  },
+  .progress = TRUE,
+  .options = furrr::furrr_options(seed = TRUE)
+)
+ 
 
 # read outputs
-dfa_fits1 <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "one-trend", "bayesdfa_c.RDS", sep = "_") 
-  readRDS(here::here("data", "generation_fits", f_name))
-})
-dfa_fits2 <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "bayesdfa_c.RDS", sep = "_") 
+dfa_fits <- map(gen_tbl$group, function(y) {
+  f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
@@ -259,7 +256,7 @@ dfa_fits2 <- map(gen_tbl$group, function(y) {
 # model comparison
 # loo_tbl <- tibble(group = rep(gen_tbl$group, 2),
 #                   m = rep(c(2, 1), each = length(gen_tbl$group)),
-#                   fits = c(dfa_fits2, dfa_fits1))
+#                   fits = c(dfa_fits, dfa_fits1))
 # loo_tbl$loo <- map(loo_tbl$fits, bayesdfa::loo)
 # loo_tbl$looic <- map(loo_tbl$loo, function(x) x$estimates["looic", "Estimate"]) %>% 
 #   unlist()
@@ -271,9 +268,11 @@ dfa_fits2 <- map(gen_tbl$group, function(y) {
 #         here::here("data", "generation_fits", "gen_bayes_dfa_loo_tbl.RDS"))
 # two trend model heavily supported for all groups
 
+loo_tbl_out <- readRDS(here::here("data", "generation_fits", 
+                                  "gen_bayes_dfa_loo_tbl.RDS"))
 
 # check diagnostics
-map2(dfa_fits2, gen_tbl$group, function (x, y) {
+map2(dfa_fits, gen_tbl$group, function (x, y) {
   data.frame(neff_ratio = bayesplot::neff_ratio(x$model),
              group = y)
 }) %>% 
@@ -282,7 +281,7 @@ map2(dfa_fits2, gen_tbl$group, function (x, y) {
   geom_histogram(aes(x = neff_ratio)) +
   facet_wrap(~group)
 
-map(dfa_fits2, function (x) {
+map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
     filter(n_eff < 500 | Rhat > 1.05)
 })
@@ -290,18 +289,17 @@ map(dfa_fits2, function (x) {
 
 # PLOT BAYESIAN DFA ------------------------------------------------------------
 
-rot_list <- map(dfa_fits2, rotate_trends)
+rot_list <- map(dfa_fits, rotate_trends)
 
 # make plots 
 source(here::here("R", "functions", "plot_fitted_bayes.R"))
-fit_list <- pmap(list(dfa_fits2, gen_tbl$names, gen_tbl$years, gen_tbl$group), 
-                 function(x, names, obs_years, title) {
+fit_list <- pmap(list(dfa_fits, gen_tbl$names, gen_tbl$years), 
+                 function(x, names, obs_years) {
                    plot_fitted_bayes(x, names = names$stock_name, 
                                      years = obs_years) +
                      scale_x_continuous(breaks = c(1970, 1990, 2010), 
                                         limits = c(min(gen$year), 
-                                                   max(gen$year))) +
-                     labs(title = title)
+                                                   max(gen$year)))
                  })
 trend_list <- pmap(list(rot_list, gen_tbl$years, gen_tbl$group), 
                    function(x, obs_years, title) {
@@ -322,10 +320,27 @@ loadings_list <- pmap(list(rot_list, gen_tbl$names, gen_tbl$group),
                    }
 ) 
 
+#pad first and third element
+pad1 <- cowplot::plot_grid(fit_list[[1]], NULL, rel_widths = c(.885,.115),
+                           axis = "l", align = "v", nrow = 1)
+pad3 <- cowplot::plot_grid(fit_list[[3]], NULL, rel_widths = c(.64, .36),
+                           axis = "l", align = "v", nrow = 1)
+
+cowplot::plot_grid(pad1, fit_list[[2]], pad3, fit_list[[4]],
+                   fit_list[[5]],
+                   axis = c("r"), align = "v", 
+                   rel_heights=c(.125, .25, .125, .25, .25),
+                   ncol=1 
+                   ) #%>% 
+  # arrangeGrob(., 
+  #             bottom = textGrob("Month", 
+  #                               gp = gpar(col = "grey30", fontsize=10))) %>% 
+  # grid.arrange()
+
 
 fig_path <- paste("figs", "dfa", "bayes", "generation_length", sep = "/")
 
-pdf(here::here(fig_path, "fits_centered.pdf"))
+pdf(here::here(fig_path, "fits_centered2.pdf"))
 fit_list
 dev.off()
 
@@ -368,9 +383,71 @@ trends <- rot_dat %>%
 png(here::here("figs", "dfa", "bayes", "generation_length", "trend_all_groups.png"), 
     height = 5.5, width = 7.5, res = 300, units = "in")
 trends
-dev.off()
+  dev.off()
 
+  
+make_pred_f <- function(modelfit, names, years, group) {
+  n_ts <- dim(modelfit$data)[1]
+  n_years <- dim(modelfit$data)[2]
+  if (is.null(years)) {
+    years <- seq_len(n_years)
+  }
+  pred <- predicted(modelfit)
+  df_pred1 <- data.frame(ID = rep(seq_len(n_ts), n_years), 
+                         group = group,
+                         Time = sort(rep(years, 
+                                         n_ts)), 
+                         mean = c(t(apply(pred, c(3, 4), mean))), 
+                         lo = c(t(apply(pred, c(3, 4), quantile, 0.025))), 
+                         hi = c(t(apply(pred, c(3, 4), quantile, 0.975)))
+  ) 
+  df_obs <- data.frame(ID = rep(seq_len(n_ts), n_years), 
+                       Time = sort(rep(years, 
+                                       n_ts)), 
+                       obs_y = c(modelfit$data)) %>% 
+    filter(!is.na(obs_y))
+  df_pred <- df_pred1 %>% 
+    left_join(., 
+              df_pred1 %>%
+                filter(Time == max(Time)) %>% 
+                select(ID, last_mean = mean), 
+              by = "ID") %>%
+    left_join(., df_obs, by = c("ID", "Time"))
+  
+  if (!is.null(names$stock_name)) {
+    df_pred$ID <- names$stock_name[df_pred$ID]
+  }
+  
+  df_pred
+}
+  
+make_pred_f(dfa_fits[[1]], gen_tbl$names[[1]]$stock_name, gen_tbl$years[[1]],
+            gen_tbl$group[1])
 
+pred_in <-  pmap(list(dfa_fits[1:2], gen_tbl[1:2, ]$names, gen_tbl[1:2, ]$years, 
+                        gen_tbl$group[1:2]), .f = make_pred_f) %>% 
+  bind_rows()
+  
+y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
+
+ggplot(pred_in, aes_string(x = "Time", y = "mean")) + 
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", fill = "last_mean"), 
+              alpha = 0.4) + 
+  geom_line(aes_string(colour = "last_mean"), size = 1.25) +
+  scale_fill_distiller(type = "div", limit = c(-1, 1), direction = 1,
+                       palette = "PuOr", "") +
+  scale_colour_distiller(type = "div", limit = c(-1, 1), direction = 1,
+                         palette = "PuOr", "") +
+  geom_point(aes_string(x = "Time", y = "obs_y"),  
+             size = 1, alpha = 0.6, shape = 21, fill = "black") + 
+  facet_grid(rows = vars(group), cols = vars(ID)) + #fct_reorder(as.factor(ID), last_mean)) +
+  # scale_y_continuous(names =)
+  # xlab("Brood Year") + ylab("") +
+  ggsidekick::theme_sleek() +
+  coord_cartesian(y = y_lims) +
+  theme(#axis.text = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "none")
 
 
 ## FIT ML DFA ------------------------------------------------------------------

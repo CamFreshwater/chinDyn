@@ -18,7 +18,9 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
          year < 2017) %>%
   group_by(stock) %>% 
   mutate(M_z = as.numeric(scale(M)),
-         M_cent = as.numeric(scale(M, center = TRUE, scale = FALSE))) %>%
+         M_cent = as.numeric(scale(M, center = TRUE, scale = FALSE)),
+         gen_cent = as.numeric(scale(gen_length, center = TRUE, 
+                                     scale = FALSE))) %>%
   ungroup() %>% 
   droplevels()
   
@@ -57,6 +59,28 @@ surv %>%
   facet_wrap(~ fct_reorder(stock, as.numeric(j_group3))) +
   theme(legend.position = "top") +
   labs(y = "M")
+
+library(mgcv)
+s_mod <- gam(gen_cent ~ s(M, m = 2, bs = "tp", k = 4) + 
+               s(M, by = stock, m = 1, bs = "tp", k = 4) + 
+               s(stock, bs = "re"), 
+             data = surv, method = "REML")
+
+new_dat <- expand.grid(
+  M = seq(min(surv$M, na.rm = T), max(surv$M, na.rm = T), n = 100))
+
+# fixed effects predictions
+preds <- predict(s_mod, new_dat, se.fit = TRUE, 
+                 exclude = excl_pars[grepl("stock", excl_pars)],
+                 newdata.guaranteed = TRUE)
+new_dat2 <- new_dat %>% 
+  mutate(link_fit = as.numeric(preds$fit),
+         link_se = as.numeric(preds$se.fit),
+         pred_surv = link_fit,
+         pred_surv_lo = link_fit + (qnorm(0.025) * link_se),
+         pred_surv_up = link_fit + (qnorm(0.975) * link_se)
+  )
+
 
 
 ## MARSS MODEL RUNS ------------------------------------------------------------
@@ -144,6 +168,8 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
 
 saveRDS(marss_aic_tab, here::here("data", "mortality_fits",
                                "marss_aic_tab.RDS"))
+marss_aic_tab <- readRDS(here::here("data", "mortality_fits",
+                                  "marss_aic_tab.RDS"))
 
 
 ## Bayesian DFA ----------------------------------------------------------------
@@ -173,18 +199,14 @@ kept_grps <- stk_tbl %>%
   droplevels()
 
 #generate tbl by group with up to two trends
-surv_tbl2 <- tibble(group = levels(surv$j_group3b)) %>% 
+surv_tbl <- tibble(group = levels(surv$j_group3b)) %>% 
   mutate(
-    m = 2,
     m_mat = surv %>% 
       filter(!is.na(M)) %>% 
       group_split(j_group3b) %>% 
       map(., make_mat)
   ) %>% 
   filter(group %in% kept_grps$j_group3b)
-surv_tbl1 <- surv_tbl2 %>% 
-  mutate(m = 1)
-surv_tbl <- rbind(surv_tbl2, surv_tbl1)
 surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),
@@ -194,84 +216,89 @@ surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
   as.numeric(colnames(x))
 })
 
-m_mat_tibble <- tibble(group = levels(surv$j_group3b)) %>% 
-  mutate(
-    m_mat = surv %>% 
-      filter(!is.na(M)) %>% 
-      group_split(j_group3b) %>% 
-      map(., make_mat)
-  )
-surv_tbl <- expand.grid(group = levels(surv$j_group3b),
-                        m = c(1, 2),
-                        est_ar = c(0, 1),
-                        est_ma = c(0, 1),
-                        est_nu = c(0, 1)) %>% 
-  as_tibble() %>% 
-  left_join(., m_mat_tibble, by = "group") %>% 
-  filter(group %in% kept_grps$j_group3b,
-         group == "sog_oceantype",
-         m == "2")
-
-test_fits <- furrr::future_pmap(
-    list(surv_tbl$m_mat, surv_tbl$m, surv_tbl$group, 
-         surv_tbl$est_ar, 
-         surv_tbl$est_ma, surv_tbl$est_nu),
-    .f = function(y, m, z, 
-                  est_ar, est_ma, est_nu) {
-      dfa_fits = fit_dfa(y = y, num_trends = m, estimate_nu = est_nu,
-                         estimate_trend_ar = est_ar, estimate_trend_ma = est_ma,
-                         zscore = FALSE, #only center don't scale
-                         iter = 2000, chains = 4, thin = 1,
-                         control = list(adapt_delta = 0.99, max_treedepth = 20))
-    },
-    .progress = TRUE,
-    .options = furrr::furrr_options(seed = TRUE)
-  )
-
-loo_list <- map(test_fits, bayesdfa::loo)
-surv_tbl$looic <- map(loo_list, function(x) x$estimates["looic", "Estimate"]) %>%
-  unlist()
+#export
+# saveRDS(surv_tbl, here::here("data", "mortality_fits", "surv_tbl.RDS"))
 
 
-# fit bayesdfa
-furrr::future_pmap(
-  list(surv_tbl$m_mat, surv_tbl$m, surv_tbl$group),
-  .f = function(y, m, z) {
-    dfa_fits = fit_dfa(y = y, num_trends = m,
-                       zscore = FALSE, #only center don't scale
-                       iter = 2800, chains = 4, thin = 1,
-                       control = list(adapt_delta = 0.98, max_treedepth = 20))
-    f_name <- paste(z, 
-                    paste(m, "trend", sep = ""),
-                    "bayesdfa.RDA", sep = "_")
-    saveRDS(dfa_fits, here::here("data", "mortality_fits", f_name))
+furrr::future_map2(
+  surv_tbl$m_mat,
+  surv_tbl$group,
+  .f = function (y, group) {
+    fit <- fit_dfa(
+      y = y, num_trends = 2, zscore = FALSE, 
+      estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
+      iter = 4000, chains = 4, thin = 1,
+      control = list(adapt_delta = 0.99, max_treedepth = 20)
+    )
+    f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+    saveRDS(fit, here::here("data", "mortality_fits", f_name))
   },
   .progress = TRUE,
   .options = furrr::furrr_options(seed = TRUE)
 )
 
-# map2(dfa_fits, surv_tbl$group, function(x, y) {
-#   f_name <- paste(y, "bayesdfa.RDS", sep = "_")
-#   saveRDS(x, here::here("data", "mortality_fits", f_name))
-# })
+
+# fit <- fit_dfa(
+#   y = surv_tbl$m_mat[[2]], num_trends = 2, zscore = FALSE, 
+#   estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
+#   iter = 8000, chains = 4, thin = 1, warmup = 2000,
+#   control = list(adapt_delta = 0.99, max_treedepth = 20)
+# )
+# f_name <- paste(surv_tbl[2, ]$group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+# saveRDS(fit, here::here("data", "mortality_fits", f_name))
+
 
 # read outputs
-dfa_fits2 <- map(surv_tbl$group, function(y) {
-  f_name <- paste(y, "bayesdfa.RDS", sep = "_") 
+dfa_fits <- map(surv_tbl$group, function(y) {
+  f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "mortality_fits", f_name))
 })
-rot_list <- map(dfa_fits2, rotate_trends)
+
+
+# check diagnostics
+map2(dfa_fits, surv_tbl$group, function (x, y) {
+  data.frame(neff_ratio = bayesplot::neff_ratio(x$model),
+             group = y)
+}) %>% 
+  bind_rows()  %>% 
+  ggplot(.) +
+  geom_histogram(aes(x = neff_ratio)) +
+  facet_wrap(~group)
+
+map(dfa_fits, function (x) {
+  as.data.frame(summary(x$model)$summary) %>% 
+    filter(n_eff < 500 | Rhat > 1.05)
+})
+
+
+## MAKE PLOTS ------------------------------------------------------------------
+
+source(here::here("R", "functions", "plot_fitted_bayes.R"))
+
+
+# predicted fits
+pred_list <- pmap(list(dfa_fits, surv_tbl$names, surv_tbl$years), 
+                  fitted_preds,
+                  descend_order = TRUE)
+# scale colors based on observed range over entire dataset
+col_ramp_in <- pred_list %>% 
+  bind_rows() %>% 
+  pull(last_mean) %>% 
+  range()
+
+fit_list <- map(pred_list, plot_fitted_pred, col_ramp = col_ramp_in, facet_col = 5)
+
+mort_fit_panel <- cowplot::plot_grid(
+  fit_list[[1]], fit_list[[2]], fit_list[[3]], fit_list[[4]], fit_list[[5]],
+  axis = c("r"), align = "v", 
+  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  ncol=1 
+)
+
+
+rot_list <- map(dfa_fits, rotate_trends)
 
 # make plots 
-source(here::here("R", "functions", "plot_fitted_bayes.R"))
-fit_list <- pmap(list(dfa_fits2, surv_tbl$names, surv_tbl$years), 
-                 function(x, names, obs_years) {
-                   plot_fitted_bayes(x, names = names$stock_name, 
-                                     years = obs_years) +
-                     scale_x_continuous(breaks = c(1970, 1990, 2010), 
-                                        limits = c(min(surv$year), 
-                                                   max(surv$year)))
-                 })
 trend_list <- pmap(list(rot_list, surv_tbl$years), 
                    function(x, obs_years) {
                      plot_trends(x, years = obs_years) +
@@ -280,6 +307,8 @@ trend_list <- pmap(list(rot_list, surv_tbl$years),
                                                      max(surv$year)))
                    }
 )
+
+
 loadings_list <- pmap(list(rot_list, surv_tbl$names), 
                       function(x, names) {
                         plot_loadings(x, names = names$stock_name) +
@@ -378,3 +407,44 @@ dev.off()
 #                method="BFGS")
 # }
 
+
+
+## MODEL SELCTION FOR DFA STRUCTURE
+
+m_mat_tibble <- tibble(group = levels(surv$j_group3b)) %>%
+  mutate(
+    m_mat = surv %>%
+      filter(!is.na(M)) %>%
+      group_split(j_group3b) %>%
+      map(., make_mat)
+  )
+surv_tbl <- expand.grid(group = levels(surv$j_group3b),
+                        m = c(1, 2),
+                        est_ar = c(0, 1),
+                        est_ma = c(0, 1),
+                        est_nu = c(0, 1)) %>%
+  as_tibble() %>%
+  left_join(., m_mat_tibble, by = "group") %>%
+  filter(group %in% kept_grps$j_group3b,
+         group == "puget_oceantype",
+         m == "2")
+
+test_fits <- furrr::future_pmap(
+    list(surv_tbl$m_mat, surv_tbl$m, surv_tbl$group,
+         surv_tbl$est_ar,
+         surv_tbl$est_ma, surv_tbl$est_nu),
+    .f = function(y, m, z,
+                  est_ar, est_ma, est_nu) {
+      dfa_fits = fit_dfa(y = y, num_trends = m, estimate_nu = est_nu,
+                         estimate_trend_ar = est_ar, estimate_trend_ma = est_ma,
+                         zscore = FALSE, #only center don't scale
+                         iter = 4000, chains = 4, thin = 1,
+                         control = list(adapt_delta = 0.99, max_treedepth = 20))
+    },
+    .progress = TRUE,
+    .options = furrr::furrr_options(seed = TRUE)
+  )
+
+loo_list <- map(test_fits, bayesdfa::loo)
+surv_tbl$looic <- map(loo_list, function(x) x$estimates["looic", "Estimate"]) %>%
+  unlist()

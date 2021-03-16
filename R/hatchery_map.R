@@ -5,11 +5,7 @@ library(ggmap)
 library(mapdata)
 
 
-stockDat <- read.csv("C:/github/chinDyn/data/salmonData/CLEANcwtInd_age2SR_OEY.csv", 
-         stringsAsFactors = FALSE) %>% 
-  select(-OEY, - surv) %>% 
-  distinct() %>% 
-  filter(!lat == "na") %>% 
+stockDat  <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) %>% 
   mutate(lat = as.numeric(lat),
          long = as.numeric(long),
          aggReg = case_when(

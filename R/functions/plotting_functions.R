@@ -42,31 +42,43 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
 
 
 ## function to plot fits (based on bayesdfa::plot_fitted)
-plot_fitted_pred <- function(df_pred, col_ramp = c(-1, 1), 
-                             col_ramp_direction = -1, facet_col = 8) {  
+plot_fitted_pred <- function(df_pred, print_x = TRUE, col_ramp = c(-1, 1), 
+                             col_ramp_direction = -1, facet_col = 8,
+                             leg_name = NULL) {  
   #limits for y axis
   y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
+  x_int <- max(df_pred$Time, na.rm = T) - 5
   
-  ggplot(df_pred, aes_string(x = "Time", y = "mean")) + 
+  p <- ggplot(df_pred, aes_string(x = "Time", y = "mean")) + 
     geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "last_mean",
                            fill = "last_mean"), 
-                alpha = 0.4) + 
+                alpha = 0.6) + 
     geom_line(aes_string(colour = "last_mean"), size = 1.25) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_distiller(type = "div", limit = col_ramp, 
                          direction = col_ramp_direction, 
-                         palette = "Spectral", "") +
+                         palette = "RdYlBu", name = leg_name) +
     scale_colour_distiller(type = "div", limit = col_ramp, 
                            direction = col_ramp_direction, 
-                           palette = "Spectral", "") +
+                           palette = "RdYlBu", name = leg_name) +
+    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     geom_point(aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
     # facet_wrap(~fct_reorder(as.factor(ID), last_mean, .desc = TRUE), ncol = 8) +
     facet_wrap(~ID, ncol = facet_col) +
     ggsidekick::theme_sleek() +
+    # xlim(c(1972, 2016)) +
     coord_cartesian(y = y_lims) +
-    theme(axis.text.x = element_blank(),
-          axis.title = element_blank(),
+    theme(axis.title = element_blank(),
           legend.position = "none")
+  
+  if (print_x == FALSE) {
+    p <- p + 
+      theme(axis.text.x = element_blank())
+  }
+  
+  return(p)
 }
 
 
@@ -118,6 +130,7 @@ plot_one_trend <- function(trend_dat) {
     geom_hline(yintercept = 0, lty = 2) +
     xlab("Brood Year") + 
     ylab("Estimated Trend") +
+    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     facet_grid(group ~ var) +
     ggsidekick::theme_sleek() + 
     theme(legend.position = "top")
@@ -135,7 +148,8 @@ prep_loadings <- function (rotated_modelfit, names, group, conf_level = 0.95) {
     group_by(name, trend) %>% 
     mutate(q_lower = sum(value < 0) / length(value), 
            q_upper = 1 - q_lower, 
-           prob_diff0 = max(q_lower, q_upper)) #%>% 
+           prob_diff0 = max(q_lower, q_upper),
+           group = group) #%>% 
     # group_by(name, trend) %>% 
     # summarize(lower = quantile(value, probs = (1 - conf_level) / 2), 
     #           upper = quantile(value, probs = 1 - (1 - conf_level) / 2),

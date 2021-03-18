@@ -5,9 +5,8 @@
 
 library(tidyverse)
 library(bayesdfa)
-
-# plotting functions
-source(here::here("R", "functions", "plot_fitted_bayes.R"))
+library(grid)
+library(gridExtra)
 
 # import juvenile mortality data
 surv_tbl <- readRDS(here::here("data", "mortality_fits", "surv_tbl.RDS"))
@@ -28,37 +27,54 @@ gen_dfa <- map(gen_tbl$group, function(y) {
 
 # PREDICTED FITS ---------------------------------------------------------------
 
+# plotting functions
+source(here::here("R", "functions", "plotting_functions.R"))
+
 # predicted survival fits
 surv_pred_list <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years), 
                   fitted_preds,
                   descend_order = TRUE)
 # scale colors based on observed range over entire dataset
-col_ramp_in <- surv_pred_list %>% 
+col_ramp_surv <- surv_pred_list %>% 
   bind_rows() %>% 
   pull(last_mean) %>% 
-  range()
+  range() %>% 
+  abs() %>% 
+  max() * c(-1, 1)
 
-surv_fit <- map(surv_pred_list, plot_fitted_pred, 
-                col_ramp = col_ramp_in, facet_col = 5)
+# make one version with a legend to use in panel fig
+leg_plot <- plot_fitted_pred(surv_pred_list[[1]], col_ramp = col_ramp_surv, 
+                             facet_col = 5, 
+                             leg_name = "5-year Mean of Centered Juvenile M") +
+  theme(legend.position = "top")  
+
+#remove x_axes except for last plot
+x_axes <- c(F, F, F, F, T)
+
+surv_fit <- map2(surv_pred_list, x_axes, .f = function(x, y) {
+  plot_fitted_pred(x, print_x = y,
+                   col_ramp = col_ramp_surv, facet_col = 5) +
+    scale_y_continuous(labels = scales::number_format(accuracy = 1))
+})
+
 
 surv_fit_panel <- cowplot::plot_grid(
   surv_fit[[1]], surv_fit[[2]], surv_fit[[3]], surv_fit[[4]], surv_fit[[5]],
   axis = c("r"), align = "v", 
   rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
   ncol=1 
-)
+) %>% 
+  arrangeGrob(., 
+              left = textGrob("Centered Instantaneous Juvenile Mortality Rate", 
+                                gp = gpar(col = "grey30", fontsize = 12),
+                              rot = 90)) %>% 
+  grid.arrange()
 
-# histogram of last_means
-last_means <- map2(surv_pred_list, surv_tbl$group, function (x, y) {
-  x %>% 
-    select(ID, last_mean) %>% 
-    distinct() %>% 
-    mutate(group = y)
-}) %>% 
-  bind_rows() %>% 
-  glimpse()
-hist(last_means$last_mean)
-nrow(last_means[which(last_means$last_mean > 0), ]) / nrow(last_means)
+surv_fit_panel2 <- cowplot::plot_grid(
+  cowplot::get_legend(leg_plot),
+  surv_fit_panel,
+  ncol=1, rel_heights=c(.05, .95)
+)
 
 
 # predicted gen length fits
@@ -69,21 +85,44 @@ gen_pred_list <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years),
 col_ramp_gen <- gen_pred_list %>% 
   bind_rows() %>% 
   pull(last_mean) %>% 
-  range()
+  range() %>% 
+  abs() %>% 
+  max() * c(-1, 1)
 
-gen_fit <- map(gen_pred_list, plot_fitted_pred, 
-                col_ramp = col_ramp_gen, facet_col = 5, col_ramp_direction = 1)
+gen_fit <- map2(gen_pred_list, x_axes, .f = function(x, y) {
+  plot_fitted_pred(x, print_x = y,
+                   col_ramp = col_ramp_gen, facet_col = 5, 
+                   col_ramp_direction = 1) +
+    scale_y_continuous(labels = scales::number_format(accuracy = 0.1))
+})
 
 gen_fit_panel <- cowplot::plot_grid(
   gen_fit[[1]], gen_fit[[2]], gen_fit[[3]], gen_fit[[4]], gen_fit[[5]],
   axis = c("r"), align = "v", 
   rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
-  ncol=1 
+  ncol=1
+) %>% 
+  arrangeGrob(., 
+              left = textGrob("Centered Mean Age", 
+                              gp = gpar(col = "grey30", fontsize = 12),
+                              rot = 90)) %>% 
+  grid.arrange()
+
+# make one version with a legend to use in panel fig
+leg_plot_g <- plot_fitted_pred(gen_pred_list[[1]], col_ramp = col_ramp_surv, 
+                             facet_col = 5, col_ramp_direction = 1,
+                             leg_name = "5-year Mean of Centered Mean Age") +
+  theme(legend.position = "top")  
+
+gen_fit_panel2 <- cowplot::plot_grid(
+  cowplot::get_legend(leg_plot_g),
+  gen_fit_panel,
+  ncol=1, rel_heights=c(.05, .95)
 )
 
 pdf(here::here("figs", "fits_both_vars.pdf"), height = 12, width = 8)
-surv_fit_panel
-gen_fit_panel
+surv_fit_panel2
+gen_fit_panel2
 dev.off()
 
 
@@ -95,12 +134,15 @@ gen_prob <- map2(gen_dfa, gen_tbl$names, final_prob, n_years = 5) %>%
   mutate(
     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
   )
+sum(gen_prob$thresh) / nrow(gen_prob)
 
 surv_prob <- map2(surv_dfa, surv_tbl$names, final_prob, n_years = 5) %>% 
   bind_rows() %>% 
   mutate(
     thresh = ifelse(prob_above_0 > 0.90, 1, 0)
   )
+sum(surv_prob$thresh) / nrow(surv_prob)
+
 
 
 # ESTIMATED TRENDS -------------------------------------------------------------
@@ -120,7 +162,7 @@ gen_trends <- pmap(
   .f = prep_trends
 ) %>% 
   bind_rows() %>% 
-  mutate(var = "Generation Length")
+  mutate(var = "Mean Age")
 
 trends <- rbind(surv_trends, gen_trends) %>% 
   mutate(var = as.factor(var),
@@ -132,7 +174,7 @@ trends <- rbind(surv_trends, gen_trends) %>%
          group = fct_relevel(as.factor(group), "north_streamtype", 
                              "sog_oceantype", "puget_streamtype", 
                              "puget_oceantype", "south_oceantype"),
-         var = fct_relevel(as.factor(var), "Juvenile M", "Generation Length"))
+         var = fct_relevel(as.factor(var), "Juvenile M", "Mean Age"))
 
 
 pdf(here::here("figs", "trends_both_vars.pdf"), height = 7, width = 4)
@@ -141,34 +183,55 @@ plot_one_trend(trends %>% filter(trend == "Trend 2"))
 dev.off()
 
 
-
 # ESTIMATED LOADINGS -----------------------------------------------------------
 
-gen_loadings <- map2(rot_gen, gen_tbl$names, prep_loadings) %>% 
-  bind_rows() %>% 
-  glimpse()
+fig_labs <- c("North\nYearling", "Puget\nSubyearling", "Puget\nYearling", 
+              "SoG\nSubyearling", "South\nSubyearling")
 
+gen_load_dat <- pmap(list(rot_gen, gen_tbl$names, gen_tbl$group),
+                      .f = prep_loadings) 
 
+load_plot_f <- function(x, group = NULL, guides = FALSE) {
+  p <- ggplot(x, aes_string(x = "name", y = "value", fill = "trend", 
+                       alpha = "prob_diff0")) + 
+    scale_alpha_continuous(name = "Probability\nDifferent") +
+    scale_fill_discrete(name = "") +
+    geom_violin(color = NA, position = position_dodge(0.3)) + 
+    geom_hline(yintercept = 0, lty = 2) + 
+    coord_flip() + 
+    xlab("Time Series") + 
+    ylab("Loading") +
+    scale_y_continuous(limits = c(-0.5, 0.5), expand = c(0, 0)) +
+    ggsidekick::theme_sleek() +
+    guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
+    theme(axis.text.y = element_text(angle = 45, vjust = -1, size = 7),
+          axis.title = element_blank()) +
+    annotate("text", x = Inf, y = -Inf, label = group, hjust = -0.05, 
+             vjust = 1, size = 3.5)
+  
+  if (guides == FALSE) {
+    p <- p +
+      theme(legend.position = "none")
+  }
+  
+  return(p)
+}
 
-ggplot(tt, aes_string(x = "name", y = "value", fill = "trend", 
-                     alpha = "prob_diff0")) + 
-  scale_alpha_continuous(name = "Probability\nDifferent") +
-  scale_fill_discrete(name = "") +
-  geom_violin(color = NA, position = position_dodge(0.3)) + 
-  geom_hline(yintercept = 0, lty = 2) + 
-  coord_flip() + 
-  xlab("Time Series") + 
-  ylab("Loading") +
-  lims(y = c(-0.75, 0.75)) +
-  ggsidekick::theme_sleek() +
-  guides(alpha = guide_legend(override.aes = list(fill = "grey")))
+#make list of figures
+gen_load <- map2(gen_load_dat, fig_labs, load_plot_f, guides = FALSE)
 
-loadings_list <- pmap(list(rot_list, gen_tbl$names, gen_tbl$group), 
-                      function(x, names, title) {
-                        plot_loadings(x, names = names$stock_name) +
-                          lims(y = c(-1, 1)) +
-                          labs(title = title) +
-                          theme(axis.text.y = element_text(angle = 45, 
-                                                           vjust = -1))
-                      }
-) 
+# make single figure to steal legend from
+leg_gen_load <- load_plot_f(gen_load_dat[[1]], guides = TRUE)
+
+# gen_load_panel <- 
+  cowplot::plot_grid(
+  gen_load[[1]], gen_load[[2]], gen_load[[3]], gen_load[[4]], gen_load[[5]],
+  cowplot::get_legend(leg_gen_load),
+  axis = c("r"), align = "v", 
+  # rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  nrow = 2
+)# %>% 
+  arrangeGrob(., 
+              bottom = textGrob("Loadings",
+                                gp = gpar(col = "grey30", fontsize = 12))) %>% 
+  grid.arrange()

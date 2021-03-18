@@ -25,6 +25,9 @@ gen_dfa <- map(gen_tbl$group, function(y) {
 })
 
 
+group_labs <- c("North\nYearling", "Puget\nSubyearling", "Puget\nYearling", 
+              "SoG\nSubyearling", "South\nSubyearling")
+
 # PREDICTED FITS ---------------------------------------------------------------
 
 # plotting functions
@@ -144,13 +147,79 @@ surv_prob <- map2(surv_dfa, surv_tbl$names, final_prob, n_years = 5) %>%
 sum(surv_prob$thresh) / nrow(surv_prob)
 
 
+# ESTIMATES OF PARS ------------------------------------------------------------
+
+# pull pars
+pull_par_f <- function(x, group) {
+  as_tibble(x$samples, rownames = "iterations") %>% 
+    pivot_longer(cols = -iterations,
+                 names_sep = "\\.",
+                 names_to = c("chains", "parameter")) %>% 
+    filter(grepl("psi", parameter) | grepl("phi", parameter) |
+             grepl("nu", parameter)) %>% 
+    mutate(group = group,
+           trend = case_when(
+             grepl("nu", parameter) ~ "Trend 1 and 2",
+             grepl("[1]", parameter) ~ "Trend 1",
+             grepl("[2]", parameter) ~ "Trend 2"
+           ),
+           parameter = case_when(
+             grepl("psi", parameter) ~ "psi",
+             grepl("phi", parameter) ~ "phi",
+             grepl("nu", parameter) ~ "nu",
+             TRUE ~ parameter
+           ),
+           y_int = ifelse(parameter == "nu", 10, 0))
+}
+
+# survival pars
+surv_pars <- map2(surv_dfa, group_labs, pull_par_f) %>% 
+  bind_rows() 
+
+surv_par_plot <-  ggplot(surv_pars, 
+                         aes(x = group, y = value, fill = trend)) + 
+  scale_fill_brewer(name = "", palette = "Set2") +
+  geom_violin(position = position_dodge(0.3),
+              draw_quantiles = 0.5) + 
+  geom_hline(aes(yintercept = y_int), lty = 2) + 
+  coord_flip() + 
+  ylab("Posterior Estimate") +
+  xlab("Stock Grouping") +
+  # scale_y_continuous(expand = c(0, 0)) +
+  ggsidekick::theme_sleek() +
+  guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
+  facet_wrap(~parameter, scales = "free_x")
+
+
+gen_pars <- map2(gen_dfa, group_labs, pull_par_f) %>% 
+  bind_rows() 
+
+gen_par_plot <- ggplot(gen_pars, 
+                       aes(x = group, y = value, fill = trend)) + 
+  scale_fill_brewer(name = "", palette = "Set2") +
+  geom_violin(position = position_dodge(0.3),
+              draw_quantiles = 0.5) + 
+  geom_hline(aes(yintercept = y_int), lty = 2) + 
+  coord_flip() + 
+  ylab("Posterior Estimate") +
+  xlab("Stock Grouping") +
+  # scale_y_continuous(expand = c(0, 0)) +
+  ggsidekick::theme_sleek() +
+  guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
+  facet_wrap(~parameter, scales = "free_x")
+
+pdf(here::here("figs", "pars_both_vars.pdf"))
+surv_par_plot
+gen_par_plot
+dev.off()
+
 
 # ESTIMATED TRENDS -------------------------------------------------------------
 
 # prep dataframes for each
 rot_surv <- map(surv_dfa, rotate_trends)
 surv_trends <- pmap(
-  list(rot_surv, surv_tbl$years, surv_tbl$group), 
+  list(rot_surv, surv_tbl$years, group_labs), 
   .f = prep_trends
   ) %>% 
   bind_rows() %>% 
@@ -185,37 +254,9 @@ dev.off()
 
 # ESTIMATED LOADINGS -----------------------------------------------------------
 
-fig_labs <- c("North\nYearling", "Puget\nSubyearling", "Puget\nYearling", 
-              "SoG\nSubyearling", "South\nSubyearling")
-
+# generation length loadings
 gen_load_dat <- pmap(list(rot_gen, gen_tbl$names, gen_tbl$group),
                       .f = prep_loadings) 
-
-load_plot_f <- function(x, group = NULL, guides = FALSE) {
-  p <- ggplot(x, aes_string(x = "name", y = "value", fill = "trend", 
-                       alpha = "prob_diff0")) + 
-    scale_alpha_continuous(name = "Probability\nDifferent") +
-    scale_fill_discrete(name = "") +
-    geom_violin(color = NA, position = position_dodge(0.3)) + 
-    geom_hline(yintercept = 0, lty = 2) + 
-    coord_flip() + 
-    xlab("Time Series") + 
-    ylab("Loading") +
-    scale_y_continuous(limits = c(-0.5, 0.5), expand = c(0, 0)) +
-    ggsidekick::theme_sleek() +
-    guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
-    theme(axis.text.y = element_text(angle = 45, vjust = -1, size = 7),
-          axis.title = element_blank()) +
-    annotate("text", x = Inf, y = -Inf, label = group, hjust = -0.05, 
-             vjust = 1, size = 3.5)
-  
-  if (guides == FALSE) {
-    p <- p +
-      theme(legend.position = "none")
-  }
-  
-  return(p)
-}
 
 #make list of figures
 gen_load <- map2(gen_load_dat, fig_labs, load_plot_f, guides = FALSE)
@@ -223,14 +264,39 @@ gen_load <- map2(gen_load_dat, fig_labs, load_plot_f, guides = FALSE)
 # make single figure to steal legend from
 leg_gen_load <- load_plot_f(gen_load_dat[[1]], guides = TRUE)
 
-# gen_load_panel <- 
+gen_load_panel <- 
   cowplot::plot_grid(
   gen_load[[1]], gen_load[[2]], gen_load[[3]], gen_load[[4]], gen_load[[5]],
   cowplot::get_legend(leg_gen_load),
-  axis = c("r"), align = "v", 
+  axis = c("lr"), align = "hv", 
   # rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
   nrow = 2
-)# %>% 
+) %>% 
+  arrangeGrob(., 
+              bottom = textGrob("Loadings",
+                                gp = gpar(col = "grey30", fontsize = 12))) %>% 
+  grid.arrange()
+  
+  
+# survival loadings
+surv_load_dat <- pmap(list(rot_surv, surv_tbl$names, group_labs),
+                     .f = prep_loadings) 
+
+#make list of figures
+surv_load <- map2(surv_load_dat, fig_labs, plot_load, guides = FALSE, 
+                  y_lims = c(-0.9, 0.9))
+
+# make single figure to steal legend from
+leg_surv_load <- load_plot_f(surv_load_dat[[1]], guides = TRUE)
+
+surv_load_panel <- 
+  cowplot::plot_grid(
+    surv_load[[1]], surv_load[[2]], surv_load[[3]], surv_load[[4]], surv_load[[5]],
+    cowplot::get_legend(leg_surv_load),
+    axis = c("lr"), align = "hv", 
+    # rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+    nrow = 2
+  ) %>% 
   arrangeGrob(., 
               bottom = textGrob("Loadings",
                                 gp = gpar(col = "grey30", fontsize = 12))) %>% 

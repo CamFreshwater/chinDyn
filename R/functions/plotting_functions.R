@@ -142,7 +142,7 @@ plot_one_trend <- function(trend_dat) {
 prep_loadings <- function (rotated_modelfit, names, group, conf_level = 0.95) { 
   v <- reshape2::melt(rotated_modelfit$Z_rot, 
                       varnames = c("iter", "name", "trend")) 
-  v$name <- as.factor(names$stock_name[v$name])
+  v$name <- as.factor(names$stock[v$name])
   v %>% 
     mutate(trend = as.factor(paste0("Trend ", trend))) %>% 
     group_by(name, trend) %>% 
@@ -158,5 +158,33 @@ prep_loadings <- function (rotated_modelfit, names, group, conf_level = 0.95) {
     #           q_upper = 1 - q_lower, 
     #           prob_diff0 = max(q_lower, q_upper),
     #           .groups = "drop")
+}
+
+
+##function to plot loadings
+plot_load <- function(x, group = NULL, guides = FALSE, y_lims = c(-0.5, 0.5)) {
+  p <- ggplot(x, aes_string(x = "name", y = "value", fill = "trend", 
+                            alpha = "prob_diff0")) + 
+    scale_alpha_continuous(name = "Probability\nDifferent") +
+    scale_fill_discrete(name = "") +
+    geom_violin(color = NA, position = position_dodge(0.3)) + 
+    geom_hline(yintercept = 0, lty = 2) + 
+    coord_flip() + 
+    xlab("Time Series") + 
+    ylab("Loading") +
+    scale_y_continuous(limits = y_lims, expand = c(0, 0)) +
+    ggsidekick::theme_sleek() +
+    guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
+    theme(#axis.text.y = element_text(angle = 45, vjust = -1, size = 7),
+          axis.title = element_blank()) +
+    annotate("text", x = Inf, y = -Inf, label = group, hjust = -0.05, 
+             vjust = 1, size = 3.5)
+  
+  if (guides == FALSE) {
+    p <- p +
+      theme(legend.position = "none")
+  }
+  
+  return(p)
 }
 

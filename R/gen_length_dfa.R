@@ -232,13 +232,13 @@ furrr::future_map2(
   gen_tbl$group,
   .f = function (y, group) {
     fit <- fit_dfa(
-      y = y, num_trends = 2, zscore = FALSE, 
-      estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
-      # zscore = TRUE,
+      y = y, num_trends = 2, #zscore = FALSE, 
+      # estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
+      zscore = TRUE,
       iter = 3000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
-    f_name <- paste(group, "one-trend", "bayesdfa_c.RDS", sep = "_")
+    f_name <- paste(group, "two-trend", "bayesdfa.RDS", sep = "_")
     saveRDS(fit, here::here("data", "generation_fits", f_name))
   },
   .progress = TRUE,

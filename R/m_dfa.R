@@ -238,14 +238,14 @@ furrr::future_map2(
 )
 
 
-# fit <- fit_dfa(
-#   y = surv_tbl$m_mat[[2]], num_trends = 2, zscore = FALSE, 
-#   estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
-#   iter = 8000, chains = 4, thin = 1, warmup = 2000,
-#   control = list(adapt_delta = 0.99, max_treedepth = 20)
-# )
-# f_name <- paste(surv_tbl[2, ]$group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-# saveRDS(fit, here::here("data", "mortality_fits", f_name))
+fit <- fit_dfa(
+  y = surv_tbl$m_mat[[1]], num_trends = 2, zscore = FALSE,
+  estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+  iter = 8000, chains = 4, thin = 1, warmup = 2000,
+  control = list(adapt_delta = 0.99, max_treedepth = 20)
+)
+f_name <- paste(surv_tbl[2, ]$group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+saveRDS(fit, here::here("data", "mortality_fits", f_name))
 
 
 # read outputs

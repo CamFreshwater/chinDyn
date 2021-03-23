@@ -157,7 +157,7 @@ pull_par_f <- function(x, group) {
     pivot_longer(cols = -iterations,
                  names_sep = "\\.",
                  names_to = c("chains", "parameter")) %>% 
-    filter(grepl("psi", parameter) | grepl("phi", parameter) |
+    filter(grepl("theta", parameter) | grepl("phi", parameter) |
              grepl("nu", parameter)) %>% 
     mutate(group = group,
            trend = case_when(

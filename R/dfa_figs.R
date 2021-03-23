@@ -185,7 +185,7 @@ surv_par_plot <-  ggplot(surv_pars,
               draw_quantiles = 0.5) + 
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
-  ylab("Posterior Estimate") +
+  ylab("Posterior Estimates from Mortality Model") +
   xlab("Stock Grouping") +
   # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +
@@ -203,7 +203,7 @@ gen_par_plot <- ggplot(gen_pars,
               draw_quantiles = 0.5) + 
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
-  ylab("Posterior Estimate") +
+  ylab("Posterior Estimates from Mean Age Model") +
   xlab("Stock Grouping") +
   # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +

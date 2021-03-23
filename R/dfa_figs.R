@@ -28,10 +28,12 @@ gen_dfa <- map(gen_tbl$group, function(y) {
 group_labs <- c("North\nYearling", "Puget\nSubyearling", "Puget\nYearling", 
               "SoG\nSubyearling", "South\nSubyearling")
 
-# PREDICTED FITS ---------------------------------------------------------------
 
 # plotting functions
 source(here::here("R", "functions", "plotting_functions.R"))
+
+
+# PREDICTED FITS ---------------------------------------------------------------
 
 # predicted survival fits
 surv_pred_list <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years), 
@@ -227,7 +229,7 @@ surv_trends <- pmap(
 
 rot_gen <- map(gen_dfa, rotate_trends)
 gen_trends <- pmap(
-  list(rot_gen, gen_tbl$years, gen_tbl$group), 
+  list(rot_gen, gen_tbl$years, group_labs), 
   .f = prep_trends
 ) %>% 
   bind_rows() %>% 
@@ -237,13 +239,14 @@ trends <- rbind(surv_trends, gen_trends) %>%
   mutate(var = as.factor(var),
          trend = as.factor(trend), 
          life_history = case_when(
-           grepl("stream", group) ~ "yearling",
-           grepl("ocean", group) ~ "subyearling"
+           grepl("Sub", group) ~ "subyearling",
+           TRUE ~ "yearling"
          ),
-         group = fct_relevel(as.factor(group), "north_streamtype", 
-                             "sog_oceantype", "puget_streamtype", 
-                             "puget_oceantype", "south_oceantype"),
-         var = fct_relevel(as.factor(var), "Juvenile M", "Mean Age"))
+         group = fct_relevel(as.factor(group), "North\nYearling", 
+                             "SoG\nSubyearling", "Puget\nYearling",
+                             "Puget\nSubyearling", "South\nSubyearling"),
+         var = fct_relevel(as.factor(var), "Juvenile M", "Mean Age")
+         )
 
 
 pdf(here::here("figs", "trends_both_vars.pdf"), height = 7, width = 4)
@@ -259,45 +262,48 @@ gen_load_dat <- pmap(list(rot_gen, gen_tbl$names, gen_tbl$group),
                       .f = prep_loadings) 
 
 #make list of figures
-gen_load <- map2(gen_load_dat, fig_labs, load_plot_f, guides = FALSE)
+gen_load <- map2(gen_load_dat, group_labs, plot_load, guides = FALSE) 
 
 # make single figure to steal legend from
-leg_gen_load <- load_plot_f(gen_load_dat[[1]], guides = TRUE)
+leg_gen_load <- plot_load(gen_load_dat[[1]], guides = TRUE) +
+  ggsidekick::theme_sleek()
 
 gen_load_panel <- 
   cowplot::plot_grid(
   gen_load[[1]], gen_load[[2]], gen_load[[3]], gen_load[[4]], gen_load[[5]],
   cowplot::get_legend(leg_gen_load),
   axis = c("lr"), align = "hv", 
-  # rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
   nrow = 2
 ) %>% 
   arrangeGrob(., 
-              bottom = textGrob("Loadings",
-                                gp = gpar(col = "grey30", fontsize = 12))) %>% 
-  grid.arrange()
-  
+              bottom = textGrob("Mean Age Model Loadings",
+                                gp = gpar(col = "grey30", fontsize = 12))) 
   
 # survival loadings
 surv_load_dat <- pmap(list(rot_surv, surv_tbl$names, group_labs),
                      .f = prep_loadings) 
 
 #make list of figures
-surv_load <- map2(surv_load_dat, fig_labs, plot_load, guides = FALSE, 
-                  y_lims = c(-0.9, 0.9))
+surv_load <- map2(surv_load_dat, group_labs, plot_load, guides = FALSE, 
+                  y_lims = c(-1.5, 1.5))
 
 # make single figure to steal legend from
-leg_surv_load <- load_plot_f(surv_load_dat[[1]], guides = TRUE)
+leg_surv_load <- plot_load(surv_load_dat[[1]], guides = TRUE) +
+  ggsidekick::theme_sleek()
 
 surv_load_panel <- 
   cowplot::plot_grid(
     surv_load[[1]], surv_load[[2]], surv_load[[3]], surv_load[[4]], surv_load[[5]],
     cowplot::get_legend(leg_surv_load),
     axis = c("lr"), align = "hv", 
-    # rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
     nrow = 2
   ) %>% 
   arrangeGrob(., 
-              bottom = textGrob("Loadings",
-                                gp = gpar(col = "grey30", fontsize = 12))) %>% 
-  grid.arrange()
+              bottom = textGrob("Mortality Model Loadings",
+                                gp = gpar(col = "grey30", fontsize = 12)))
+
+
+pdf(here::here("figs", "loadings_both_vars.pdf"), height = 7, width = 10)
+grid.arrange(gen_load_panel)
+grid.arrange(surv_load_panel)
+dev.off()

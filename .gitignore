@@ -27,6 +27,7 @@ data/dfaBayesFits/
 data/gamFits/
 data/mortality_fits/
 data/generation_fits/
+data/model_structure_fits/
 .Rproj.user/
 .Rproj.user
 *.html

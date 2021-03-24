@@ -307,3 +307,15 @@ pdf(here::here("figs", "loadings_both_vars.pdf"), height = 7, width = 10)
 grid.arrange(gen_load_panel)
 grid.arrange(surv_load_panel)
 dev.off()
+
+
+# CHECK REGIMES ----------------------------------------------------------------
+
+glimpse(rot_surv[[4]])
+r1 <- rot_surv[[4]]
+f1 <- find_regimes(r1$trends_mean[1, ], 
+             sds = (r1$trends_upper - r1$trends_mean)[1, ] / 1.96)
+f2 <- find_regimes(r1$trends_mean[2, ], 
+             sds = (r1$trends_upper - r1$trends_mean)[2, ] / 1.96)
+plot_regime_model(f1$best_model)
+plot_regime_model(f2$best_model)

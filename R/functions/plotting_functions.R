@@ -1,6 +1,6 @@
 ## function to prepare predicted fits for plot_fitted_bayes
 fitted_preds <- function(modelfit, names = NULL, years = NULL,
-                         descend_order = FALSE) {
+                         descend_order = FALSE, subset = NULL) {
   n_ts <- dim(modelfit$data)[1]
   n_years <- dim(modelfit$data)[2]
   if (is.null(years)) {
@@ -27,14 +27,19 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
     group_by(ID) %>% 
     summarize(last_mean = mean(mean))
   
-  df_pred %>%
+  out <- df_pred %>%
     left_join(.,
               last_gen_mean, 
-              # df_pred %>%
-              #   filter(Time == max(Time)) %>%
-              #   select(ID, last_mean = mean),
               by = "ID") %>%
-    left_join(., df_obs, by = c("ID", "Time")) %>% 
+    left_join(., df_obs, by = c("ID", "Time")) 
+  
+  if (!is.null(subset)) {
+    samp_seq <- sample(unique(df_pred$ID), size = subset)
+    out <- out %>% 
+      filter(ID %in% samp_seq)
+  }
+  
+  out %>% 
     mutate(ID = names$stock_name[ID] %>% 
              as.factor(.) %>% 
              fct_reorder(., last_mean, .desc = descend_order))
@@ -42,8 +47,10 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
 
 
 ## function to plot fits (based on bayesdfa::plot_fitted)
-plot_fitted_pred <- function(df_pred, print_x = TRUE, col_ramp = c(-1, 1), 
-                             col_ramp_direction = -1, facet_col = 8,
+plot_fitted_pred <- function(df_pred, #ylab = NULL, 
+                             print_x = TRUE, 
+                             col_ramp = c(-1, 1), 
+                             col_ramp_direction = -1, facet_col = NULL,
                              leg_name = NULL) {  
   #limits for y axis
   y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
@@ -62,24 +69,31 @@ plot_fitted_pred <- function(df_pred, print_x = TRUE, col_ramp = c(-1, 1),
     scale_colour_distiller(type = "div", limit = col_ramp, 
                            direction = col_ramp_direction, 
                            palette = "RdYlBu", name = leg_name) +
+    # scale_y_continuous(name = ylab, position = 'right', sec.axis = dup_axis(),
+    #                    labels = scales::number_format(accuracy = 1)) + 
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     geom_point(aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
-    # facet_wrap(~fct_reorder(as.factor(ID), last_mean, .desc = TRUE), ncol = 8) +
-    facet_wrap(~ID, ncol = facet_col) +
+    # facet_wrap(~ID, ncol = facet_col) +
+    facet_wrap(~ID, nrow = 1) +
     ggsidekick::theme_sleek() +
-    # xlim(c(1972, 2016)) +
     coord_cartesian(y = y_lims) +
-    theme(axis.title = element_blank(),
-          legend.position = "none")
+    # labs(y = ylab) +
+    theme(axis.title.x = element_blank(),
+          axis.title.y.left = element_blank(),
+          legend.position = "none",
+          axis.text.y.right = element_blank(),
+          axis.ticks.y.right = element_blank())
   
   if (print_x == FALSE) {
     p <- p + 
-      theme(axis.text.x = element_blank())
+      theme(axis.text.x = element_blank(),
+            axis.ticks.x = element_blank())
   }
   
   return(p)
 }
+
 
 
 ## function to calculate probability that estimates below average in last 
@@ -149,15 +163,7 @@ prep_loadings <- function (rotated_modelfit, names, group, conf_level = 0.95) {
     mutate(q_lower = sum(value < 0) / length(value), 
            q_upper = 1 - q_lower, 
            prob_diff0 = max(q_lower, q_upper),
-           group = group) #%>% 
-    # group_by(name, trend) %>% 
-    # summarize(lower = quantile(value, probs = (1 - conf_level) / 2), 
-    #           upper = quantile(value, probs = 1 - (1 - conf_level) / 2),
-    #           median = median(value), 
-    #           q_lower = sum(value < 0)/length(value), 
-    #           q_upper = 1 - q_lower, 
-    #           prob_diff0 = max(q_lower, q_upper),
-    #           .groups = "drop")
+           group = group) 
 }
 
 
@@ -166,7 +172,7 @@ plot_load <- function(x, group = NULL, guides = FALSE, y_lims = c(-0.5, 0.5)) {
   p <- ggplot(x, aes_string(x = "name", y = "value", fill = "trend", 
                             alpha = "prob_diff0")) + 
     scale_alpha_continuous(name = "Probability\nDifferent") +
-    scale_fill_discrete(name = "") +
+    scale_fill_brewer(name = "", palette = "Set2") +
     geom_violin(color = NA, position = position_dodge(0.3)) + 
     geom_hline(yintercept = 0, lty = 2) + 
     coord_flip() + 
@@ -178,7 +184,7 @@ plot_load <- function(x, group = NULL, guides = FALSE, y_lims = c(-0.5, 0.5)) {
     theme(#axis.text.y = element_text(angle = 45, vjust = -1, size = 7),
           axis.title = element_blank()) +
     annotate("text", x = Inf, y = -Inf, label = group, hjust = -0.05, 
-             vjust = 1, size = 3.5)
+             vjust = 1.1, size = 3.5)
   
   if (guides == FALSE) {
     p <- p +

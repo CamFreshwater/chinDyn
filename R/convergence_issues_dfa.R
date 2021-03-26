@@ -1,8 +1,8 @@
 ## Non-convergence Example
-# DFA model that throws non-convergence errors when unique observation variance 
+# DFA model that throws divergent tran errors when unique observation variance 
 # is estimated for each time series. Otherwise ok. 
 # Input is time series of average age at maturity for stocks of Pacific salmon 
-# returning to Puget Sound. Some other similar datasets (i.e. mean age of stocks
+# returning to Strait of Georgia. Some other similar datasets (i.e. mean age of stocks
 # returning to other regions) converge with this model, others don't.
 
 library(tidyverse)

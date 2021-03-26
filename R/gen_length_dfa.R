@@ -172,8 +172,8 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
 saveRDS(marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab_scalingA_centered.RDS"))
 
-# marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
-#                                     "marss_aic_tab_scalingA_centered.RDS"))
+marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
+                                    "marss_aic_tab_scalingA_centered.RDS"))
 # marss_aic_tab2 <- readRDS(here::here("data", "generation_fits", 
 #                                      "marss_aic_tab_zeroA_centered.RDS"))
 # marss_aic_tab3 <- readRDS(here::here("data", "generation_fits", 
@@ -232,13 +232,13 @@ furrr::future_map2(
   gen_tbl$group,
   .f = function (y, group) {
     fit <- fit_dfa(
-      y = y, num_trends = 2, #zscore = FALSE, 
-      # estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
-      zscore = TRUE,
+      y = y, num_trends = 2, zscore = FALSE, 
+      # estimate_nu = TRUE, 
+      estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
       iter = 3000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
-    f_name <- paste(group, "two-trend", "bayesdfa.RDS", sep = "_")
+    f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "generation_fits", f_name))
   },
   .progress = TRUE,
@@ -251,7 +251,6 @@ dfa_fits <- map(gen_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
-
 
 # model comparison
 # loo_tbl <- tibble(group = rep(gen_tbl$group, 2),
@@ -268,8 +267,8 @@ dfa_fits <- map(gen_tbl$group, function(y) {
 #         here::here("data", "generation_fits", "gen_bayes_dfa_loo_tbl.RDS"))
 # two trend model heavily supported for all groups
 
-loo_tbl_out <- readRDS(here::here("data", "generation_fits", 
-                                  "gen_bayes_dfa_loo_tbl.RDS"))
+# loo_tbl_out <- readRDS(here::here("data", "generation_fits", 
+#                                   "gen_bayes_dfa_loo_tbl.RDS"))
 
 # check diagnostics
 map2(dfa_fits, gen_tbl$group, function (x, y) {

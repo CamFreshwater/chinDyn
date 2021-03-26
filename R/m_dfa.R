@@ -60,26 +60,26 @@ surv %>%
   theme(legend.position = "top") +
   labs(y = "M")
 
-library(mgcv)
-s_mod <- gam(gen_cent ~ s(M, m = 2, bs = "tp", k = 4) + 
-               s(M, by = stock, m = 1, bs = "tp", k = 4) + 
-               s(stock, bs = "re"), 
-             data = surv, method = "REML")
-
-new_dat <- expand.grid(
-  M = seq(min(surv$M, na.rm = T), max(surv$M, na.rm = T), n = 100))
-
-# fixed effects predictions
-preds <- predict(s_mod, new_dat, se.fit = TRUE, 
-                 exclude = excl_pars[grepl("stock", excl_pars)],
-                 newdata.guaranteed = TRUE)
-new_dat2 <- new_dat %>% 
-  mutate(link_fit = as.numeric(preds$fit),
-         link_se = as.numeric(preds$se.fit),
-         pred_surv = link_fit,
-         pred_surv_lo = link_fit + (qnorm(0.025) * link_se),
-         pred_surv_up = link_fit + (qnorm(0.975) * link_se)
-  )
+# library(mgcv)
+# s_mod <- gam(gen_cent ~ s(M, m = 2, bs = "tp", k = 4) + 
+#                s(M, by = stock, m = 1, bs = "tp", k = 4) + 
+#                s(stock, bs = "re"), 
+#              data = surv, method = "REML")
+# 
+# new_dat <- expand.grid(
+#   M = seq(min(surv$M, na.rm = T), max(surv$M, na.rm = T), n = 100))
+# 
+# # fixed effects predictions
+# preds <- predict(s_mod, new_dat, se.fit = TRUE, 
+#                  exclude = excl_pars[grepl("stock", excl_pars)],
+#                  newdata.guaranteed = TRUE)
+# new_dat2 <- new_dat %>% 
+#   mutate(link_fit = as.numeric(preds$fit),
+#          link_se = as.numeric(preds$se.fit),
+#          pred_surv = link_fit,
+#          pred_surv_lo = link_fit + (qnorm(0.025) * link_se),
+#          pred_surv_up = link_fit + (qnorm(0.975) * link_se)
+#   )
 
 
 
@@ -226,8 +226,9 @@ furrr::future_map2(
   .f = function (y, group) {
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE, 
-      estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = FALSE,
-      iter = 4000, chains = 4, thin = 1,
+      # estimate_nu = TRUE, 
+      estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+      iter = 3500, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
@@ -237,15 +238,15 @@ furrr::future_map2(
   .options = furrr::furrr_options(seed = TRUE)
 )
 
-
-fit <- fit_dfa(
-  y = surv_tbl$m_mat[[1]], num_trends = 2, zscore = FALSE,
-  estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-  iter = 8000, chains = 4, thin = 1, warmup = 2000,
-  control = list(adapt_delta = 0.99, max_treedepth = 20)
-)
-f_name <- paste(surv_tbl[2, ]$group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-saveRDS(fit, here::here("data", "mortality_fits", f_name))
+# 
+# fit <- fit_dfa(
+#   y = surv_tbl$m_mat[[1]], num_trends = 2, zscore = FALSE,
+#   estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+#   iter = 8000, chains = 4, thin = 1, warmup = 2000,
+#   control = list(adapt_delta = 0.99, max_treedepth = 20)
+# )
+# f_name <- paste(surv_tbl[2, ]$group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+# saveRDS(fit, here::here("data", "mortality_fits", f_name))
 
 
 # read outputs
@@ -269,6 +270,16 @@ map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
     filter(n_eff < 500 | Rhat > 1.05)
 })
+
+div_trans <- map(dfa_fits, function (y) {
+  par_list <- get_sampler_params(y$model, inc_warmup = FALSE)
+  map(par_list, function (x) {
+    sum(x[ , "divergent__"]) 
+  }) %>% 
+    unlist() %>% 
+    sum()
+})
+surv_tbl$divergent <- div_trans %>% unlist()
 
 
 #-------------------------------------------------------------------------------

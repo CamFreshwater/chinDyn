@@ -216,10 +216,7 @@ surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
   as.numeric(colnames(x))
 })
 
-#export
-# saveRDS(surv_tbl, here::here("data", "mortality_fits", "surv_tbl.RDS"))
-
-
+# fit model
 furrr::future_map2(
   surv_tbl$m_mat,
   surv_tbl$group,
@@ -238,23 +235,11 @@ furrr::future_map2(
   .options = furrr::furrr_options(seed = TRUE)
 )
 
-# 
-# fit <- fit_dfa(
-#   y = surv_tbl$m_mat[[1]], num_trends = 2, zscore = FALSE,
-#   estimate_nu = TRUE, estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-#   iter = 8000, chains = 4, thin = 1, warmup = 2000,
-#   control = list(adapt_delta = 0.99, max_treedepth = 20)
-# )
-# f_name <- paste(surv_tbl[2, ]$group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-# saveRDS(fit, here::here("data", "mortality_fits", f_name))
-
-
 # read outputs
 dfa_fits <- map(surv_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "mortality_fits", f_name))
 })
-
 
 # check diagnostics
 map2(dfa_fits, surv_tbl$group, function (x, y) {
@@ -280,6 +265,38 @@ div_trans <- map(dfa_fits, function (y) {
     sum()
 })
 surv_tbl$divergent <- div_trans %>% unlist()
+
+
+# rotate trends and add to surv_tbl (keep DFA separate because they're huge)
+surv_tbl$rot_surv <- rot_surv#map(dfa_fit, rotate_trends)
+
+# test for evidence of regimes 
+regime_f <- function(rots_in) {
+  dum <- vector(nrow(rots_in$trends_mean), mode = "list")
+  for(i in 1:nrow(rots_in$trends_mean)) {
+    dum[[i]] <- find_regimes(
+      rots_in$trends_mean[i, ], 
+      sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
+      max_regimes = 3,
+      iter = 3000,
+      control = list(adapt_delta = 0.99, max_treedepth = 20)
+    )
+  }
+  return(dum)
+}
+
+hmm_list <- furrr::future_map(surv_tbl$rot_surv, regime_f)
+map(hmm_list, function(x) {
+  map(x, ~.$table)
+} )
+
+map(hmm_list, function(x) {
+  map(x, function (y) plot_regime_model(y$best_model))
+} )
+
+
+#export
+# saveRDS(surv_tbl, here::here("data", "mortality_fits", "surv_tbl.RDS"))
 
 
 #-------------------------------------------------------------------------------

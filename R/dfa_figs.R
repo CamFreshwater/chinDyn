@@ -268,7 +268,6 @@ dev.off()
 # ESTIMATED TRENDS -------------------------------------------------------------
 
 # prep dataframes for each
-rot_surv <- map(surv_dfa, rotate_trends)
 surv_trends <- pmap(
   list(rot_surv, surv_tbl$years, group_labs), 
   .f = prep_trends
@@ -379,14 +378,3 @@ png(here::here("figs", "ms_figs", "age_loadings.png"), height = 7, width = 10,
 grid.arrange(gen_load_panel)
 dev.off()
 
-
-# CHECK REGIMES ----------------------------------------------------------------
-
-glimpse(rot_surv[[4]])
-r1 <- rot_surv[[4]]
-f1 <- find_regimes(r1$trends_mean[1, ], 
-             sds = (r1$trends_upper - r1$trends_mean)[1, ] / 1.96)
-f2 <- find_regimes(r1$trends_mean[2, ], 
-             sds = (r1$trends_upper - r1$trends_mean)[2, ] / 1.96)
-plot_regime_model(f1$best_model)
-plot_regime_model(f2$best_model)

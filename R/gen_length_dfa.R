@@ -286,6 +286,33 @@ map(dfa_fits, function (x) {
 })
 
 
+# rotate trends and add to surv_tbl (keep DFA separate because they're huge)
+gen_tbl$rot_gen <- map(dfa_fit, rotate_trends)
+
+# test for evidence of regimes 
+regime_f <- function(rots_in) {
+  dum <- vector(nrow(rots_in$trends_mean), mode = "list")
+  for(i in 1:nrow(rots_in$trends_mean)) {
+    dum[[i]] <- find_regimes(
+      rots_in$trends_mean[i, ], 
+      sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
+      max_regimes = 3,
+      iter = 3000,
+      control = list(adapt_delta = 0.99, max_treedepth = 20)
+    )
+  }
+  return(dum)
+}
+
+hmm_list <- furrr::future_map(gen_tbl$rot_gen, regime_f)
+map(hmm_list, function(x) {
+  map(x, ~.$table)
+} )
+
+map(hmm_list, function(x) {
+  map(x, function (y) plot_regime_model(y$best_model))
+} )
+
 
 ## FIT ML DFA ------------------------------------------------------------------
 

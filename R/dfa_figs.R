@@ -166,7 +166,7 @@ pull_par_f <- function(x, group) {
              grepl("[2]", parameter) ~ "Trend 2"
            ),
            parameter = case_when(
-             grepl("psi", parameter) ~ "psi",
+             grepl("theta", parameter) ~ "theta",
              grepl("phi", parameter) ~ "phi",
              grepl("nu", parameter) ~ "nu",
              TRUE ~ parameter

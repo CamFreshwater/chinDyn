@@ -151,6 +151,70 @@ plot_one_trend <- function(trend_dat) {
 }
 
 
+## function to prep regime model fit for plotting (based on 
+# bayesdfa::plot_regime_model)
+regime_model <- gen_tbl$regime_trend1[[1]]
+
+prep_regime <- function(regime_model, probs = c(0.05, 0.95),
+                        regime_prob_threshold = 0.9,
+                        years, group) {
+  gamma_tk <- rstan::extract(regime_model$model, pars = "gamma_tk")[[1]]
+  mu_k <- rstan::extract(regime_model$model, pars = "mu_k")[[1]]
+  l <- apply(gamma_tk, 2:3, quantile, probs = probs[[1]])
+  u <- apply(gamma_tk, 2:3, quantile, probs = probs[[2]])
+  med <- apply(gamma_tk, 2:3, quantile, probs = 0.5)
+  range01 <- function(x) (x - min(x))/(max(x) - min(x))
+  mu_k_low <- apply(mu_k, 2, quantile, probs = probs[[1]])
+  mu_k_high <- apply(mu_k, 2, quantile, probs = probs[[2]])
+  mu_k <- apply(mu_k, 2, median)
+  confident_regimes <- apply(
+    gamma_tk, 2:3, function(x) mean(x > 0.5) > regime_prob_threshold
+  )
+  regime_indexes <- apply(confident_regimes, 1, function(x) {
+    w <- which(x)
+    if (length(w) == 0) 
+      NA
+    else w
+  })
+  
+  plot_prob_indices <- seq_len(ncol(med))
+  df_l <- reshape2::melt(l, varnames = c("Time", "State"), 
+                         value.name = "lwr")
+  df_u <- reshape2::melt(u, varnames = c("Time", "State"), 
+                         value.name = "upr")
+  df_m <- reshape2::melt(med, varnames = c("Time", "State"), 
+                         value.name = "median")
+  df_y <- data.frame(y = range01(regime_model$y), 
+                     Time = seq_along(regime_model$y))
+  dplyr::inner_join(df_l, df_u, by = c("Time", "State")) %>% 
+    dplyr::inner_join(df_m, by = c("Time", "State")) %>% 
+    dplyr::filter(.data$State %in% plot_prob_indices) %>% 
+    dplyr::mutate(State = paste("State", .data$State),
+                  time = rep(years, length(unique(State))),
+                  group = group)
+}
+
+
+## function to plot regimes (based on bayesdfa::plot_trends/plot_regime_model)
+plot_one_regime <- function(regime_dat) {
+  ggplot(regime_dat, 
+         aes_string(x = "time", y = "median")) + 
+    geom_ribbon(aes_string(ymin = "lwr", ymax = "upr", colour = "life_history",
+                           fill = "life_history"), 
+                alpha = 0.4, lty = 2) + 
+    geom_line(aes_string(colour = "life_history"), size = 1.2, lty = 2) + 
+    scale_colour_brewer(type = "qual", name = "") +
+    scale_fill_brewer(type = "qual", name = "") +
+    xlab("Brood Year") + 
+    ylab("Probability of Regime 1") +
+    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
+    facet_grid(group ~ var) +
+    ggsidekick::theme_sleek() + 
+    theme(legend.position = "top")
+}
+
+
+
 ## function to prepare rotated model fit for plotting loadings (based on 
 # bayesdfa::plot_loadings)
 prep_loadings <- function (rotated_modelfit, names, group, conf_level = 0.95) { 

@@ -269,14 +269,14 @@ dev.off()
 
 # prep dataframes for each
 surv_trends <- pmap(
-  list(rot_surv, surv_tbl$years, group_labs), 
+  list(surv_tbl$rot_surv, surv_tbl$years, group_labs), 
   .f = prep_trends
   ) %>% 
   bind_rows() %>% 
   mutate(var = "Juvenile Mortality Rate")
 
 gen_trends <- pmap(
-  list(rot_gen, gen_tbl$years, group_labs), 
+  list(gen_tbl$rot_gen, gen_tbl$years, group_labs), 
   .f = prep_trends
 ) %>% 
   bind_rows() %>% 
@@ -311,6 +311,60 @@ png(here::here("figs", "ms_figs", "trend2.png"), height = 7, width = 4,
     res = 300, units = "in")
 plot_one_trend(trends %>% filter(trend == "Trend 2"))
 dev.off()
+
+
+# ESTIMATED REGIMES ------------------------------------------------------------
+
+surv_regimes1 <- pmap(
+  list(regime_model = surv_tbl$regime_trend1, years = surv_tbl$years, 
+       group = group_labs), 
+  .f = prep_regime
+) %>% 
+  bind_rows() %>%
+  mutate(trend = "One") 
+surv_regimes2 <- pmap(
+  list(regime_model = surv_tbl$regime_trend2, years = surv_tbl$years, 
+       group = group_labs), 
+  .f = prep_regime
+) %>% 
+  bind_rows() %>% 
+  mutate(trend = "Two")
+surv_regimes <- rbind(surv_regimes1, surv_regimes2) %>% 
+  mutate(var = "Juvenile Mortality Rate") 
+
+gen_regimes1 <- pmap(
+  list(regime_model = gen_tbl$regime_trend1, years = gen_tbl$years, 
+       group = group_labs), 
+  .f = prep_regime
+) %>% 
+  bind_rows() %>%
+  mutate(trend = "One") 
+gen_regimes2 <- pmap(
+  list(regime_model = gen_tbl$regime_trend2, years = gen_tbl$years, 
+       group = group_labs), 
+  .f = prep_regime
+) %>% 
+  bind_rows() %>% 
+  mutate(trend = "Two")
+gen_regimes <- rbind(gen_regimes1, gen_regimes2) %>% 
+  mutate(var = "Mean Age") 
+
+regimes <- rbind(surv_regimes, gen_regimes) %>% 
+  mutate(var = as.factor(var),
+         state = as.factor(State), 
+         life_history = case_when(
+           grepl("Sub", group) ~ "subyearling",
+           TRUE ~ "yearling"
+         ),
+         group = fct_relevel(as.factor(group), "North\nYearling", 
+                             "SoG\nSubyearling", "Puget\nYearling",
+                             "Puget\nSubyearling", "South\nSubyearling"),
+         var = fct_relevel(as.factor(var), "Juvenile Mortality Rate", 
+                           "Mean Age")
+  ) 
+
+plot_one_regime(regimes %>% filter(trend == "One", State == "State 1"))
+plot_one_regime(regimes %>% filter(trend == "Two", State == "State 1"))
 
 
 # ESTIMATED LOADINGS -----------------------------------------------------------

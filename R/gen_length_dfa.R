@@ -252,23 +252,6 @@ dfa_fits <- map(gen_tbl$group, function(y) {
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
-# model comparison
-# loo_tbl <- tibble(group = rep(gen_tbl$group, 2),
-#                   m = rep(c(2, 1), each = length(gen_tbl$group)),
-#                   fits = c(dfa_fits, dfa_fits1))
-# loo_tbl$loo <- map(loo_tbl$fits, bayesdfa::loo)
-# loo_tbl$looic <- map(loo_tbl$loo, function(x) x$estimates["looic", "Estimate"]) %>% 
-#   unlist()
-# loo_tbl_out <- loo_tbl %>%
-#   group_by(group) %>% 
-#   mutate(min_looic = min(looic),
-#             delta_loo = looic - min_looic) 
-# saveRDS(loo_tbl_out, 
-#         here::here("data", "generation_fits", "gen_bayes_dfa_loo_tbl.RDS"))
-# two trend model heavily supported for all groups
-
-# loo_tbl_out <- readRDS(here::here("data", "generation_fits", 
-#                                   "gen_bayes_dfa_loo_tbl.RDS"))
 
 # check diagnostics
 map2(dfa_fits, gen_tbl$group, function (x, y) {
@@ -304,14 +287,40 @@ regime_f <- function(rots_in) {
   return(dum)
 }
 
-hmm_list <- furrr::future_map(gen_tbl$rot_gen, regime_f)
-map(hmm_list, function(x) {
+hmm_list_g <- furrr::future_map(gen_tbl$rot_gen, regime_f)
+map(hmm_list_g, function(x) {
   map(x, ~.$table)
 } )
 
-map(hmm_list, function(x) {
+map(hmm_list_g, function(x) {
   map(x, function (y) plot_regime_model(y$best_model))
 } )
+
+gen_tbl$regime_trend1 <- map(hmm_list_g, function(x) x[[1]]$best_model)
+gen_tbl$regime_trend2 <- map(hmm_list_g, function(x) x[[2]]$best_model)
+
+saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl.RDS"))
+
+
+## MODEL COMPARISON ------------------------------------------------------------
+
+# model comparison
+# loo_tbl <- tibble(group = rep(gen_tbl$group, 2),
+#                   m = rep(c(2, 1), each = length(gen_tbl$group)),
+#                   fits = c(dfa_fits, dfa_fits1))
+# loo_tbl$loo <- map(loo_tbl$fits, bayesdfa::loo)
+# loo_tbl$looic <- map(loo_tbl$loo, function(x) x$estimates["looic", "Estimate"]) %>% 
+#   unlist()
+# loo_tbl_out <- loo_tbl %>%
+#   group_by(group) %>% 
+#   mutate(min_looic = min(looic),
+#             delta_loo = looic - min_looic) 
+# saveRDS(loo_tbl_out, 
+#         here::here("data", "generation_fits", "gen_bayes_dfa_loo_tbl.RDS"))
+# two trend model heavily supported for all groups
+
+# loo_tbl_out <- readRDS(here::here("data", "generation_fits", 
+#                                   "gen_bayes_dfa_loo_tbl.RDS"))
 
 
 ## FIT ML DFA ------------------------------------------------------------------

@@ -217,23 +217,23 @@ surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
 })
 
 # fit model
-furrr::future_map2(
-  surv_tbl$m_mat,
-  surv_tbl$group,
-  .f = function (y, group) {
-    fit <- fit_dfa(
-      y = y, num_trends = 2, zscore = FALSE, 
-      # estimate_nu = TRUE, 
-      estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-      iter = 3500, chains = 4, thin = 1,
-      control = list(adapt_delta = 0.99, max_treedepth = 20)
-    )
-    f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-    saveRDS(fit, here::here("data", "mortality_fits", f_name))
-  },
-  .progress = TRUE,
-  .options = furrr::furrr_options(seed = TRUE)
-)
+# furrr::future_map2(
+#   surv_tbl$m_mat,
+#   surv_tbl$group,
+#   .f = function (y, group) {
+#     fit <- fit_dfa(
+#       y = y, num_trends = 2, zscore = FALSE, 
+#       # estimate_nu = TRUE, 
+#       estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+#       iter = 3500, chains = 4, thin = 1,
+#       control = list(adapt_delta = 0.99, max_treedepth = 20)
+#     )
+#     f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+#     saveRDS(fit, here::here("data", "mortality_fits", f_name))
+#   },
+#   .progress = TRUE,
+#   .options = furrr::furrr_options(seed = TRUE)
+# )
 
 # read outputs
 dfa_fits <- map(surv_tbl$group, function(y) {
@@ -268,7 +268,7 @@ surv_tbl$divergent <- div_trans %>% unlist()
 
 
 # rotate trends and add to surv_tbl (keep DFA separate because they're huge)
-surv_tbl$rot_surv <- rot_surv#map(dfa_fit, rotate_trends)
+surv_tbl$rot_surv <- map(dfa_fits, rotate_trends)
 
 # test for evidence of regimes 
 regime_f <- function(rots_in) {
@@ -277,7 +277,7 @@ regime_f <- function(rots_in) {
     dum[[i]] <- find_regimes(
       rots_in$trends_mean[i, ], 
       sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
-      max_regimes = 3,
+      max_regimes = 2,
       iter = 3000,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
@@ -285,18 +285,22 @@ regime_f <- function(rots_in) {
   return(dum)
 }
 
-hmm_list <- furrr::future_map(surv_tbl$rot_surv, regime_f)
-map(hmm_list, function(x) {
+hmm_list_m <- furrr::future_map(surv_tbl$rot_surv, regime_f, 
+                                .options = furrr::furrr_options(seed = TRUE))
+map(hmm_list_m, function(x) {
   map(x, ~.$table)
 } )
 
-map(hmm_list, function(x) {
+map(hmm_list_m, function(x) {
   map(x, function (y) plot_regime_model(y$best_model))
 } )
 
+surv_tbl$regime_trend1 <- map(hmm_list_m, function(x) x[[1]]$best_model)
+surv_tbl$regime_trend2 <- map(hmm_list_m, function(x) x[[2]]$best_model)
+
 
 #export
-# saveRDS(surv_tbl, here::here("data", "mortality_fits", "surv_tbl.RDS"))
+saveRDS(surv_tbl, here::here("data", "mortality_fits", "surv_tbl.RDS"))
 
 
 #-------------------------------------------------------------------------------

@@ -242,7 +242,7 @@ gen_par_plot <- ggplot(gen_pars,
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
   scale_x_discrete(limits = rev) +
-  ylab("Posterior Estimates from Mean Age Model") +
+  ylab("Posterior Estimates from Mean      nnn Age Model") +
   xlab("Stock Grouping") +
   # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +
@@ -275,7 +275,6 @@ surv_trends <- pmap(
   bind_rows() %>% 
   mutate(var = "Juvenile Mortality Rate")
 
-rot_gen <- map(gen_dfa, rotate_trends)
 gen_trends <- pmap(
   list(rot_gen, gen_tbl$years, group_labs), 
   .f = prep_trends

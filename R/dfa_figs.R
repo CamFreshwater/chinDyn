@@ -25,11 +25,13 @@ gen_dfa <- map(gen_tbl$group, function(y) {
 })
 
 
-surv_tbl$group_labs <- gen_tbl$group_labs <- c("North\nYearling", 
-                                               "Puget\nSubyearling", 
-                                               "Puget\nYearling", 
-                                               "SoG\nSubyearling", 
-                                               "South\nSubyearling")
+group_labs <- surv_tbl$group_labs <- gen_tbl$group_labs <- c(
+  "North\nYearling", 
+  "Puget\nSubyearling", 
+  "Puget\nYearling", 
+  "SoG\nSubyearling", 
+  "South\nSubyearling"
+)
 
 
 # plotting functions
@@ -335,14 +337,16 @@ surv_regimes <- rbind(surv_regimes1, surv_regimes2) %>%
 gen_regimes1 <- pmap(
   list(regime_model = gen_tbl$regime_trend1, years = gen_tbl$years, 
        group = group_labs), 
-  .f = prep_regime
+  .f = prep_regime,
+  flip_regimes = TRUE
 ) %>% 
   bind_rows() %>%
   mutate(trend = "One") 
 gen_regimes2 <- pmap(
   list(regime_model = gen_tbl$regime_trend2, years = gen_tbl$years, 
        group = group_labs), 
-  .f = prep_regime
+  .f = prep_regime,
+  flip_regimes = TRUE
 ) %>% 
   bind_rows() %>% 
   mutate(trend = "Two")
@@ -363,8 +367,15 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
                            "Mean Age")
   ) 
 
-plot_one_regime(regimes %>% filter(trend == "One", State == "State 1"))
-plot_one_regime(regimes %>% filter(trend == "Two", State == "State 1"))
+png(here::here("figs", "ms_figs", "regime_trend1.png"), height = 7, width = 4, 
+    res = 300, units = "in")
+plot_one_regime(regimes %>% filter(State == "State 1" & trend == "One"))
+dev.off()
+
+png(here::here("figs", "ms_figs", "regime_trend2.png"), height = 7, width = 4, 
+    res = 300, units = "in")
+plot_one_regime(regimes %>% filter(State == "State 1" & trend == "Two"))
+dev.off()
 
 
 # ESTIMATED LOADINGS -----------------------------------------------------------

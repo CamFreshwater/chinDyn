@@ -156,7 +156,7 @@ plot_one_trend <- function(trend_dat) {
 regime_model <- gen_tbl$regime_trend1[[1]]
 
 prep_regime <- function(regime_model, probs = c(0.05, 0.95),
-                        regime_prob_threshold = 0.9,
+                        regime_prob_threshold = 0.9, flip_regimes = FALSE,
                         years, group) {
   gamma_tk <- rstan::extract(regime_model$model, pars = "gamma_tk")[[1]]
   mu_k <- rstan::extract(regime_model$model, pars = "mu_k")[[1]]
@@ -176,6 +176,14 @@ prep_regime <- function(regime_model, probs = c(0.05, 0.95),
       NA
     else w
   })
+  
+  #should regimes be flipped for plotting
+  if (flip_regimes) {
+    mu_k <- 1 - mu_k
+    u <- 1 - u
+    l <- 1 - l
+    med <- 1 - med
+  }
   
   plot_prob_indices <- seq_len(ncol(med))
   df_l <- reshape2::melt(l, varnames = c("Time", "State"), 
@@ -201,8 +209,8 @@ plot_one_regime <- function(regime_dat) {
          aes_string(x = "time", y = "median")) + 
     geom_ribbon(aes_string(ymin = "lwr", ymax = "upr", colour = "life_history",
                            fill = "life_history"), 
-                alpha = 0.4, lty = 2) + 
-    geom_line(aes_string(colour = "life_history"), size = 1.2, lty = 2) + 
+                alpha = 0.4, lty = 6) + 
+    geom_line(aes_string(colour = "life_history"), size = 1.2, lty = 6) + 
     scale_colour_brewer(type = "qual", name = "") +
     scale_fill_brewer(type = "qual", name = "") +
     xlab("Brood Year") + 

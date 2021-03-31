@@ -17,8 +17,10 @@ rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
 # import tbls made in m_dfa and gen_dfa
-surv_tbl <- readRDS(here::here("data", "mortality_fits", "surv_tbl.RDS"))
-gen_tbl <- readRDS(here::here("data", "generation_fits", "gen_tbl.RDS"))
+surv_tbl <- readRDS(here::here("data", "mortality_fits", "surv_tbl.RDS")) %>% 
+  select(group:years)
+gen_tbl <- readRDS(here::here("data", "generation_fits", "gen_tbl.RDS")) %>% 
+  select(group:years)
 
 
 # focus on one stock group and add additional parameters
@@ -27,30 +29,37 @@ tbl_in <- rbind(surv_tbl %>% mutate(var = "surv") %>% rename(mat_in = m_mat),
   filter(group == "sog_oceantype")
 
 tbl_in2 <- expand.grid(var = c("age", "surv"),
-            saturated = c(TRUE, FALSE),
-            r_mat = c("equal", "unequal")
+            r_mat = c("equal", "unequal"),
+            nu = c(0, 1),
+            ar = c(0, 1),
+            ma = c(0, 1)
             )  %>% 
    left_join(tbl_in, ., by = "var") %>% 
-  filter(var == "age", 
-         r_mat == "unequal")
+  filter(var == "surv", 
+         r_mat == "equal",
+         !(nu == 1 & ar == 1 & ma == 1))
 
 # fit model
 furrr::future_pmap(
-  list(tbl_in2$mat_in, tbl_in2$var, tbl_in2$r_mat, tbl_in2$saturated),
-  .f = function (y, var, r_mat, saturated) {
+  list(tbl_in2$mat_in, tbl_in2$var, tbl_in2$r_mat, tbl_in2$nu,
+       tbl_in2$ar, tbl_in2$ma),
+  .f = function (y, var_in, r_mat, nu, ar, ma) {
     varIndx <- if (r_mat %in% c("unequal", "unconstrained")) {
        seq(1, nrow(y), by = 1)
     } else  NULL
     
-    sat_name <- ifelse(saturated == TRUE, "sat", "unsat")
-    f_name <- paste(var, sat_name, r_mat, "bayesdfa.RDS", sep = "_")
+    sat_name1 <- if (nu) "nu_" 
+    sat_name2 <- if (ar) "ar_" 
+    sat_name3 <- if (ma) "ma_" 
+    sat_name <- paste(sat_name1, sat_name2, sat_name3, sep = "")
     
+    f_name <- paste(var_in, sat_name, r_mat, "bayesdfa.RDS", sep = "_")
+
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE, 
       varIndx = varIndx, 
-      #estimate_nu = saturated, 
-      estimate_trend_ar = saturated, estimate_trend_ma = saturated,
-      iter = 3000, chains = 4, thin = 1,
+      estimate_nu = nu, estimate_trend_ar = ar, estimate_trend_ma = ma,
+      iter = 2000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     saveRDS(fit, here::here("data", "model_structure_fits", f_name))
@@ -61,8 +70,9 @@ furrr::future_pmap(
 
 
 files <- list.files(path = here::here("data", "model_structure_fits"), 
-                    pattern = "\\.RDS$", full.names = TRUE)
-fit_list <- lapply(files, readRDS)
+                    pattern = "\\.RDS$", full.names = TRUE) 
+subfiles <- files[grepl("surv", files)]
+fit_list <- lapply(subfiles, readRDS)
 
 
 ## diagnostics check
@@ -72,16 +82,16 @@ map(fit_list, function (x) {
     filter(n_eff < 250 | Rhat > 1.05)
 })
 
-fit_tbl <- tbl_in2 %>% 
-  arrange(var, -saturated) %>% 
-  select(var, saturated, r_mat)
-fit_tbl$fits <- fit_list
+# fit_tbl <- tbl_in2 %>%
+#   arrange(var, nu, ma) %>%
+#   select(var, saturated, r_mat)
+# fit_tbl$fits <- fit_list
 
 # check for convergence
-fit_tbl$converged <- map(fit_tbl$fits, is_converged) %>% unlist()
+fit_tbl$converged <- map(fit_list, is_converged) %>% unlist()
 
 # sum div transitions
-div_trans <- map(fit_tbl$fits, function (y) {
+div_trans <- map(fit_list, function (y) {
   par_list <- get_sampler_params(y$model, inc_warmup = FALSE)
   map(par_list, function (x) {
     sum(x[ , "divergent__"]) 
@@ -89,7 +99,6 @@ div_trans <- map(fit_tbl$fits, function (y) {
     unlist() %>% 
     sum()
 })
-fit_tbl$divergent <- div_trans %>% unlist()
 
 # plot divergent transitions focusing on candidate parameters
 all_pars <- dimnames(fit_tbl$post[[1]])[3] %>% unlist() %>% as.character()
@@ -105,20 +114,15 @@ fit_tbl$np <- map(fit_tbl$fits, function (x) {
 
 mcmc_trace(fit_tbl$post[[1]], pars = pars, np = fit_tbl$np[[1]])
 
-age_mat <- gen_tbl$gen_mat[[4]]
-r_index <- seq(1, nrow(age_mat), by = 1)
+# loo_tbl <- tibble(group = rep(gen_tbl$group, 2),
+#                   m = rep(c(2, 1), each = length(gen_tbl$group)),
+#                   fits = c(dfa_fits, dfa_fits1))
+loo <- map(fit_list, bayesdfa::loo)
+looic <- map(loo, function(x) x$estimates["looic", "Estimate"]) %>%
+  unlist()
 
-fit1 <- fit_dfa(
-  y = age_mat, num_trends = 2, zscore = FALSE, 
-  varIndx = r_index, 
-  estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-  iter = 3000, chains = 4, thin = 1,
-  control = list(adapt_delta = 0.99, max_treedepth = 20)
-)
-fit2 <- fit_dfa(
-  y = age_mat, num_trends = 2, zscore = FALSE, 
-  varIndx = r_index, 
-  estimate_trend_ar = FALSE, estimate_trend_ma = FALSE,
-  iter = 3000, chains = 4, thin = 1,
-  control = list(adapt_delta = 0.99, max_treedepth = 20)
-)
+
+loo_tbl_out <- loo_tbl %>%
+  group_by(group) %>%
+  mutate(min_looic = min(looic),
+            delta_loo = looic - min_looic)

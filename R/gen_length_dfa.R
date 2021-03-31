@@ -223,27 +223,24 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
   as.numeric(colnames(x))
 })
 
-# export
-saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl.RDS"))
-
-
-furrr::future_map2(
-  gen_tbl$gen_mat,
-  gen_tbl$group,
-  .f = function (y, group) {
-    fit <- fit_dfa(
-      y = y, num_trends = 2, zscore = FALSE, 
-      # estimate_nu = TRUE, 
-      estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-      iter = 3000, chains = 4, thin = 1,
-      control = list(adapt_delta = 0.99, max_treedepth = 20)
-    )
-    f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-    saveRDS(fit, here::here("data", "generation_fits", f_name))
-  },
-  .progress = TRUE,
-  .options = furrr::furrr_options(seed = TRUE)
-)
+#fit 
+# furrr::future_map2(
+#   gen_tbl$gen_mat,
+#   gen_tbl$group,
+#   .f = function (y, group) {
+#     fit <- fit_dfa(
+#       y = y, num_trends = 2, zscore = FALSE, 
+#       # estimate_nu = TRUE, 
+#       estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+#       iter = 3000, chains = 4, thin = 1,
+#       control = list(adapt_delta = 0.99, max_treedepth = 20)
+#     )
+#     f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+#     saveRDS(fit, here::here("data", "generation_fits", f_name))
+#   },
+#   .progress = TRUE,
+#   .options = furrr::furrr_options(seed = TRUE)
+# )
  
 
 # read outputs
@@ -267,6 +264,30 @@ map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
     filter(n_eff < 500 | Rhat > 1.05)
 })
+
+
+# chain plots for key pars
+post <- map(dfa_fits, function (x) {
+  as.array(x$samples)
+})
+np <- map(dfa_fits, function (x) {
+  nuts_params(x$model)
+})
+
+all_pars <- dimnames(post[[1]])[3] %>% unlist() %>% as.character()
+to_match <- c("theta", "phi", "xstar", "sigma")
+pars <- all_pars[grepl(paste(to_match, collapse = "|"), all_pars)]
+
+trace_list <- pmap(list(post, np, gen_tbl$group),
+                   .f = function(x, y, z) {
+                     mcmc_trace(x, pars = pars, np = y) +
+                       labs(title = z)
+                     })
+
+pdf(here::here("figs", "dfa", "bayes", "generation_length", "diagnostics",
+               "trace_plots.pdf"))
+trace_list
+dev.off()
 
 
 # rotate trends and add to surv_tbl (keep DFA separate because they're huge)

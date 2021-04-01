@@ -29,7 +29,8 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
 stk_tbl <- surv %>% 
   ungroup() %>% 
   select(stock, stock_name, smolt, run, 
-         j_group1:j_group4, a_group1:a_group4, j_group4b:j_group1b) %>% 
+         j_group1:j_group4, a_group1:a_group4, j_group1b, j_group2b, j_group3b,
+         j_group4b, j_group5b) %>% 
   distinct() 
 
 # subset of stocks for test run

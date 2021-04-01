@@ -17,11 +17,7 @@ gen_raw <- readRDS(here::here("data", "salmonData",
                               "cwt_indicator_surv_clean.RDS")) 
 
 gen <- gen_raw %>% 
-  filter(!is.na(gen_length),
-         #!j_group3 %in% c("col_streamtype", "north_oceantype", 
-         # "sog_streamtype"),
-         #!a_group3 == "north_streamtype"
-  ) %>% 
+  filter(!is.na(gen_length)) %>% 
   group_by(stock) %>% 
   mutate(gen_z = as.numeric(scale(gen_length)),
          gen_cent = as.numeric(scale(gen_length, center = TRUE, 
@@ -47,7 +43,8 @@ stk_tbl <- gen %>%
                                 max_age - 2)) %>% 
   ungroup() %>% 
   select(stock, stock_name, max_age, max_ocean_age, smolt, run, 
-         j_group1:j_group4, a_group1:a_group4, j_group4b:j_group1b) %>% 
+         j_group1:j_group4, a_group1:a_group4, j_group1b, j_group2b, j_group3b,
+         j_group4b, j_group5b) %>% 
   distinct() 
 
 

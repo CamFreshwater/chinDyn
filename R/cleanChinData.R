@@ -72,8 +72,8 @@ by_dat <- metadata %>%
   left_join(., by_dat1, by = c("stock", "stock_name", "brood_year")) %>% 
   full_join(., gen1, by = c("stock", "brood_year")) %>%
   mutate(
-    lat = as.numeric(lat),
-    long = as.numeric(long),
+    lat = as.numeric(hatch_lat),
+    long = as.numeric(hatch_long),
     M = -log(survival),
     # change Elwha's region given catch dist similar to Puget
     region = ifelse(stock == "ELW", "NPGSD", region),
@@ -140,16 +140,16 @@ by_dat <- metadata %>%
          j_group4b  = as.factor(paste(j_group4, smolt, sep = "_")),
          j_group3b  = as.factor(paste(j_group3, smolt, sep = "_")),
          j_group2b  = as.factor(paste(j_group2, smolt, sep = "_")),
-         j_group1b = as.factor(paste(j_group1, smolt, sep = "_"))#,
-         # a_group4b  = as.factor(paste(a_group4, smolt, sep = "_")),
-         # a_group3b  = as.factor(paste(a_group3, smolt, sep = "_")),
-         # a_group2b  = as.factor(paste(a_group2, smolt, sep = "_")),
-         # a_group1b = as.factor(paste(a_group1, smolt, sep = "_")),
-         # a_group4c  = as.factor(paste(a_group4, run, sep = "_")),
-         # a_group3c  = as.factor(paste(a_group3, run, sep = "_")),
-         # a_group2c  = as.factor(paste(a_group2, run, sep = "_")),
-         # a_group1c = as.factor(paste(a_group1, run, sep = "_"))
-         )
+         j_group1b = as.factor(paste(j_group1, smolt, sep = "_"))
+         ) %>% 
+  #add final category that separates SoG/PS for subyearlings, but not 
+  #yearlings
+  mutate(j_group5b = case_when(
+    j_group2 == "salish" & smolt == "streamtype" ~ "salish_streamtype",
+    TRUE ~ as.character(j_group3b)
+  ) %>% 
+    as.factor()
+  )
 
 saveRDS(by_dat,
         here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))

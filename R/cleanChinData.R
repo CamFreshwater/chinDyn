@@ -176,27 +176,30 @@ by_dat %>%
 
 ## Prep escapement data
 # Focus only on Salish Sea stocks
-escDatWide <- read.csv(here("data", "salmonData", "rawData", "escapementData",
-                            "escDataWideTrim.csv"), 
+esc_wide <- read.csv(here("data", "salmonData", "escapement_data_wide.csv"), 
                        stringsAsFactors = FALSE)
 
-escDat <- escDatWide %>% 
+esc_long <- esc_wide %>% 
   gather(key = stock, value = esc, -Year) %>% 
-  #restrict to Salish Sea only stocks
-  filter(stock %in% c("Upper.Geo.", "Cowichan", "Nanaimo", "Fraser..Sp.1.3",
-                      "Fraser..Sp.1.2", "Nicola.Sp.1.2", "Fraser..Sum.1.3", 
-                      "Fraser..Sum.0.3", "L..Shuswap", "Harrison", "Skagit.Spr",
-                      "Skagit.Sum", "Stillaguamish", "Snohomish", "Green", 
-                      "Nooksack.Spr", "Lake.Washington")) %>% 
-  mutate(year = as.numeric(
-    case_when(
-      Year > 74 & Year < 100 ~ paste("19", Year, sep = ""),
-      Year < 10 ~ paste("200", Year, sep =  ""),
-      TRUE ~ paste("20", Year, sep = ""))
-    )
-  ) %>% 
-  select(year, stock, esc)
+  mutate(stock = tolower(stock))
 
-write.csv(escDat, here::here("data", "salmonData", "CLEANsalishSea_escData.csv"),
+# import escapement key (made by hand)
+esc_key <- read.csv(here::here("data", "salmonData", "esc_stock_key.csv"))
+
+esc <- esc_long %>% 
+  left_join(., esc_key, by = "stock") %>% 
+  # drop some redundant stocks
+  filter(!is.na(new_stock)) %>% 
+  mutate(
+    escapement = esc / 1000,
+    year = as.numeric(
+      case_when(
+        Year > 74 & Year < 100 ~ paste("19", Year, sep = ""),
+        Year < 10 ~ paste("200", Year, sep =  ""),
+        TRUE ~ paste("20", Year, sep = "")))
+  ) %>%
+  select(year, stock = new_stock, juv_group3b, escapement) 
+
+write.csv(esc, here::here("data", "salmonData", "clean_escapement_data.csv"),
           row.names = FALSE)
 

@@ -18,9 +18,7 @@ surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>%
          year < 2017) %>%
   group_by(stock) %>% 
   mutate(M_z = as.numeric(scale(M)),
-         M_cent = as.numeric(scale(M, center = TRUE, scale = FALSE)),
-         gen_cent = as.numeric(scale(gen_length, center = TRUE, 
-                                     scale = FALSE))) %>%
+         M_cent = as.numeric(scale(M, center = TRUE, scale = FALSE))) %>%
   ungroup() %>% 
   droplevels()
   

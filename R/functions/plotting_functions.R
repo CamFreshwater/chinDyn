@@ -42,7 +42,7 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
   out %>% 
     mutate(ID = names$stock_name[ID] %>% 
              as.factor(.) %>% 
-             fct_reorder(., last_mean, .desc = descend_order))
+             fct_reorder(., last_mean, .desc = descend_order)) 
 }
 
 
@@ -50,7 +50,8 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
 plot_fitted_pred <- function(df_pred, #ylab = NULL, 
                              print_x = TRUE, 
                              col_ramp = c(-1, 1), 
-                             col_ramp_direction = -1, facet_col = NULL,
+                             col_ramp_direction = -1, 
+                             facet_row = NULL,
                              leg_name = NULL) {  
   #limits for y axis
   y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
@@ -69,22 +70,18 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     scale_colour_distiller(type = "div", limit = col_ramp, 
                            direction = col_ramp_direction, 
                            palette = "RdYlBu", name = leg_name) +
-    # scale_y_continuous(name = ylab, position = 'right', sec.axis = dup_axis(),
-    #                    labels = scales::number_format(accuracy = 1)) + 
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     geom_point(aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
-    # facet_wrap(~ID, ncol = facet_col) +
-    facet_wrap(~ID, nrow = 1) +
+    facet_wrap(~ID, nrow = facet_row) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
-    # labs(y = ylab) +
     theme(axis.title.x = element_blank(),
           axis.title.y.left = element_blank(),
           legend.position = "none",
           axis.text.y.right = element_blank(),
           axis.ticks.y.right = element_blank())
-  
+
   if (print_x == FALSE) {
     p <- p + 
       theme(axis.text.x = element_blank(),
@@ -153,8 +150,6 @@ plot_one_trend <- function(trend_dat) {
 
 ## function to prep regime model fit for plotting (based on 
 # bayesdfa::plot_regime_model)
-regime_model <- gen_tbl$regime_trend1[[1]]
-
 prep_regime <- function(regime_model, probs = c(0.05, 0.95),
                         regime_prob_threshold = 0.9, flip_regimes = FALSE,
                         years, group) {

@@ -287,7 +287,7 @@ trace_list
 dev.off()
 
 
-# rotate trends and add to surv_tbl (keep DFA separate because they're huge)
+# rotate trends and add to gen_tbl (keep DFA separate because they're huge)
 gen_tbl$rot_gen <- map(dfa_fit, rotate_trends)
 
 # test for evidence of regimes 

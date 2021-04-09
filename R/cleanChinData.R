@@ -176,7 +176,7 @@ by_dat %>%
 
 ## Prep escapement data
 # Focus only on Salish Sea stocks
-esc_wide <- read.csv(here("data", "salmonData", "escapement_data_wide.csv"), 
+esc_wide <- read.csv(here::here("data", "salmonData", "escapement_data_wide.csv"), 
                        stringsAsFactors = FALSE)
 
 esc_long <- esc_wide %>% 
@@ -191,14 +191,15 @@ esc <- esc_long %>%
   # drop some redundant stocks
   filter(!is.na(new_stock)) %>% 
   mutate(
-    escapement = esc / 1000,
+    #replace zero values (n=1)
+    esc = ifelse(esc > 0, esc, 1),
     year = as.numeric(
       case_when(
         Year > 74 & Year < 100 ~ paste("19", Year, sep = ""),
         Year < 10 ~ paste("200", Year, sep =  ""),
         TRUE ~ paste("20", Year, sep = "")))
   ) %>%
-  select(year, stock = new_stock, juv_group3b, escapement) 
+  select(year, stock = new_stock, j_group3b = juv_group3b, esc) 
 
 write.csv(esc, here::here("data", "salmonData", "clean_escapement_data.csv"),
           row.names = FALSE)

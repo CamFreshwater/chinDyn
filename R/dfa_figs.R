@@ -24,6 +24,13 @@ gen_dfa <- map(gen_tbl$group, function(y) {
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
+# import escapement data
+# esc_tbl <- readRDS(here::here("data", "escapement_fits", "esc_tbl.RDS"))
+# esc_dfa <- map(esc_tbl$group, function(y) {
+#   f_name <- paste(y, "two-trend", "bayesdfa_scaled.RDS", sep = "_") 
+#   readRDS(here::here("data", "escapement_fits", f_name))
+# }) 
+
 
 group_labs <- surv_tbl$group_labs <- gen_tbl$group_labs <- c(
   "North\nYearling", 

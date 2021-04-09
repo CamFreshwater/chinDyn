@@ -25,6 +25,7 @@ myNotes.*
 data/salmonData/rawData
 data/dfaBayesFits/
 data/gamFits/
+data/escapement_fits/
 data/mortality_fits/
 data/generation_fits/
 data/model_structure_fits/

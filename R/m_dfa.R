@@ -11,7 +11,7 @@ library(tidyverse)
 ncores <- parallel::detectCores() 
 future::plan(future::multisession, workers = ncores - 2)
 
-surv <- readRDS(here::here("data/salmonData/cwt_indicator_surv_clean.RDS")) %>% 
+surv <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS")) %>% 
   #remove stocks that are aggregates of others on CP's advice
   # TST combines STI/TAK and AKS combines SSA and NSA
   filter(!stock %in% c("TST", "AKS"),

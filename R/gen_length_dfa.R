@@ -13,7 +13,7 @@ ncores <- parallel::detectCores()
 future::plan(future::multisession, workers = ncores - 2)
 
 
-gen_raw <- readRDS(here::here("data", "salmonData", 
+gen_raw <- readRDS(here::here("data", "salmon_data", 
                               "cwt_indicator_surv_clean.RDS")) 
 
 gen <- gen_raw %>% 

@@ -65,10 +65,10 @@ shape_pal <- c(21, 23)
 names(shape_pal) <- c("Subyearling", "Yearling")
 
 oey_map <- base_map +
-  geom_point(data = dat,
+  geom_jitter(data = dat,
              aes(x = hatch_long, y = hatch_lat, 
                  fill = juv_region, shape = life_history),
-             size = 3,
+             height = 0.25, width = 0.25, size = 3,
              inherit.aes = FALSE) +
   scale_fill_manual(name = "Ocean Entry Region",
                     values = fill_pal) +
@@ -103,5 +103,5 @@ png(here::here("figs", "ms_figs", "stock_locs.png"),
     height = 7, width = 6, units = "in", res = 300)
 cowplot::ggdraw() +
   cowplot::draw_plot(oey_map) +
-  cowplot::draw_plot(inset_map, x = 0.13, y = 0.01, width = 0.3, height = 0.35)
+  cowplot::draw_plot(inset_map, x = 0.09, y = 0, width = 0.35, height = 0.4)
 dev.off()

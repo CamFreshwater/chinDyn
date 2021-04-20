@@ -53,8 +53,7 @@ set.seed(345)
 # predicted survival fits
 surv_pred_list <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years), 
                   fitted_preds,
-                  descend_order = TRUE,
-                  subset = 5)
+                  descend_order = TRUE)
 # scale colors based on observed range over entire dataset
 col_ramp_surv <- surv_pred_list %>% 
   bind_rows() %>% 
@@ -75,8 +74,7 @@ x_axes <- c(F, F, F, F, T)
 surv_fit <- pmap(list(surv_pred_list, surv_tbl$group_labs, x_axes), 
                  .f = function(x, y, z) {
                    plot_fitted_pred(x, print_x = z,
-                                    col_ramp = col_ramp_surv
-                                    # , facet_col = 7
+                                    col_ramp = col_ramp_surv, facet_col = 5,
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis(),
@@ -87,8 +85,8 @@ surv_fit <- pmap(list(surv_pred_list, surv_tbl$group_labs, x_axes),
 surv_fit_panel <- cowplot::plot_grid(
   surv_fit[[1]], surv_fit[[2]], surv_fit[[3]], surv_fit[[4]], surv_fit[[5]],
   axis = c("r"), align = "v", 
-  rel_heights = c(rep(.195, 4), .22), #to account for text on bottom
-  # rel_heights = c(2/9, 2/9, 1/9, 2/9, 2/9),
+  # rel_heights = c(rep(.195, 4), .22), #to account for text on bottom
+  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
   ncol=1 
 ) %>% 
   arrangeGrob(., 
@@ -107,8 +105,7 @@ surv_fit_panel2 <- cowplot::plot_grid(
 # predicted gen length fits
 gen_pred_list <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years), 
                        fitted_preds,
-                       descend_order = FALSE,
-                      subset = 5)
+                       descend_order = FALSE)
 # scale colors based on observed range over entire dataset
 col_ramp_gen <- gen_pred_list %>% 
   bind_rows() %>% 
@@ -117,19 +114,12 @@ col_ramp_gen <- gen_pred_list %>%
   abs() %>% 
   max() * c(-1, 1)
 
-gen_fit <- map2(gen_pred_list, x_axes, .f = function(x, y) {
-  plot_fitted_pred(x, print_x = y,
-                   col_ramp = col_ramp_gen, facet_col = 5, 
-                   col_ramp_direction = 1) +
-    scale_y_continuous(labels = scales::number_format(accuracy = 0.1))
-})
-
 gen_fit <- pmap(list(gen_pred_list, gen_tbl$group_labs, x_axes), 
                 .f = function(x, y, z) {
                   plot_fitted_pred(x, print_x = z,
                                    col_ramp = col_ramp_gen,
-                                   col_ramp_direction = 1
-                                   # , facet_col = 7
+                                   col_ramp_direction = 1,
+                                   facet_col = 5
                   ) +
                     scale_y_continuous(
                       name = y, position = 'right', sec.axis = dup_axis(),
@@ -140,8 +130,8 @@ gen_fit <- pmap(list(gen_pred_list, gen_tbl$group_labs, x_axes),
 gen_fit_panel <- cowplot::plot_grid(
   gen_fit[[1]], gen_fit[[2]], gen_fit[[3]], gen_fit[[4]], gen_fit[[5]],
   axis = c("r"), align = "v", 
-  rel_heights = c(rep(.195, 4), .22), #to account for text on bottom  
-  # rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  # rel_heights = c(rep(.195, 4), .22), #to account for text on bottom  
+  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
   ncol=1
 ) %>% 
   arrangeGrob(., 
@@ -168,12 +158,12 @@ gen_fit_panel2 <- cowplot::plot_grid(
 # gen_fit_panel2
 # dev.off()
 
-png(here::here("figs", "ms_figs", "mortality_fit.png"), height = 7, width = 8, 
+png(here::here("figs", "ms_figs", "mortality_fit.png"), height = 10, width = 8, 
     res = 300, units = "in")
 surv_fit_panel2
 dev.off()
 
-png(here::here("figs", "ms_figs", "age_fit.png"), height = 7, width = 8, 
+png(here::here("figs", "ms_figs", "age_fit.png"), height = 10, width = 8, 
     res = 300, units = "in")
 gen_fit_panel2
 dev.off()
@@ -291,39 +281,32 @@ gen_trends <- pmap(
   bind_rows() %>% 
   mutate(var = "Mean Age")
 
-trends <- rbind(surv_trends, gen_trends) %>% 
+# old version combining trends of different variables
+trends <- rbind(surv_trends, gen_trends) %>%
   mutate(var = as.factor(var),
-         trend = as.factor(trend), 
+         trend = as.factor(trend),
          life_history = case_when(
            grepl("Sub", group) ~ "subyearling",
            TRUE ~ "yearling"
          ),
-         group = fct_relevel(as.factor(group), "North\nYearling", 
+         group = fct_relevel(as.factor(group), "North\nYearling",
                              "SoG\nSubyearling", "Puget\nYearling",
                              "Puget\nSubyearling", "South\nSubyearling"),
-         var = fct_relevel(as.factor(var), "Juvenile Mortality Rate", 
+         var = fct_relevel(as.factor(var), "Juvenile Mortality Rate",
                            "Mean Age")
          )
 
-
-# pdf(here::here("figs", "trends_both_vars.pdf"), height = 7, width = 4)
+# png(here::here("figs", "ms_figs", "trend1.png"), height = 7, width = 4, 
+#     res = 300, units = "in")
 # plot_one_trend(trends %>% filter(trend == "Trend 1"))
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "trend2.png"), height = 7, width = 4, 
+#     res = 300, units = "in")
 # plot_one_trend(trends %>% filter(trend == "Trend 2"))
 # dev.off()
 
-png(here::here("figs", "ms_figs", "trend1.png"), height = 7, width = 4, 
-    res = 300, units = "in")
-plot_one_trend(trends %>% filter(trend == "Trend 1"))
-dev.off()
-
-png(here::here("figs", "ms_figs", "trend2.png"), height = 7, width = 4, 
-    res = 300, units = "in")
-plot_one_trend(trends %>% filter(trend == "Trend 2"))
-dev.off()
-
-
-# ESTIMATED REGIMES ------------------------------------------------------------
-
+# new version combines trends and regimes
 surv_regimes1 <- pmap(
   list(regime_model = surv_tbl$regime_trend1, years = surv_tbl$years, 
        group = group_labs), 
@@ -369,10 +352,44 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
          ),
          group = fct_relevel(as.factor(group), "North\nYearling", 
                              "SoG\nSubyearling", "Puget\nYearling",
-                             "Puget\nSubyearling", "South\nSubyearling"),
-         var = fct_relevel(as.factor(var), "Juvenile Mortality Rate", 
-                           "Mean Age")
+                             "Puget\nSubyearling", "South\nSubyearling")#,
+         # var = fct_relevel(as.factor(var), "Juvenile Mortality Rate", 
+         #                   "Mean Age")
   ) 
+
+# dummy version just for legend
+leg_plot <- trends %>% 
+  filter(trend == "Trend 1", 
+         var == "Juvenile Mortality Rate") %>% 
+  plot_one_trend() +
+  theme(legend.position = "top")
+  
+# first survival trend
+surv_t_one <- trends %>% 
+  filter(trend == "Trend 1", 
+         var == "Juvenile Mortality Rate") %>% 
+  plot_one_trend()
+surv_r_one <- regimes %>% 
+  filter(trend == "One", 
+         State == "State 1",
+         var == "Juvenile Mortality Rate") %>% 
+  plot_one_regime()
+surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
+
+
+png(here::here("figs", "ms_figs", "trend_regime_surv1.png"), 
+    height = 8.5, width = 6, res = 300, units = "in")
+cowplot::plot_grid(
+  cowplot::get_legend(leg_plot),
+  surv_one_panel,
+  ncol=1, rel_heights=c(.075, .925)
+)
+dev.off()
+
+
+
+
+
 
 png(here::here("figs", "ms_figs", "regime_trend1.png"), height = 7, width = 4, 
     res = 300, units = "in")

@@ -51,7 +51,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                              print_x = TRUE, 
                              col_ramp = c(-1, 1), 
                              col_ramp_direction = -1, 
-                             facet_row = NULL,
+                             facet_row = NULL, facet_col = NULL,
                              leg_name = NULL) {  
   #limits for y axis
   y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
@@ -73,7 +73,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     geom_point(aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
-    facet_wrap(~ID, nrow = facet_row) +
+    facet_wrap(~ID, nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
     theme(axis.title.x = element_blank(),
@@ -129,8 +129,8 @@ prep_trends <- function (rotated_modelfit, years, group) {
 
 
 ## function to plot trends (based on bayesdfa::plot_trends)
-plot_one_trend <- function(trend_dat) {
-  ggplot(trend_dat, 
+plot_one_trend <- function(trend_dat, facet_var = FALSE) {
+  p <- ggplot(trend_dat, 
          aes_string(x = "time", y = "x")) + 
     geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
                            fill = "life_history"), 
@@ -142,9 +142,16 @@ plot_one_trend <- function(trend_dat) {
     xlab("Brood Year") + 
     ylab("Estimated Trend") +
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
-    facet_grid(group ~ var) +
+    facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() + 
-    theme(legend.position = "top")
+    theme(legend.position = "none")
+  
+  if (facet_var == TRUE) {
+    p <- p + 
+      facet_grid(group~var)
+  }
+  
+  return(p)
 }
 
 
@@ -199,9 +206,9 @@ prep_regime <- function(regime_model, probs = c(0.05, 0.95),
 
 
 ## function to plot regimes (based on bayesdfa::plot_trends/plot_regime_model)
-plot_one_regime <- function(regime_dat) {
-  ggplot(regime_dat, 
-         aes_string(x = "time", y = "median")) + 
+plot_one_regime <- function(regime_dat, facet_var = FALSE) {
+  p <- ggplot(regime_dat, 
+              aes_string(x = "time", y = "median")) + 
     geom_ribbon(aes_string(ymin = "lwr", ymax = "upr", colour = "life_history",
                            fill = "life_history"), 
                 alpha = 0.4, lty = 6) + 
@@ -211,9 +218,16 @@ plot_one_regime <- function(regime_dat) {
     xlab("Brood Year") + 
     ylab("Probability of Regime 1") +
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
-    facet_grid(group ~ var) +
+    facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() + 
-    theme(legend.position = "top")
+    theme(legend.position = "none")
+  
+  if (facet_var == TRUE) {
+    p <- p +
+      facet_grid(group ~ var)
+  }
+  
+  return(p)
 }
 
 

@@ -17,7 +17,7 @@ require(tidyverse); require(here)
 
 
 # new survival data
-by_raw <- read.csv(here::here("data","salmonData", 
+by_raw <- read.csv(here::here("data","salmon_data", 
                               "cwt_indicator_surv_sep2020.csv"), 
                       stringsAsFactors = FALSE)
 colnames(by_raw)[1] <- "year"
@@ -35,7 +35,7 @@ by_dat1 <- by_raw[-1, ] %>%
   arrange(stock) 
 
 # mean generation length data
-gen1 <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv")) %>% 
+gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time.csv")) %>% 
   mutate(stock = as.factor(Stock)) %>% 
   select(stock, brood_year = BY, 
          gen_length = GenTim.fishing.mortality.represented.in.calcuations.)
@@ -62,7 +62,7 @@ gen1 <- read.csv(here::here("data/salmonData/cwt_indicator_generation_time.csv")
 
 
 # import version cleaned by hand (added lat/longs and two systems HOK and SMK)
-metadata <- read.csv(here::here("data", "salmonData", "metadata_clean.csv")) 
+metadata <- read.csv(here::here("data", "salmon_data", "metadata_clean.csv")) 
 
 by_dat <- metadata %>% 
   left_join(.,
@@ -152,16 +152,40 @@ by_dat <- metadata %>%
   )
 
 saveRDS(by_dat,
-        here::here("data", "salmonData", "cwt_indicator_surv_clean.RDS"))
+        here::here("data", "salmon_data", "cwt_indicator_surv_clean.RDS"))
+
+# yearly range
+gen_years <- by_dat %>%
+  filter(!is.na(gen_length)) %>% 
+  group_by(stock) %>% 
+  summarize(min_year_gen = min(brood_year),
+            max_year_gen = max(brood_year)) %>% 
+  mutate(gen_year_range = paste(min_year_gen, max_year_gen, sep = "-")) 
+surv_years <- by_dat %>%
+  filter(!is.na(survival)) %>% 
+  group_by(stock) %>% 
+  summarize(min_year_surv = min(brood_year),
+            max_year_surv = max(brood_year)) %>% 
+  mutate(surv_year_range = paste(min_year_surv, max_year_surv, sep = "-")) 
 
 groupings_table <- by_dat %>% 
-  select(stock, stock_name, smolt, run, region, j_group1:j_group4, 
-         a_group1:a_group4) %>% 
-  distinct() %>% 
-  arrange(juvenile_grouping)
-write.csv(groupings_table, here::here("data", "salmonData", 
+  left_join(., gen_years %>% select(stock, gen_year_range), by = "stock") %>% 
+  left_join(., surv_years %>% select(stock, surv_year_range), by = "stock") %>% 
+  mutate(j_group4 = fct_relevel(as.factor(j_group4), "north", "sog", "puget", "south", 
+                                          "col"),
+         lifehistory = ifelse(smolt == "streamtype", "yearling", 
+                              "subyearling")) %>% 
+  arrange(j_group4) %>% 
+  select(stock, stock_name, gen_year_range, surv_year_range, lifehistory, run,
+         juv_fine = j_group4, juv_int1= j_group3, juv_int2 = j_group2, 
+         juv_coarse = j_group1, adult_fine = a_group4, adult_int1= a_group3, 
+         adult_int2 = a_group2, adult_coarse = a_group1) %>% 
+  distinct() 
+
+write.csv(groupings_table, here::here("data", "salmon_data", 
                                       "groupings_table.csv"),
           row.names = FALSE)
+
 
 # How many stocks per region?
 by_dat %>% 
@@ -176,7 +200,7 @@ by_dat %>%
 
 ## Prep escapement data
 # Focus only on Salish Sea stocks
-esc_wide <- read.csv(here::here("data", "salmonData", "escapement_data_wide.csv"), 
+esc_wide <- read.csv(here::here("data", "salmon_data", "escapement_data_wide.csv"), 
                        stringsAsFactors = FALSE)
 
 esc_long <- esc_wide %>% 
@@ -184,7 +208,7 @@ esc_long <- esc_wide %>%
   mutate(stock = tolower(stock))
 
 # import escapement key (made by hand)
-esc_key <- read.csv(here::here("data", "salmonData", "esc_stock_key.csv"))
+esc_key <- read.csv(here::here("data", "salmon_data", "esc_stock_key.csv"))
 
 esc <- esc_long %>% 
   left_join(., esc_key, by = "stock") %>% 
@@ -201,6 +225,6 @@ esc <- esc_long %>%
   ) %>%
   select(year, stock = new_stock, j_group3b = juv_group3b, esc) 
 
-write.csv(esc, here::here("data", "salmonData", "clean_escapement_data.csv"),
+write.csv(esc, here::here("data", "salmon_data", "clean_escapement_data.csv"),
           row.names = FALSE)
 

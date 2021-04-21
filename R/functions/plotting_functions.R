@@ -216,10 +216,10 @@ plot_one_regime <- function(regime_dat, facet_var = FALSE) {
     scale_colour_brewer(type = "qual", name = "") +
     scale_fill_brewer(type = "qual", name = "") +
     xlab("Brood Year") + 
-    ylab("Probability of Regime 1") +
+    ylab("Probability of State 1") +
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     facet_wrap(~group, ncol = 1) +
-    ggsidekick::theme_sleek() + 
+    ggsidekick::theme_sleek() +
     theme(legend.position = "none")
   
   if (facet_var == TRUE) {

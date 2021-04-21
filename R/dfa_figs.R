@@ -281,7 +281,6 @@ gen_trends <- pmap(
   bind_rows() %>% 
   mutate(var = "Mean Age")
 
-# old version combining trends of different variables
 trends <- rbind(surv_trends, gen_trends) %>%
   mutate(var = as.factor(var),
          trend = as.factor(trend),
@@ -296,15 +295,6 @@ trends <- rbind(surv_trends, gen_trends) %>%
                            "Mean Age")
          )
 
-# png(here::here("figs", "ms_figs", "trend1.png"), height = 7, width = 4, 
-#     res = 300, units = "in")
-# plot_one_trend(trends %>% filter(trend == "Trend 1"))
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "trend2.png"), height = 7, width = 4, 
-#     res = 300, units = "in")
-# plot_one_trend(trends %>% filter(trend == "Trend 2"))
-# dev.off()
 
 # new version combines trends and regimes
 surv_regimes1 <- pmap(
@@ -376,30 +366,92 @@ surv_r_one <- regimes %>%
   plot_one_regime()
 surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
 
+# second survival trend
+surv_t_two <- trends %>% 
+  filter(trend == "Trend 2", 
+         var == "Juvenile Mortality Rate") %>% 
+  plot_one_trend()
+surv_r_two <- regimes %>% 
+  filter(trend == "Two", 
+         State == "State 1",
+         var == "Juvenile Mortality Rate") %>% 
+  plot_one_regime()
+surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
+
+# first age trend
+gen_t_one <- trends %>% 
+  filter(trend == "Trend 1", 
+         var == "Mean Age") %>% 
+  plot_one_trend()
+gen_r_one <- regimes %>% 
+  filter(trend == "One", 
+         State == "State 1",
+         var == "Mean Age") %>% 
+  plot_one_regime()
+gen_one_panel <- cowplot::plot_grid(gen_t_one, gen_r_one, ncol = 2)
+
+# second age trend
+gen_t_two <- trends %>% 
+  filter(trend == "Trend 2", 
+         var == "Mean Age") %>% 
+  plot_one_trend()
+gen_r_two <- regimes %>% 
+  filter(trend == "Two", 
+         State == "State 1",
+         var == "Mean Age") %>% 
+  plot_one_regime()
+gen_two_panel <- cowplot::plot_grid(gen_t_two, gen_r_two, ncol = 2)
+
+#output plots
+plot_out <- function(x) {
+  cowplot::plot_grid(
+    cowplot::get_legend(leg_plot),
+    x,
+    ncol=1, rel_heights=c(.075, .925)
+  )
+}
 
 png(here::here("figs", "ms_figs", "trend_regime_surv1.png"), 
     height = 8.5, width = 6, res = 300, units = "in")
-cowplot::plot_grid(
-  cowplot::get_legend(leg_plot),
-  surv_one_panel,
-  ncol=1, rel_heights=c(.075, .925)
-)
+plot_out(surv_one_panel)
 dev.off()
 
-
-
-
-
-
-png(here::here("figs", "ms_figs", "regime_trend1.png"), height = 7, width = 4, 
-    res = 300, units = "in")
-plot_one_regime(regimes %>% filter(State == "State 1" & trend == "One"))
+png(here::here("figs", "ms_figs", "trend_regime_surv2.png"), 
+    height = 8.5, width = 6, res = 300, units = "in")
+plot_out(surv_two_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "regime_trend2.png"), height = 7, width = 4, 
-    res = 300, units = "in")
-plot_one_regime(regimes %>% filter(State == "State 1" & trend == "Two"))
+png(here::here("figs", "ms_figs", "trend_regime_gen1.png"), 
+    height = 8.5, width = 6, res = 300, units = "in")
+plot_out(gen_one_panel)
 dev.off()
+
+png(here::here("figs", "ms_figs", "trend_regime_gen2.png"), 
+    height = 8.5, width = 6, res = 300, units = "in")
+plot_out(gen_two_panel)
+dev.off()
+
+# old version combining trends of different variables
+
+# png(here::here("figs", "ms_figs", "trend1.png"), height = 7, width = 4, 
+#     res = 300, units = "in")
+# plot_one_trend(trends %>% filter(trend == "Trend 1"))
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "trend2.png"), height = 7, width = 4, 
+#     res = 300, units = "in")
+# plot_one_trend(trends %>% filter(trend == "Trend 2"))
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "regime_trend1.png"), height = 7, width = 4, 
+#     res = 300, units = "in")
+# plot_one_regime(regimes %>% filter(State == "State 1" & trend == "One"))
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "regime_trend2.png"), height = 7, width = 4, 
+#     res = 300, units = "in")
+# plot_one_regime(regimes %>% filter(State == "State 1" & trend == "Two"))
+# dev.off()
 
 
 # ESTIMATED LOADINGS -----------------------------------------------------------

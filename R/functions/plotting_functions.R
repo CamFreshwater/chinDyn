@@ -206,7 +206,7 @@ prep_regime <- function(regime_model, probs = c(0.05, 0.95),
 
 
 ## function to plot regimes (based on bayesdfa::plot_trends/plot_regime_model)
-plot_one_regime <- function(regime_dat, facet_var = FALSE) {
+plot_one_regime <- function(regime_dat, facet_var = FALSE, y_lab = NULL) {
   p <- ggplot(regime_dat, 
               aes_string(x = "time", y = "median")) + 
     geom_ribbon(aes_string(ymin = "lwr", ymax = "upr", colour = "life_history",
@@ -216,7 +216,7 @@ plot_one_regime <- function(regime_dat, facet_var = FALSE) {
     scale_colour_brewer(type = "qual", name = "") +
     scale_fill_brewer(type = "qual", name = "") +
     xlab("Brood Year") + 
-    ylab("Probability of State 1") +
+    ylab(y_lab) +
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() +

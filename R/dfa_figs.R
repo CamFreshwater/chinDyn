@@ -361,9 +361,9 @@ surv_t_one <- trends %>%
   plot_one_trend()
 surv_r_one <- regimes %>% 
   filter(trend == "One", 
-         State == "State 1",
+         State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime()
+  plot_one_regime(y_lab = "Probability of High Mortality Regime")
 surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
 
 # second survival trend
@@ -373,9 +373,9 @@ surv_t_two <- trends %>%
   plot_one_trend()
 surv_r_two <- regimes %>% 
   filter(trend == "Two", 
-         State == "State 1",
+         State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime()
+  plot_one_regime(y_lab = "Probability of High Mortality Regime")
 surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
 
 # first age trend
@@ -387,7 +387,7 @@ gen_r_one <- regimes %>%
   filter(trend == "One", 
          State == "State 1",
          var == "Mean Age") %>% 
-  plot_one_regime()
+  plot_one_regime(y_lab = "Probability of Low Mean Age Regime")
 gen_one_panel <- cowplot::plot_grid(gen_t_one, gen_r_one, ncol = 2)
 
 # second age trend
@@ -399,7 +399,7 @@ gen_r_two <- regimes %>%
   filter(trend == "Two", 
          State == "State 1",
          var == "Mean Age") %>% 
-  plot_one_regime()
+  plot_one_regime(y_lab = "Probability of Low Mean Age Regime")
 gen_two_panel <- cowplot::plot_grid(gen_t_two, gen_r_two, ncol = 2)
 
 #output plots

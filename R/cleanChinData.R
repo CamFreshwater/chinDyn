@@ -16,29 +16,70 @@
 require(tidyverse); require(here)
 
 
-# new survival data
-by_raw <- read.csv(here::here("data","salmon_data", 
-                              "cwt_indicator_surv_sep2020.csv"), 
+
+# exploitation rate analysis output - provides updated juvenile survival est.
+# for many stocks
+dat_can <- read.csv(here::here("data/salmon_data/ctc_era_output_canada_may2021.csv")) %>% 
+  select(age = Age, stock = stock_code, brood_year, survival = Marine.Survival) 
+dat_us <- read.csv(here::here("data/salmon_data/ctc_era_output_usa_may2021.csv")) %>% 
+  select(age, stock = stock_code, brood_year, survival = Marine.Survival) 
+
+by_dat1 <- rbind(dat_can, dat_us) %>%
+  group_by(stock) %>% 
+  mutate(min_age = min(age)) %>% 
+  ungroup() %>% 
+  filter(age == min_age) %>% 
+  select(-age, -min_age) 
+
+
+# survival data provided by Chuck -- not updated but includes historical/defunct
+# TS
+by_raw <- read.csv(here::here("data","salmon_data",
+                              "cwt_indicator_surv_sep2020.csv"),
                       stringsAsFactors = FALSE)
 colnames(by_raw)[1] <- "year"
 stock_key <- data.frame(
   stock = colnames(by_raw)[2:58],
   stock_name = t(by_raw[1, 2:58])
-) %>% 
+) %>%
   rename(stock_name = X1)
-by_dat1 <- by_raw[-1, ] %>% 
-  pivot_longer(., 2:ncol(.), names_to = "stock", values_to = "survival") %>% 
-  left_join(., stock_key, by = "stock") %>% 
+by_dat2 <- by_raw[-1, ] %>%
+  pivot_longer(., 2:ncol(.), names_to = "stock", values_to = "survival") %>%
+  left_join(., stock_key, by = "stock") %>%
   mutate(survival = as.numeric(survival),
-         brood_year = as.numeric(year)) %>% 
-  select(brood_year, stock, stock_name, survival) %>% 
+         brood_year = as.numeric(year)) %>%
+  select(brood_year, stock, stock_name, survival) %>%
   arrange(stock) 
+
+# combine survival data
+by_dat3 <- rbind(by_dat1, 
+                 by_dat2 %>% 
+                   #remove stocks that are present in updated dataset (by_dat1)
+                   filter(!stock %in% by_dat1$stock) %>% 
+                   select(-stock_name))
+
 
 # mean generation length data
 gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time.csv")) %>% 
   mutate(stock = as.factor(Stock)) %>% 
   select(stock, brood_year = BY, 
          gen_length = GenTim.fishing.mortality.represented.in.calcuations.)
+
+
+
+# Code snippet to calculate mean age for one stock; incorrect because cohort
+# size still includes fishery removals
+# dat_can %>% 
+#   filter(stock_code == "ATN") %>% 
+#   select(brood_year, Age, Cohort.Size.ANM, Mat.Rate) %>% 
+#   mutate(spawners = Mat.Rate * Cohort.Size.ANM) %>% 
+#   group_by(brood_year) %>% 
+#   mutate(tot_spawners = sum(spawners)) %>%
+#   ungroup() %>% 
+#   mutate(rel_spawners = spawners * Age) %>%
+#   group_by(brood_year) %>% 
+#   mutate(mean_age = sum(rel_spawners) / tot_spawners) 
+
 
 
 ## Generate metadata using old survival as a template than modify in excel
@@ -52,7 +93,7 @@ gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time.csv"
 #   distinct()
 
 # export temporary .csv to fill in metadata
-# temp_out <- by_dat1 %>%
+# temp_out <- by_dat2 %>%
 #   left_join(., old_surv, by = "stock") %>%
 #   # filter(is.na(jurisdiction)) %>%
 #   select(stock, stock_name, jurisdiction:long) %>%
@@ -60,17 +101,36 @@ gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time.csv"
 #   arrange(stock)
 # write.csv(temp_out, here::here("data", "salmonData", "metadata.csv"))
 
-
 # import version cleaned by hand (added lat/longs and two systems HOK and SMK)
 metadata <- read.csv(here::here("data", "salmon_data", "metadata_clean.csv")) 
 
+
+# mean release size data
+size1 <- read.csv(here::here("data/salmon_data/chinook_releaseweight_weightedavg.csv")) %>% 
+  # for now remove some potential mistakes
+  filter(!(STOCK == "SPR" & BROOD == "2016" & ReleaseYear == "2018"),
+         !(STOCK == "WSH" & BROOD == "2015" & ReleaseYear == "2016" & 
+             age == "2")) %>% 
+  left_join(., metadata %>% select(STOCK = stock, smoltType), by = "STOCK") %>%
+  mutate(dom_release_age = ifelse(smoltType == "streamtype", 2, 1)) %>% 
+  # drop stocks missing from metadata and stocks where release age doesn't
+  # correspond with dominant strategy
+  filter(!is.na(smoltType),
+         age == dom_release_age) %>% 
+  rename(brood_year = BROOD)
+names(size1) <- tolower(names(size1))
+
 by_dat <- metadata %>% 
   left_join(.,
-            expand.grid(brood_year = unique(by_dat1$brood_year),
+            expand.grid(brood_year = unique(by_dat3$brood_year),
                         stock = unique(metadata$stock)),
             by = "stock") %>% 
-  left_join(., by_dat1, by = c("stock", "stock_name", "brood_year")) %>% 
+  left_join(., by_dat3, by = c("stock", "brood_year")) %>% 
+  arrange(stock, brood_year) %>% 
   full_join(., gen1, by = c("stock", "brood_year")) %>%
+  left_join(., 
+            size1 %>% select(stock, brood_year, avg_weight = avg.weight), 
+            by = c("stock", "brood_year")) %>% 
   mutate(
     lat = as.numeric(hatch_lat),
     long = as.numeric(hatch_long),
@@ -167,16 +227,24 @@ surv_years <- by_dat %>%
   summarize(min_year_surv = min(brood_year),
             max_year_surv = max(brood_year)) %>% 
   mutate(surv_year_range = paste(min_year_surv, max_year_surv, sep = "-")) 
+size_years <- by_dat %>%
+  filter(!is.na(avg_weight)) %>% 
+  group_by(stock) %>% 
+  summarize(min_year_size = min(brood_year),
+            max_year_size = max(brood_year)) %>% 
+  mutate(size_year_range = paste(min_year_size, max_year_size, sep = "-")) 
 
 groupings_table <- by_dat %>% 
   left_join(., gen_years %>% select(stock, gen_year_range), by = "stock") %>% 
   left_join(., surv_years %>% select(stock, surv_year_range), by = "stock") %>% 
+  left_join(., size_years %>% select(stock, size_year_range), by = "stock") %>% 
   mutate(j_group4 = fct_relevel(as.factor(j_group4), "north", "sog", "puget", "south", 
                                           "col"),
          lifehistory = ifelse(smolt == "streamtype", "yearling", 
                               "subyearling")) %>% 
   arrange(j_group4) %>% 
-  select(stock, stock_name, gen_year_range, surv_year_range, lifehistory, run,
+  select(stock, stock_name, gen_year_range, surv_year_range, size_year_range,
+         lifehistory, run,
          juv_fine = j_group4, juv_int1= j_group3, juv_int2 = j_group2, 
          juv_coarse = j_group1, adult_fine = a_group4, adult_int1= a_group3, 
          adult_int2 = a_group2, adult_coarse = a_group1) %>% 

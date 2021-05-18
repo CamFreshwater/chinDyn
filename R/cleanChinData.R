@@ -262,6 +262,29 @@ by_dat %>%
   group_by(a_group) %>% 
   summarize(nStocks = length(unique(stock)))
 
+# Coverage mean age, growth and survival
+by_dat %>% 
+  select(stock, brood_year, j_group3, survival, gen_length, avg_weight) %>% 
+  pivot_longer(cols = c("survival", "gen_length", "avg_weight"),
+               names_to = "variable",
+               values_to = "value") %>% 
+  filter(!is.na(value)) 
+
+temp <- by_dat %>% 
+  mutate(surv_cov = ifelse(!is.na(survival) & !is.na(avg_weight), "full",
+                               "missing"),
+         gen_cov = ifelse(!is.na(gen_length) & !is.na(avg_weight), "full",
+                          "missing")) 
+
+pdf(here::here("figs", "sample_coverage.pdf"))
+ggplot(temp %>% filter(!is.na(survival))) +
+  geom_point(aes(x = brood_year, y = stock, colour = surv_cov)) + 
+  facet_wrap(~j_group3, scales = "free_y")
+ggplot(temp %>% filter(!is.na(gen_length))) +
+  geom_point(aes(x = brood_year, y = stock, colour = gen_cov)) + 
+  facet_wrap(~j_group3, scales = "free_y")
+dev.off()
+
 
 #-------------------------------------------------------------------------------
 

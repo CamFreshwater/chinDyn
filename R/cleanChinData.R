@@ -16,7 +16,6 @@
 require(tidyverse); require(here)
 
 
-
 # exploitation rate analysis output - provides updated juvenile survival est.
 # for many stocks
 dat_can <- read.csv(here::here("data/salmon_data/ctc_era_output_canada_may2021.csv")) %>% 

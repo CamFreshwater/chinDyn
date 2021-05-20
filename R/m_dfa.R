@@ -8,6 +8,8 @@
 library(MARSS)
 library(tidyverse)
 
+source(here::here("R", "functions", "data_cleaning_functions.R"))
+
 ncores <- parallel::detectCores() 
 future::plan(future::multisession, workers = ncores - 2)
 
@@ -179,16 +181,6 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-#helper function to spread and label input matrices for bayesdfa
-make_mat <- function(x) {
-  mat1 <- x %>%
-    select(year, stock, M) %>%
-    spread(key = stock, value = M) %>%
-    as.matrix() 
-  out_mat <- t(mat1[, 2:ncol(mat1)])
-  colnames(out_mat) <- mat1[, "year"]
-  return(out_mat)
-}
 
 # number of stocks per group
 kept_grps <- stk_tbl %>% 
@@ -270,20 +262,6 @@ surv_tbl$divergent <- div_trans %>% unlist()
 surv_tbl$rot_surv <- map(dfa_fits, rotate_trends)
 
 # test for evidence of regimes 
-regime_f <- function(rots_in) {
-  dum <- vector(nrow(rots_in$trends_mean), mode = "list")
-  for(i in 1:nrow(rots_in$trends_mean)) {
-    dum[[i]] <- find_regimes(
-      rots_in$trends_mean[i, ], 
-      sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
-      max_regimes = 2,
-      iter = 3000,
-      control = list(adapt_delta = 0.99, max_treedepth = 20)
-    )
-  }
-  return(dum)
-}
-
 hmm_list_m <- furrr::future_map(surv_tbl$rot_surv, regime_f, 
                                 .options = furrr::furrr_options(seed = TRUE))
 map(hmm_list_m, function(x) {

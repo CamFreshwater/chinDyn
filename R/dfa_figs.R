@@ -241,7 +241,7 @@ gen_par_plot <- ggplot(gen_pars,
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
   scale_x_discrete(limits = rev) +
-  ylab("Posterior Estimates from Mean      nnn Age Model") +
+  ylab("Posterior Estimates from Mean Age Model") +
   xlab("Stock Grouping") +
   # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +

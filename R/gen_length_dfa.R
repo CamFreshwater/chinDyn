@@ -8,6 +8,8 @@
 library(MARSS)
 library(tidyverse)
 
+source(here::here("R", "functions", "data_cleaning_functions.R"))
+
 # prep multisession
 ncores <- parallel::detectCores() 
 future::plan(future::multisession, workers = ncores - 2)
@@ -185,17 +187,6 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-#helper function to spread and label input matrices for bayesdfa
-make_mat <- function(x) {
-  mat1 <- x %>%
-    select(year, stock, gen_length) %>%
-    spread(key = stock, value = gen_length) %>%
-    as.matrix() 
-  out_mat <- t(mat1[, 2:ncol(mat1)])
-  colnames(out_mat) <- mat1[, "year"]
-  return(out_mat)
-}
-
 # number of stocks per group
 kept_grps <- stk_tbl %>%
   group_by(j_group3b) %>%
@@ -290,21 +281,7 @@ dev.off()
 # rotate trends and add to gen_tbl (keep DFA separate because they're huge)
 gen_tbl$rot_gen <- map(dfa_fit, rotate_trends)
 
-# test for evidence of regimes 
-regime_f <- function(rots_in) {
-  dum <- vector(nrow(rots_in$trends_mean), mode = "list")
-  for(i in 1:nrow(rots_in$trends_mean)) {
-    dum[[i]] <- find_regimes(
-      rots_in$trends_mean[i, ], 
-      sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
-      max_regimes = 3,
-      iter = 3000,
-      control = list(adapt_delta = 0.99, max_treedepth = 20)
-    )
-  }
-  return(dum)
-}
-
+# hidden markov model for regimes
 hmm_list_g <- furrr::future_map(gen_tbl$rot_gen, regime_f)
 map(hmm_list_g, function(x) {
   map(x, ~.$table)
@@ -339,133 +316,3 @@ saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl.RDS"))
 
 # loo_tbl_out <- readRDS(here::here("data", "generation_fits", 
 #                                   "gen_bayes_dfa_loo_tbl.RDS"))
-
-
-## FIT ML DFA ------------------------------------------------------------------
-
-# # specify other MARSS parameters
-# m <- 2
-# x0 <- A <- "zero"
-# Q <- B <- "identity"
-# R <- "diagonal and unequal"
-# V0 <- diag(5, m)
-# 
-# # z-score input matrix
-# gen_mat_in <- zscore(gen_tbl$gen_mat[[2]])
-# 
-# model.list <- list(A=A, x0=x0, Q=Q, B=B,
-#                    R=R, m = m, V0=V0)
-# fit <- MARSS(gen_mat_in, model = model.list, form = "dfa", z.score = TRUE,
-#              control=list(minit=1000, maxit=3000, trace=1,
-#                           conv.test.slope.tol=0.1))
-# while(fit$convergence != 0){
-#   fit <- MARSS(gen_mat_in,
-#                model=fit.model,
-#                form = "dfa", z.score = TRUE,
-#                control=list(maxit=2000, trace=1),
-#                inits=as.matrix(coef(fit)[1]),
-#                method="BFGS")
-# }
-# 
-# 
-# estZ <- coef(fit, type = "matrix")$Z
-# #retrieve rotated matrix
-# invH <- if (ncol(estZ) > 1) {
-#   varimax(estZ)$rotmat
-# } else if (ncol(estZ) == 1) {
-#   1
-# }
-# 
-# # Loadings
-# rotZ <- (estZ %*% invH) %>% 
-#   as.data.frame() %>% 
-#   mutate(stock = row.names(gen_mat_in)) %>% 
-#   left_join(., gen_tbl$names[[2]], by = "stock") %>% 
-#   gather(key = "trend", value = "loading", -stock, -stock_name) %>% 
-#   mutate(trend = as.numeric(as.factor(trend)),
-#          stock = factor(stock, unique(stock))) %>% 
-#   distinct() %>% 
-#   mutate(stock = factor(stock, unique(stock))#,
-#          # #invert T1 and T2 to make more intuitive
-#          # loadingT = case_when(
-#          #   trend %in% c("1", "2", "4") ~ (loading * -1), 
-#          #   TRUE ~ loading
-#          # )
-#   )
-# 
-# ggplot(rotZ, aes(x = stock, y = loading)) +
-#   geom_col() +
-#   ggsidekick::theme_sleek() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-#   facet_wrap(~trend)
-# 
-# rotTrends <- (solve(invH) %*% fit$states) %>% 
-#   t() %>% 
-#   as.data.frame() %>% 
-#   mutate(year = gen_tbl$years[[2]]) %>% 
-#   gather(key = "trend", value = "est", -year) %>% 
-#   mutate(trend = as.numeric(as.factor(trend))) #%>% 
-# # mutate(estT = case_when(
-# #   trend %in% c("1", "2", "4") ~ (est * -1), 
-# #   TRUE ~ est
-# # ))
-# 
-# ggplot(rotTrends, aes(x = year, y = est)) +
-#   geom_line() +
-#   ggsidekick::theme_sleek() +
-#   geom_hline(yintercept = 0, colour = "red") +
-#   facet_wrap(~trend)
-# 
-# 
-# ## empty list for results
-# fits <- list()
-# ## extra stuff for var() calcs
-# Ey <- MARSS:::MARSShatyt(fit)
-# ## model params
-# mod_par <- coef(fit, type="matrix")
-# ZZ <- mod_par$Z
-# ## number of obs ts
-# nn <- dim(Ey$ytT)[1]
-# ## number of time steps
-# TT <- dim(Ey$ytT)[2]
-# ## get the inverse of the rotation matrix
-# H_inv <- varimax(ZZ)$rotmat
-# ## model expectation
-# fits$ex <- ZZ %*% H_inv %*% fit$states + matrix(mod_par$A, nn, TT)
-# ## Var in model fits
-# VtT <- MARSSkfss(fit)$VtT
-# VV <- NULL
-# for(tt in 1:TT) {
-#   RZVZ <- mod_par$R - ZZ%*%VtT[,,tt]%*%t(ZZ)
-#   SS <- Ey$yxtT[,,tt] - Ey$ytT[,tt,drop=FALSE] %*% t(fit$states[,tt,drop=FALSE])
-#   VV <- cbind(VV,diag(RZVZ + SS%*%t(ZZ) + ZZ%*%t(SS)))    
-# }
-# SE <- sqrt(VV)
-# ## upper (1-alpha)% CI
-# fits$up <- qnorm(1 - 0.05 / 2)*SE + fits$ex    
-# ## lower (1-alpha)% CI
-# fits$lo <- qnorm(0.05 / 2)*SE + fits$ex
-# 
-# temp_fits <- map2(fits, names(fits), function (x, y) {
-#   rownames(x) <- gen_tbl$names[[2]]$stock
-#   tt <- x %>% 
-#     t() %>% 
-#     as.data.frame %>% 
-#     mutate(year =  gen_tbl$years[[2]], 
-#            estimate = y) %>% 
-#     gather(key = "stock", value = "value", -year, -estimate)
-# }) %>% 
-#   bind_rows() %>% 
-#   left_join(., gen %>% select(stock, year, obs = gen_z), 
-#             by = c("stock", "year")) %>% 
-#   pivot_wider(., names_from = "estimate", values_from = "value") %>% 
-#   glimpse()
-# 
-# ggplot(temp_fits, aes(x = year)) +
-#   geom_line(aes(y = ex)) +
-#   geom_point(aes(y = obs), colour = "red") +
-#   geom_ribbon(aes(ymin = lo, ymax = up), linetype = 2, 
-#               alpha = 0.2) +
-#   ggsidekick::theme_sleek() +
-#   facet_wrap(~stock)
-

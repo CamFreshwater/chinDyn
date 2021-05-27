@@ -1,10 +1,10 @@
 ## Helper functions for data cleaning
 
 #Function to spread and label input matrices for bayesdfa
-make_mat <- function(x) {
+make_mat <- function(x, resp) {
   mat1 <- x %>%
-    select(year, stock, gen_length) %>%
-    spread(key = stock, value = gen_length) %>%
+    select(year, stock, !! sym(resp)) %>%
+    spread(key = stock, value = !! sym(resp)) %>%
     as.matrix() 
   out_mat <- t(mat1[, 2:ncol(mat1)])
   colnames(out_mat) <- mat1[, "year"]

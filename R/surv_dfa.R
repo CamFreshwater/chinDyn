@@ -1,10 +1,7 @@
-## Fit MARSS then Bayes DFA models to instantaneous mortality data
-# Jan 6 2021
-# Update on surv_bayesDFA; instead of deciding groupings a priori, first perform
-# model selection for groupings with MARSS (faster to converge than bayesDFA), 
-# then fit group specific models with bayesdfa
-# Updated Feb 23 2020 with Columbia split from other juveniles
-# NOTE DEPRECATED IN FAVOR OF IDENTICAL MODEL WITH LOGIT(SURVIVAL)
+## Fit MARSS then Bayes DFA models to logit survival data
+# June 1, 2021
+# Copied m_dfa and retweaked response variable to from -log(survival) to 
+# logit(survival)
 
 library(MARSS)
 library(tidyverse)
@@ -14,17 +11,19 @@ source(here::here("R", "functions", "data_cleaning_functions.R"))
 ncores <- parallel::detectCores() 
 future::plan(future::multisession, workers = ncores - 2)
 
-surv <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS")) %>% 
+surv <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS")) %>%
+  mutate(logit_surv = boot::logit(survival)) %>% 
   #remove stocks that are aggregates of others on CP's advice
   # TST combines STI/TAK and AKS combines SSA and NSA
   filter(!stock %in% c("TST", "AKS"),
          year < 2017) %>%
   group_by(stock) %>% 
-  mutate(M_z = as.numeric(scale(M)),
-         M_cent = as.numeric(scale(M, center = TRUE, scale = FALSE))) %>%
+  mutate(logit_surv_z = as.numeric(scale(logit_surv)),
+         logit_surv_cent = as.numeric(scale(logit_surv, center = TRUE, 
+                                            scale = FALSE))) %>%
   ungroup() %>% 
   droplevels()
-  
+
 
 # dataframe of only stocks and juvenile groupings
 stk_tbl <- surv %>% 
@@ -53,14 +52,22 @@ stk_tbl <- surv %>%
 
 ## EXPLORATORY -----------------------------------------------------------------
 
-#plot raw survival data
+#plot transformed survival data
+surv %>%
+  filter(!is.na(logit_surv)) %>%
+  ggplot(.) +
+  geom_point(aes(x = year, y = logit_surv, fill = j_group3), shape = 21) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(j_group3))) +
+  theme(legend.position = "top") +
+  labs(y = "logit(survival rate)")
+
 surv %>%
   filter(!is.na(M)) %>%
   ggplot(.) +
-  geom_point(aes(x = year, y = M, fill = j_group3), shape = 21) +
+  geom_histogram(aes(M, fill = j_group3)) +
   facet_wrap(~ fct_reorder(stock, as.numeric(j_group3))) +
   theme(legend.position = "top") +
-  labs(y = "M")
+  labs(y = "logit(survival rate)")
 
 # library(mgcv)
 # s_mod <- gam(gen_cent ~ s(M, m = 2, bs = "tp", k = 4) + 
@@ -88,24 +95,24 @@ surv %>%
 ## MARSS MODEL RUNS ------------------------------------------------------------
 
 # make matrix of natural mortality rates
-m_mat <- surv %>% 
-  select(year, stock, M) %>% 
-  pivot_wider(names_from = stock, values_from = M) %>% 
+surv_mat <- surv %>% 
+  select(year, stock, logit_surv) %>% 
+  pivot_wider(names_from = stock, values_from = logit_surv) %>% 
   arrange(year) %>% 
   as.matrix() %>% 
   t()
-m_mat <- m_mat[2:nrow(m_mat), ]
-colnames(m_mat) <- seq(min(surv$year), max(surv$year), by = 1)
+surv_mat <- surv_mat[2:nrow(surv_mat), ]
+colnames(surv_mat) <- seq(min(surv$year), max(surv$year), by = 1)
 
-n_ts <- nrow(m_mat)
-tt <- ncol(m_mat)
+n_ts <- nrow(surv_mat)
+tt <- ncol(surv_mat)
 
 
 ## Generic MARSS approach
 
 # specify the z models based on different groupings (smolt, run, a dist, j dist)
 z_model_inputs <- colnames(surv)[which(colnames(surv) %in% c("smolt", "run") |
-                                        str_detect(colnames(surv), "group"))]
+                                         str_detect(colnames(surv), "group"))]
 z_models <- map(z_model_inputs, function (x) {
   stk_tbl %>% 
     pull(.data[[x]]) %>% 
@@ -126,11 +133,11 @@ model_constants <- list(U = U, B = B, x0 = x0, V0 = V0, Q = Q)
 # function to fit models
 fit_marss <- function(z_name, z_in) {
   fit_model <- c(list(Z = z_in), model_constants)
-  fit <- MARSS(m_mat, model = fit_model,
+  fit <- MARSS(surv_mat, model = fit_model,
                silent = FALSE, 
                control = list(minit = 100, maxit = 500, safe = TRUE))
   if (fit$convergence != 0){
-    fit <- MARSS(m_mat, 
+    fit <- MARSS(surv_mat, 
                  model = fit_model, 
                  control = list(maxit = 4000, trace = 1),
                  inits = as.matrix(coef(fit)[1]),
@@ -158,8 +165,8 @@ mod_tbl <- tibble(
 # fit generic MARSS models
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models),
-                     .f = fit_marss,
-                     .progress = TRUE)
+                                 .f = fit_marss,
+                                 .progress = TRUE)
 
 marss_aic_tab <- purrr::map(marss_list, "out") %>% 
   bind_rows() %>% 
@@ -168,10 +175,10 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          rel_like = exp(-1 * deltaAICc / 2),
          aic_weight = rel_like / sum(rel_like))
 
-saveRDS(marss_aic_tab, here::here("data", "mortality_fits",
-                               "marss_aic_tab.RDS"))
-marss_aic_tab <- readRDS(here::here("data", "mortality_fits",
+saveRDS(marss_aic_tab, here::here("data", "survival_fits",
                                   "marss_aic_tab.RDS"))
+marss_aic_tab <- readRDS(here::here("data", "survival_fits",
+                                    "marss_aic_tab.RDS"))
 
 
 ## Bayesian DFA ----------------------------------------------------------------
@@ -185,7 +192,7 @@ options(mc.cores = parallel::detectCores())
 
 # number of stocks per group
 kept_grps <- stk_tbl %>% 
-  group_by(j_group3b) %>% 
+  group_by(j_group3) %>% 
   tally() %>% 
   filter(n > 2) %>% 
   droplevels()
@@ -193,44 +200,44 @@ kept_grps <- stk_tbl %>%
 #generate tbl by group with up to two trends
 surv_tbl <- tibble(group = levels(surv$j_group3b)) %>% 
   mutate(
-    m_mat = surv %>% 
+    surv_mat = surv %>% 
       filter(!is.na(M)) %>% 
       group_split(j_group3b) %>% 
-      map(., make_mat)
+      map2(., "logit_surv", make_mat)
   ) %>% 
   filter(group %in% kept_grps$j_group3b)
-surv_tbl$names <- map(surv_tbl$m_mat, function (x) {
+surv_tbl$names <- map(surv_tbl$surv_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),
               by = "stock")
 })
-surv_tbl$years <- map(surv_tbl$m_mat, function (x) {
+surv_tbl$years <- map(surv_tbl$surv_mat, function (x) {
   as.numeric(colnames(x))
 })
 
 # fit model
-# furrr::future_map2(
-#   surv_tbl$m_mat,
-#   surv_tbl$group,
-#   .f = function (y, group) {
-#     fit <- fit_dfa(
-#       y = y, num_trends = 2, zscore = FALSE, 
-#       # estimate_nu = TRUE, 
-#       estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-#       iter = 3500, chains = 4, thin = 1,
-#       control = list(adapt_delta = 0.99, max_treedepth = 20)
-#     )
-#     f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-#     saveRDS(fit, here::here("data", "mortality_fits", f_name))
-#   },
-#   .progress = TRUE,
-#   .options = furrr::furrr_options(seed = TRUE)
-# )
+furrr::future_map2(
+  surv_tbl$surv_mat,
+  surv_tbl$group,
+  .f = function (y, group) {
+    fit <- fit_dfa(
+      y = y, num_trends = 2, zscore = FALSE,
+      # estimate_nu = TRUE,
+      estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+      iter = 3500, chains = 4, thin = 1,
+      control = list(adapt_delta = 0.99, max_treedepth = 20)
+    )
+    f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+    saveRDS(fit, here::here("data", "survival_fits", f_name))
+  },
+  .progress = TRUE,
+  .options = furrr::furrr_options(seed = TRUE)
+)
 
 # read outputs
 dfa_fits <- map(surv_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
-  readRDS(here::here("data", "mortality_fits", f_name))
+  readRDS(here::here("data", "survival_fits", f_name))
 })
 
 # check diagnostics
@@ -278,7 +285,7 @@ surv_tbl$regime_trend2 <- map(hmm_list_m, function(x) x[[2]]$best_model)
 
 
 #export
-saveRDS(surv_tbl, here::here("data", "mortality_fits", "surv_tbl.RDS"))
+saveRDS(surv_tbl, here::here("data", "survival_fits", "surv_tbl.RDS"))
 
 
 #-------------------------------------------------------------------------------

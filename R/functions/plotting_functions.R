@@ -1,4 +1,6 @@
 ## function to prepare predicted fits for plot_fitted_bayes
+# modelfit <- surv_dfa[[1]]; names <- surv_tbl$names[[1]]; years <- surv_tbl$years[[1]]
+# descend_order = TRUE
 fitted_preds <- function(modelfit, names = NULL, years = NULL,
                          descend_order = FALSE, subset = NULL) {
   n_ts <- dim(modelfit$data)[1]
@@ -7,30 +9,39 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
     years <- seq_len(n_years)
   }
   pred <- predicted(modelfit)
+  
   df_pred <- data.frame(ID = rep(seq_len(n_ts), n_years),
                         Time = sort(rep(years,
                                         n_ts)),
                         mean = c(t(apply(pred, c(3, 4), mean))),
                         lo = c(t(apply(pred, c(3, 4), quantile, 0.025))),
                         hi = c(t(apply(pred, c(3, 4), quantile, 0.975)))
-                        )
+                        ) %>% 
+    mutate(stock = names$stock[ID])
+  
   df_obs <- data.frame(ID = rep(seq_len(n_ts), n_years),
                        Time = sort(rep(years,
                                        n_ts)),
                        obs_y = c(modelfit$data)) %>%
-    filter(!is.na(obs_y))
+    filter(!is.na(obs_y)) 
   
   # calculate mean over last generation to color code
-  gen_seq <- seq(max(df_pred$Time - 5), max(df_pred$Time), by = 1)
-  last_gen_mean <- df_pred %>%
-    filter(Time %in% gen_seq) %>%
-    group_by(ID) %>% 
-    summarize(last_mean = mean(mean))
+  # old gradient version
+  # gen_seq <- seq(max(df_pred$Time - 5), max(df_pred$Time), by = 1)
+  # last_gen_mean <- df_pred %>%
+  #   filter(Time %in% gen_seq) %>%
+  #   group_by(ID) %>% 
+  #   summarize(last_mean = mean(mean))
+  # new categorical version
+  last_gen_mean <-  final_prob(modelfit = modelfit, names = names, 
+                               n_years = 5) %>% 
+    mutate(prob = ifelse(last_mean > 0, prob_above_0, prob_below_0)) %>% 
+    select(-c(prob_above_0, prob_below_0))
   
   out <- df_pred %>%
     left_join(.,
               last_gen_mean, 
-              by = "ID") %>%
+              by = "stock") %>%
     left_join(., df_obs, by = c("ID", "Time")) 
   
   if (!is.null(subset)) {
@@ -47,31 +58,56 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
 
 
 ## function to plot fits (based on bayesdfa::plot_fitted)
+# df_pred <- gen_pred_list[[1]]
+
 plot_fitted_pred <- function(df_pred, #ylab = NULL, 
                              print_x = TRUE, 
-                             col_ramp = c(-1, 1), 
-                             col_ramp_direction = -1, 
+                             col_ramp = c(-1, 1),
+                             col_ramp_direction = -1,
                              facet_row = NULL, facet_col = NULL,
                              leg_name = NULL) {  
   #limits for y axis
   y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
   x_int <- max(df_pred$Time, na.rm = T) - 5
   
-  p <- ggplot(df_pred, aes_string(x = "Time", y = "mean")) + 
-    geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "last_mean",
-                           fill = "last_mean"), 
-                alpha = 0.6) + 
-    geom_line(aes_string(colour = "last_mean"), size = 1.25) +
+  #make palette for last five year mean based on bins and col_ramp values 
+  breaks <- seq(min(col_ramp), max(col_ramp), length.out = 9)
+  df_pred$color_ids <- cut(df_pred$last_mean, 
+                           breaks=breaks, 
+                           include.lowest=TRUE, 
+                           right=FALSE)
+  col_pal <- c("#a50f15", "#de2d26", "#fb6a4a", "#fc9272", "#9ecae1", "#6baed6",
+               "#3182bd", "#08519c", "grey60")
+  names(col_pal) <- c(levels(df_pred$color_ids), "historic")
+  # col_pal <- c("#e41a1c", "#377eb8")
+  # names(col_pal) <- levels(df_pred$last_anomaly)
+  
+  p <- ggplot(df_pred %>% filter(Time >= x_int),
+              aes_string(x = "Time", y = "mean")) + 
+    geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids",
+                           fill = "color_ids"), alpha = 0.6) + 
+    geom_line(aes_string(colour = "color_ids"), 
+              size = 1.25) +
+    geom_ribbon(data = df_pred %>% filter(Time <= x_int),
+                aes_string(ymin = "lo", ymax = "hi"),
+                fill = "grey60", colour = "grey60", alpha = 0.6) +
+    geom_line(data = df_pred %>% filter(Time <= x_int), 
+              size = 1) +
     geom_hline(yintercept = 0, lty = 2) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
-    scale_fill_distiller(type = "div", limit = col_ramp, 
-                         direction = col_ramp_direction, 
-                         palette = "RdYlBu", name = leg_name) +
-    scale_colour_distiller(type = "div", limit = col_ramp, 
-                           direction = col_ramp_direction, 
-                           palette = "RdYlBu", name = leg_name) +
+    scale_fill_manual(values = col_pal) +
+    scale_colour_manual(values = col_pal) +
+    # scale_fill_brewer(type = "qual", 
+    #                      # limit = col_ramp, 
+    #                      direction = col_ramp_direction, 
+    #                      palette = "Set1", name = leg_name) +
+    # scale_colour_brewer(type = "qual", 
+    #                        # limit = col_ramp, 
+    #                        direction = col_ramp_direction, 
+    #                        palette = "Set1", name = leg_name) +
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
-    geom_point(aes_string(x = "Time", y = "obs_y"),  
+    geom_point(data = df_pred, 
+               aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
     facet_wrap(~ID, nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
@@ -95,18 +131,21 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
 
 ## function to calculate probability that estimates below average in last 
 # n_years
-final_prob <- function (modelfit, names, n_years = 5) {
+final_prob <- function(modelfit, names, n_years = 5) {
   tt <- reshape2::melt(predicted(modelfit), 
                        varnames = c("iter", "chain", "year", "stock")) 
-  tt$stock <- as.factor(names$stock_name[tt$stock])
+  tt$stock <- as.factor(names$stock[tt$stock])
   yr_range <- seq(max(tt$year) - (n_years - 1), max(tt$year), by = 1)
   tt %>% 
     filter(year %in% yr_range) %>% 
+    group_by(stock, iter) %>%
+    mutate(mean_value = mean(value)) %>% 
     group_by(stock) %>% 
     summarize( 
-      prob_below_0 = sum(value < 0) / length(value),
-      prob_above_0 = sum(value > 0) / length(value)
-    )
+      last_mean = mean(mean_value),
+      prob_below_0 = sum(mean_value < 0) / length(mean_value),
+      prob_above_0 = sum(mean_value > 0) / length(mean_value)
+    ) 
 }
 
 

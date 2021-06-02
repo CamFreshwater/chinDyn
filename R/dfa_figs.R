@@ -62,11 +62,11 @@ col_ramp_surv <- surv_pred_list %>%
   abs() %>% 
   max() * c(-1, 1)
 
-# make one version with a legend to use in panel fig
-leg_plot <- plot_fitted_pred(surv_pred_list[[1]], surv_tbl$group_labs[[1]],
-                             col_ramp = col_ramp_surv, 
-                             leg_name = "5-year Mean of Centered Juvenile M") +
-  theme(legend.position = "top")  
+# # make one version with a legend to use in panel fig
+# leg_plot <- plot_fitted_pred(surv_pred_list %>% bind_rows, 
+#                              col_ramp = col_ramp_surv,
+#                              leg_name = "5-year Mean of Centered Juvenile M") +
+#   theme(legend.position = "top")  
 
 #remove x_axes except for last plot
 x_axes <- c(F, F, F, F, T)
@@ -74,7 +74,8 @@ x_axes <- c(F, F, F, F, T)
 surv_fit <- pmap(list(surv_pred_list, surv_tbl$group_labs, x_axes), 
                  .f = function(x, y, z) {
                    plot_fitted_pred(x, print_x = z,
-                                    col_ramp = col_ramp_surv, facet_col = 5,
+                                    col_ramp = col_ramp_surv,
+                                    facet_col = 5
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis(),
@@ -95,11 +96,13 @@ surv_fit_panel <- cowplot::plot_grid(
                               rot = 90)) %>% 
   grid.arrange()
 
-surv_fit_panel2 <- cowplot::plot_grid(
-  cowplot::get_legend(leg_plot),
-  surv_fit_panel,
-  ncol=1, rel_heights=c(.075, .925)
-)
+cowplot::plot_grid(surv_fit_panel)
+
+# surv_fit_panel2 <- cowplot::plot_grid(
+#   cowplot::get_legend(leg_plot),
+#   surv_fit_panel,
+#   ncol=1, rel_heights=c(.075, .925)
+# )
 
 
 # predicted gen length fits
@@ -118,7 +121,7 @@ gen_fit <- pmap(list(gen_pred_list, gen_tbl$group_labs, x_axes),
                 .f = function(x, y, z) {
                   plot_fitted_pred(x, print_x = z,
                                    col_ramp = col_ramp_gen,
-                                   col_ramp_direction = 1,
+                                   # col_ramp_direction = 1,
                                    facet_col = 5
                   ) +
                     scale_y_continuous(
@@ -141,17 +144,17 @@ gen_fit_panel <- cowplot::plot_grid(
   grid.arrange()
 
 # make one version with a legend to use in panel fig
-leg_plot_g <- plot_fitted_pred(gen_pred_list[[1]], col_ramp = col_ramp_surv, 
-                             # facet_col = 5, 
-                             col_ramp_direction = 1,
-                             leg_name = "5-year Mean of Centered Mean Age") +
-  theme(legend.position = "top")  
-
-gen_fit_panel2 <- cowplot::plot_grid(
-  cowplot::get_legend(leg_plot_g),
-  gen_fit_panel,
-  ncol=1, rel_heights=c(.075, .925)
-)
+# leg_plot_g <- plot_fitted_pred(gen_pred_list[[1]], col_ramp = col_ramp_surv, 
+#                              # facet_col = 5, 
+#                              col_ramp_direction = 1,
+#                              leg_name = "5-year Mean of Centered Mean Age") +
+#   theme(legend.position = "top")  
+# 
+# gen_fit_panel2 <- cowplot::plot_grid(
+#   cowplot::get_legend(leg_plot_g),
+#   gen_fit_panel,
+#   ncol=1, rel_heights=c(.075, .925)
+# )
 
 # pdf(here::here("figs", "fits_both_vars.pdf"), height = 12, width = 8)
 # surv_fit_panel2

@@ -69,28 +69,6 @@ surv %>%
   theme(legend.position = "top") +
   labs(y = "logit(survival rate)")
 
-# library(mgcv)
-# s_mod <- gam(gen_cent ~ s(M, m = 2, bs = "tp", k = 4) + 
-#                s(M, by = stock, m = 1, bs = "tp", k = 4) + 
-#                s(stock, bs = "re"), 
-#              data = surv, method = "REML")
-# 
-# new_dat <- expand.grid(
-#   M = seq(min(surv$M, na.rm = T), max(surv$M, na.rm = T), n = 100))
-# 
-# # fixed effects predictions
-# preds <- predict(s_mod, new_dat, se.fit = TRUE, 
-#                  exclude = excl_pars[grepl("stock", excl_pars)],
-#                  newdata.guaranteed = TRUE)
-# new_dat2 <- new_dat %>% 
-#   mutate(link_fit = as.numeric(preds$fit),
-#          link_se = as.numeric(preds$se.fit),
-#          pred_surv = link_fit,
-#          pred_surv_lo = link_fit + (qnorm(0.025) * link_se),
-#          pred_surv_up = link_fit + (qnorm(0.975) * link_se)
-#   )
-
-
 
 ## MARSS MODEL RUNS ------------------------------------------------------------
 
@@ -287,45 +265,3 @@ surv_tbl$regime_trend2 <- map(hmm_list_m, function(x) x[[2]]$best_model)
 #export
 saveRDS(surv_tbl, here::here("data", "survival_fits", "surv_tbl.RDS"))
 
-
-#-------------------------------------------------------------------------------
-
-## MODEL SELCTION FOR DFA STRUCTURE
-
-# m_mat_tibble <- tibble(group = levels(surv$j_group3b)) %>%
-#   mutate(
-#     m_mat = surv %>%
-#       filter(!is.na(M)) %>%
-#       group_split(j_group3b) %>%
-#       map(., make_mat)
-#   )
-# surv_tbl <- expand.grid(group = levels(surv$j_group3b),
-#                         m = c(1, 2),
-#                         est_ar = c(0, 1),
-#                         est_ma = c(0, 1),
-#                         est_nu = c(0, 1)) %>%
-#   as_tibble() %>%
-#   left_join(., m_mat_tibble, by = "group") %>%
-#   filter(group %in% kept_grps$j_group3b,
-#          group == "puget_oceantype",
-#          m == "2")
-# 
-# test_fits <- furrr::future_pmap(
-#     list(surv_tbl$m_mat, surv_tbl$m, surv_tbl$group,
-#          surv_tbl$est_ar,
-#          surv_tbl$est_ma, surv_tbl$est_nu),
-#     .f = function(y, m, z,
-#                   est_ar, est_ma, est_nu) {
-#       dfa_fits = fit_dfa(y = y, num_trends = m, estimate_nu = est_nu,
-#                          estimate_trend_ar = est_ar, estimate_trend_ma = est_ma,
-#                          zscore = FALSE, #only center don't scale
-#                          iter = 4000, chains = 4, thin = 1,
-#                          control = list(adapt_delta = 0.99, max_treedepth = 20))
-#     },
-#     .progress = TRUE,
-#     .options = furrr::furrr_options(seed = TRUE)
-#   )
-# 
-# loo_list <- map(test_fits, bayesdfa::loo)
-# surv_tbl$looic <- map(loo_list, function(x) x$estimates["looic", "Estimate"]) %>%
-#   unlist()

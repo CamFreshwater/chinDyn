@@ -22,7 +22,8 @@ knitr-cache
 
 R/defunct
 myNotes.*
-data/salmon_data/rawData
+figs/ms_figs/old_version/
+data/salmon_data/rawData/
 data/dfaBayesFits/
 data/gamFits/
 data/escapement_fits/

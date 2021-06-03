@@ -56,10 +56,7 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
              fct_reorder(., last_mean, .desc = descend_order)) 
 }
 
-
-## function to plot fits (based on bayesdfa::plot_fitted)
-# df_pred <- gen_pred_list[[1]]
-
+## function to plot fits in link sapce (based on bayesdfa::plot_fitted)
 plot_fitted_pred <- function(df_pred, #ylab = NULL, 
                              print_x = TRUE, 
                              col_ramp = c(-1, 1),
@@ -112,6 +109,87 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     facet_wrap(~ID, nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
+    scale_y_continuous(breaks = seq(0,50, by=5)) +
+    theme(axis.title.x = element_blank(),
+          axis.title.y.left = element_blank(),
+          legend.position = "none",
+          axis.text.y.right = element_blank(),
+          axis.ticks.y.right = element_blank())
+  
+  if (print_x == FALSE) {
+    p <- p + 
+      theme(axis.text.x = element_blank(),
+            axis.ticks.x = element_blank())
+  }
+  
+  return(p)
+}
+
+## function to plot fits in real space (based on bayesdfa::plot_fitted)
+# df_pred <- real_surv_pred_list[[1]]
+plot_fitted_pred_real <- function(df_pred, #ylab = NULL, 
+                             y_lims = NULL, 
+                             print_x = TRUE, 
+                             facet_row = NULL, facet_col = NULL
+                             ) {  
+  x_int <- max(df_pred$Time, na.rm = T) - 5
+  y_int <- df_pred %>% 
+    group_by(ID) %>% 
+    summarize(ts_mean = mean(uncent_mean_logit),
+              sd_mean = sd(uncent_mean_logit), 
+              ts_mean_sd_hi = plogis(ts_mean + (qnorm(0.9) * sd_mean)),
+              ts_mean_sd_lo = plogis(ts_mean + (qnorm(0.1) * sd_mean)),
+              ts_uncent_mean = mean(uncent_mean), 
+              .groups = "drop") %>% 
+    distinct()
+  
+  df_pred2 <- df_pred %>% 
+    left_join(., y_int, by = c("ID")) %>% 
+    mutate(
+      color_id = case_when(
+        last_mean < ts_mean_sd_lo ~ "very low",
+        ts_mean_sd_lo < last_mean & last_mean < ts_uncent_mean ~ "low",
+        ts_mean_sd_hi > last_mean & last_mean  > ts_uncent_mean ~ "high",
+        last_mean > ts_mean_sd_hi ~ "very high"
+      ),
+      color_ids = fct_reorder(as.factor(color_id),
+                             last_mean),
+      # necessary to order correctly
+      ID_key = fct_reorder(as.factor(ID), as.numeric(color_ids)))
+  y_int2 <- y_int %>% 
+    left_join(., df_pred2 %>% select(ID, ID_key) %>% distinct(), by = "ID")
+  
+  #make palette for last five year mean based on bins and col_ramp values 
+  col_pal <- c("#a50f15",  "#fc9272", "#9ecae1",  "#08519c", "grey60")
+  names(col_pal) <- c("very low", "low", "high", "very high", "historic")
+   
+  p <- ggplot(df_pred2 %>% filter(Time >= x_int),
+              aes_string(x = "Time", y = "uncent_mean")) + 
+    geom_ribbon(aes_string(ymin = "uncent_lo", ymax = "uncent_hi", 
+                           colour = "color_ids",
+                           fill = "color_ids"), alpha = 0.6) + 
+    geom_line(aes_string(colour = "color_ids"), 
+              size = 1.25) +
+    geom_ribbon(data = df_pred2 %>% filter(Time <= x_int),
+                aes_string(ymin = "uncent_lo", ymax = "uncent_hi"),
+                fill = "grey60", colour = "grey60", alpha = 0.6) +
+    geom_line(data = df_pred2 %>% filter(Time <= x_int), 
+              size = 1) +
+    geom_hline(data = y_int2, aes(yintercept = ts_uncent_mean), lty = 2) +
+    geom_hline(data = y_int2, aes(yintercept = ts_mean_sd_hi), lty = 3) +
+    geom_hline(data = y_int2, aes(yintercept = ts_mean_sd_lo), lty = 3) +
+    geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
+    scale_fill_manual(values = col_pal) +
+    scale_colour_manual(values = col_pal) +
+    geom_point(data = df_pred2 %>% filter(!is.na(obs_y)), 
+               aes_string(x = "Time", y = "survival"),  
+               size = 1, alpha = 0.6, shape = 21, fill = "black") + 
+    facet_wrap(~ID_key,  
+               nrow = facet_row, ncol = facet_col) +
+    ggsidekick::theme_sleek() +
+    coord_cartesian(y = y_lims) +
+    # scale_y_continuous(breaks = seq(0, round(max(y_lims), 1), length = 3)) + 
+    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     theme(axis.title.x = element_blank(),
           axis.title.y.left = element_blank(),
           legend.position = "none",
@@ -126,7 +204,6 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
   
   return(p)
 }
-
 
 
 ## function to calculate probability that estimates below average in last 

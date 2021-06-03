@@ -2,18 +2,21 @@
 # March 15, 2021
 # Use juvenile mortality and mean generation length DFAs to generate manuscript
 # figures
+# Updated June 2 to use logit survival
 
 library(tidyverse)
 library(bayesdfa)
 library(grid)
 library(gridExtra)
 
+raw_data <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS"))
+
 # import juvenile mortality data
-surv_tbl <- readRDS(here::here("data", "mortality_fits", "surv_tbl.RDS"))
+surv_tbl <- readRDS(here::here("data", "survival_fits", "surv_tbl.RDS"))
 surv_dfa <- map(surv_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   # f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
-  readRDS(here::here("data", "mortality_fits", f_name))
+  readRDS(here::here("data", "survival_fits", f_name))
 })
 
 # import mean gen length
@@ -53,7 +56,8 @@ set.seed(345)
 # predicted survival fits
 surv_pred_list <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years), 
                   fitted_preds,
-                  descend_order = TRUE)
+                  descend_order = FALSE)
+
 # scale colors based on observed range over entire dataset
 col_ramp_surv <- surv_pred_list %>% 
   bind_rows() %>% 
@@ -61,12 +65,6 @@ col_ramp_surv <- surv_pred_list %>%
   range() %>% 
   abs() %>% 
   max() * c(-1, 1)
-
-# # make one version with a legend to use in panel fig
-# leg_plot <- plot_fitted_pred(surv_pred_list %>% bind_rows, 
-#                              col_ramp = col_ramp_surv,
-#                              leg_name = "5-year Mean of Centered Juvenile M") +
-#   theme(legend.position = "top")  
 
 #remove x_axes except for last plot
 x_axes <- c(F, F, F, F, T)
@@ -90,19 +88,64 @@ surv_fit_panel <- cowplot::plot_grid(
   rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
   ncol=1 
 ) %>% 
-  arrangeGrob(., 
-              left = textGrob("Centered Instantaneous Juvenile Mortality Rate", 
-                                gp = gpar(col = "grey30", fontsize = 12),
-                              rot = 90)) %>% 
+  arrangeGrob(
+    ., 
+    left = textGrob("Centered Juvenile Survival Rate (logit transformed)", 
+                    gp = gpar(col = "grey30", fontsize = 12),
+                    rot = 90)
+  ) %>% 
   grid.arrange()
 
-cowplot::plot_grid(surv_fit_panel)
 
 # surv_fit_panel2 <- cowplot::plot_grid(
 #   cowplot::get_legend(leg_plot),
 #   surv_fit_panel,
 #   ncol=1, rel_heights=c(.075, .925)
 # )
+
+# real space fits
+real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
+  # calculate estimated uncentered survival rate in real space 
+  x %>% 
+    left_join(., 
+              raw_data %>% 
+                select(ID = stock_name, Time = brood_year, survival),
+              by = c("ID", "Time")) %>% 
+    group_by(ID) %>% 
+    mutate(obs_mean_logit = mean(qlogis(survival), na.rm = T)) %>%
+    ungroup() %>% 
+    # uncenter predictions and calculate in real space
+    mutate(uncent_mean_logit = mean + obs_mean_logit,
+           uncent_mean = plogis(uncent_mean_logit),
+           uncent_lo = plogis(obs_mean_logit + lo),
+           uncent_hi = plogis(obs_mean_logit + hi),
+           last_mean = plogis(obs_mean_logit + last_mean))
+})
+
+
+# one version of figure with full ylimit range
+real_surv_ylims <- c(0, max(raw_data$survival, na.rm = T))
+real_surv_fit <- pmap(list(real_surv_pred_list, surv_tbl$group_labs, x_axes), 
+                 .f = function(x, y, z) {
+                   plot_fitted_pred_real(x, y_lims = real_surv_ylims,
+                                    print_x = z,
+                                    facet_col = 5
+                   ) +
+                     scale_y_continuous(
+                       name = y, position = 'right', sec.axis = dup_axis()) 
+                 })
+real_surv_fit_panel <- cowplot::plot_grid(
+  real_surv_fit[[1]], real_surv_fit[[2]], real_surv_fit[[3]], real_surv_fit[[4]], 
+  real_surv_fit[[5]],
+  axis = c("r"), align = "v", 
+  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  ncol=1 
+) %>% 
+  arrangeGrob(., 
+              left = textGrob("Survival Rate", 
+                              gp = gpar(col = "grey30", fontsize = 12),
+                              rot = 90)) %>% 
+  grid.arrange()
 
 
 # predicted gen length fits
@@ -144,11 +187,11 @@ gen_fit_panel <- cowplot::plot_grid(
   grid.arrange()
 
 # make one version with a legend to use in panel fig
-# leg_plot_g <- plot_fitted_pred(gen_pred_list[[1]], col_ramp = col_ramp_surv, 
-#                              # facet_col = 5, 
+# leg_plot_g <- plot_fitted_pred(gen_pred_list[[1]], col_ramp = col_ramp_gen,
+#                              # facet_col = 5,
 #                              col_ramp_direction = 1,
 #                              leg_name = "5-year Mean of Centered Mean Age") +
-#   theme(legend.position = "top")  
+#   theme(legend.position = "top")
 # 
 # gen_fit_panel2 <- cowplot::plot_grid(
 #   cowplot::get_legend(leg_plot_g),
@@ -161,14 +204,19 @@ gen_fit_panel <- cowplot::plot_grid(
 # gen_fit_panel2
 # dev.off()
 
-png(here::here("figs", "ms_figs", "mortality_fit.png"), height = 10, width = 8, 
+png(here::here("figs", "ms_figs", "survival_fit.png"), height = 10, width = 8, 
     res = 300, units = "in")
-surv_fit_panel2
+cowplot::plot_grid(surv_fit_panel)
+dev.off()
+
+png(here::here("figs", "ms_figs", "survival_fit_real.png"), height = 10, width = 8, 
+    res = 300, units = "in")
+cowplot::plot_grid(real_surv_fit_panel)
 dev.off()
 
 png(here::here("figs", "ms_figs", "age_fit.png"), height = 10, width = 8, 
     res = 300, units = "in")
-gen_fit_panel2
+cowplot::plot_grid(gen_fit_panel)
 dev.off()
 
 
@@ -185,7 +233,7 @@ sum(gen_prob$thresh) / nrow(gen_prob)
 surv_prob <- map2(surv_dfa, surv_tbl$names, final_prob, n_years = 5) %>% 
   bind_rows() %>% 
   mutate(
-    thresh = ifelse(prob_above_0 > 0.90, 1, 0)
+    thresh = ifelse(prob_below_0 > 0.90, 1, 0)
   )
 sum(surv_prob$thresh) / nrow(surv_prob)
 
@@ -256,7 +304,7 @@ gen_par_plot <- ggplot(gen_pars,
 # gen_par_plot
 # dev.off()
 
-png(here::here("figs", "ms_figs", "mort_pars.png"), height = 7, width = 8, 
+png(here::here("figs", "ms_figs", "surv_pars.png"), height = 7, width = 8, 
     res = 300, units = "in")
 surv_par_plot
 dev.off()
@@ -434,28 +482,6 @@ png(here::here("figs", "ms_figs", "trend_regime_gen2.png"),
 plot_out(gen_two_panel)
 dev.off()
 
-# old version combining trends of different variables
-
-# png(here::here("figs", "ms_figs", "trend1.png"), height = 7, width = 4, 
-#     res = 300, units = "in")
-# plot_one_trend(trends %>% filter(trend == "Trend 1"))
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "trend2.png"), height = 7, width = 4, 
-#     res = 300, units = "in")
-# plot_one_trend(trends %>% filter(trend == "Trend 2"))
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "regime_trend1.png"), height = 7, width = 4, 
-#     res = 300, units = "in")
-# plot_one_regime(regimes %>% filter(State == "State 1" & trend == "One"))
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "regime_trend2.png"), height = 7, width = 4, 
-#     res = 300, units = "in")
-# plot_one_regime(regimes %>% filter(State == "State 1" & trend == "Two"))
-# dev.off()
-
 
 # ESTIMATED LOADINGS -----------------------------------------------------------
 
@@ -482,7 +508,8 @@ gen_load_panel <-
                                 gp = gpar(col = "grey30", fontsize = 12))) 
   
 # survival loadings
-surv_load_dat <- pmap(list(rot_surv, surv_tbl$names, group_labs),
+surv_load_dat <- pmap(list(surv_tbl$rot_surv, surv_tbl$names, 
+                           surv_tbl$group_labs),
                      .f = prep_loadings) 
 
 #make list of figures
@@ -511,7 +538,7 @@ surv_load_panel <-
 # grid.arrange(surv_load_panel)
 # dev.off()
 
-png(here::here("figs", "ms_figs", "mort_loadings.png"), height = 7, width = 10, 
+png(here::here("figs", "ms_figs", "surv_loadings.png"), height = 7, width = 10, 
     res = 300, units = "in")
 grid.arrange(surv_load_panel)
 dev.off()

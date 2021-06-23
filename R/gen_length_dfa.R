@@ -51,45 +51,45 @@ stk_tbl <- gen %>%
 
 
 ## EXPLORATORY -----------------------------------------------------------------
-
-#plot raw generation length data
-raw_gen <- gen %>% 
-  ggplot(.) +
-  geom_point(aes(x = year, y = gen_length, fill = a_group2), shape = 21) +
-  facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
-  theme(legend.position = "top") +
-  labs(y = "Mean Generation Length") +
-  ggsidekick::theme_sleek()
-
-pdf(here::here("figs", "raw_gen_trends.pdf"), width = 10, height = 7)
-raw_gen
-dev.off()
-
-#distribution of generation length 
-gen %>%
-  group_by(stock) %>% 
-  ggplot(.) +
-  geom_histogram(aes(x = log(gen_length), fill = a_group)) +
-  facet_wrap(~ fct_reorder(stock, as.numeric(a_group))) +
-  theme(legend.position = "top") +
-  ggsidekick::theme_sleek()
-
-gen %>% 
-  ggplot(.) +
-  geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
-  geom_point(aes(x = year, y = gen_cent, fill = a_group2), shape = 24) +
-  facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
-  theme(legend.position = "top") +
-  labs(y = "Mean Generation Length") +
-  ggsidekick::theme_sleek()
+# 
+# #plot raw generation length data
+# raw_gen <- gen %>% 
+#   ggplot(.) +
+#   geom_point(aes(x = year, y = gen_length, fill = a_group2), shape = 21) +
+#   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
+#   theme(legend.position = "top") +
+#   labs(y = "Mean Generation Length") +
+#   ggsidekick::theme_sleek()
+# 
+# pdf(here::here("figs", "raw_gen_trends.pdf"), width = 10, height = 7)
+# raw_gen
+# dev.off()
+# 
+# #distribution of generation length 
+# gen %>%
+#   group_by(stock) %>% 
+#   ggplot(.) +
+#   geom_histogram(aes(x = log(gen_length), fill = a_group)) +
+#   facet_wrap(~ fct_reorder(stock, as.numeric(a_group))) +
+#   theme(legend.position = "top") +
+#   ggsidekick::theme_sleek()
+# 
+# gen %>% 
+#   ggplot(.) +
+#   geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
+#   geom_point(aes(x = year, y = gen_cent, fill = a_group2), shape = 24) +
+#   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
+#   theme(legend.position = "top") +
+#   labs(y = "Mean Generation Length") +
+#   ggsidekick::theme_sleek()
 
 
 ## MARSS MODEL RUNS ------------------------------------------------------------
 
 # make matrix
 gen_mat1 <- gen %>% 
-  select(year, stock, gen_cent) %>% 
-  pivot_wider(names_from = stock, values_from = gen_cent) %>% 
+  select(year, stock, gen_length) %>% 
+  pivot_wider(names_from = stock, values_from = gen_length) %>% 
   arrange(year) %>% 
   as.matrix() %>% 
   t()
@@ -161,22 +161,22 @@ marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                  .f = fit_marss,
                                  .progress = TRUE)
 
-marss_aic_tab <- purrr::map(marss_list, "out") %>% 
+age_marss_aic_tab <- purrr::map(marss_list, "out") %>% 
   bind_rows() %>% 
   arrange(AICc) %>% 
   mutate(deltaAICc = AICc - min(AICc),
          rel_like = exp(-1 * deltaAICc / 2),
          aic_weight = rel_like / sum(rel_like))
 
-saveRDS(marss_aic_tab, here::here("data", "generation_fits",
-                                  "marss_aic_tab_scalingA_centered.RDS"))
+saveRDS(age_marss_aic_tab, here::here("data", "generation_fits",
+                                  "marss_aic_tab_scalingA_raw.RDS"))
 
-marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
-                                    "marss_aic_tab_scalingA_centered.RDS"))
+# marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
+#                                     "marss_aic_tab_scalingA_centered.RDS"))
 # marss_aic_tab2 <- readRDS(here::here("data", "generation_fits", 
 #                                      "marss_aic_tab_zeroA_centered.RDS"))
-# marss_aic_tab3 <- readRDS(here::here("data", "generation_fits", 
-#                                      "marss_aic_tab_scalingA_raw.RDS"))
+marss_aic_tab3 <- readRDS(here::here("data", "generation_fits",
+                                     "marss_aic_tab_scalingA_raw.RDS"))
 
 
 ## FIT BAYESIAN DFA ------------------------------------------------------------

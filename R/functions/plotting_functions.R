@@ -109,7 +109,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     facet_wrap(~ID, nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
-    scale_y_continuous(breaks = seq(0,50, by=5)) +
+    # scale_y_continuous(breaks = seq(0,50, by=5)) +
     theme(axis.title.x = element_blank(),
           axis.title.y.left = element_blank(),
           legend.position = "none",
@@ -126,7 +126,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
 }
 
 ## function to plot fits in real space (based on bayesdfa::plot_fitted)
-# df_pred <- real_surv_pred_list[[1]]
+# df_pred <- real_surv_pred_list[[3]]
 plot_fitted_pred_real <- function(df_pred, #ylab = NULL, 
                              y_lims = NULL, 
                              print_x = TRUE, 

@@ -27,21 +27,51 @@ gen_dfa <- map(gen_tbl$group, function(y) {
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
-# import escapement data
-# esc_tbl <- readRDS(here::here("data", "escapement_fits", "esc_tbl.RDS"))
-# esc_dfa <- map(esc_tbl$group, function(y) {
-#   f_name <- paste(y, "two-trend", "bayesdfa_scaled.RDS", sep = "_") 
-#   readRDS(here::here("data", "escapement_fits", f_name))
-# }) 
-
-
-group_labs <- surv_tbl$group_labs <- gen_tbl$group_labs <- c(
+# make labels for stock groupings and edit stock names to fit
+group_labs <- group_labs <- c(
   "North\nYearling", 
+  "SoG\nSubyearling", 
   "Puget\nSubyearling", 
   "Puget\nYearling", 
-  "SoG\nSubyearling", 
   "South\nSubyearling"
 )
+
+surv_names <- surv_tbl %>% 
+  select(group, names) %>% 
+  unnest(cols = c(names)) %>%
+  mutate(
+    stock_name = fct_recode(
+      as.factor(stock_name), 
+      "Behm Canal Spring" = "Alaska Hatchery Springs - Behm Canal",
+      "U.W. Accelerated" = "University of Washington Accelerated",
+      "G. Adams Fall Fingerling" = "George Adams Fall Fingerling",
+      "South P.S. Fall Fingerling" = "South Puget Sound Fall Fingerling",
+      "South P.S. Fall Yearling" = "South Puget Sound Fall Yearling",
+      "Lower Shuswap R. Summer" = "Lower Shuswap River Summer",
+      "Middle Shuswap R. Summer" = "Middle Shuswap River Summer",
+      "Ok.-Sim. Summer" = "Okanagan-Similkameen Summer",
+      "Columbia Upriver Bright" = "Columbia River Upriver Bright"
+    )
+  ) %>%
+  nest(names = c(stock, stock_name))
+
+gen_names <- surv_tbl %>% 
+  select(group, names) %>% 
+  unnest(cols = c(names)) %>%
+  mutate(
+    stock_name = fct_recode(
+      as.factor(stock_name), 
+      "U.W. Accelerated" = "University of Washington Accelerated",
+      "G. Adams Fall Fingerling" = "George Adams Fall Fingerling",
+      "South P.S. Fall Fingerling" = "South Puget Sound Fall Fingerling",
+      "South P.S. Fall Yearling" = "South Puget Sound Fall Yearling",
+      "Lower Shuswap R. Summer" = "Lower Shuswap River Summer",
+      "Middle Shuswap R. Summer" = "Middle Shuswap River Summer",
+      "Ok.-Sim. Summer" = "Okanagan-Similkameen Summer",
+      "Columbia Upriver Bright" = "Columbia River Upriver Bright"
+    )
+  ) %>%
+  nest(names = c(stock, stock_name))
 
 
 # plotting functions
@@ -54,9 +84,11 @@ source(here::here("R", "functions", "plotting_functions.R"))
 set.seed(345)
 
 # predicted survival fits
-surv_pred_list <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years), 
+surv_pred_list1 <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years), 
                   fitted_preds,
                   descend_order = FALSE)
+# reorder to match group_labs
+surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
 
 # scale colors based on observed range over entire dataset
 col_ramp_surv <- surv_pred_list %>% 
@@ -69,7 +101,7 @@ col_ramp_surv <- surv_pred_list %>%
 #remove x_axes except for last plot
 x_axes <- c(F, F, F, F, T)
 
-surv_fit <- pmap(list(surv_pred_list, surv_tbl$group_labs, x_axes), 
+surv_fit <- pmap(list(surv_pred_list, group_labs, x_axes), 
                  .f = function(x, y, z) {
                    plot_fitted_pred(x, print_x = z,
                                     col_ramp = col_ramp_surv,
@@ -84,8 +116,7 @@ surv_fit <- pmap(list(surv_pred_list, surv_tbl$group_labs, x_axes),
 surv_fit_panel <- cowplot::plot_grid(
   surv_fit[[1]], surv_fit[[2]], surv_fit[[3]], surv_fit[[4]], surv_fit[[5]],
   axis = c("r"), align = "v", 
-  # rel_heights = c(rep(.195, 4), .22), #to account for text on bottom
-  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  rel_heights = c(2/11, 2/11, 3/11, 1/11, 3/11),
   ncol=1 
 ) %>% 
   arrangeGrob(
@@ -109,8 +140,8 @@ real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
   x %>% 
     left_join(., 
               raw_data %>% 
-                select(ID = stock_name, Time = brood_year, survival),
-              by = c("ID", "Time")) %>% 
+                select(stock, Time = brood_year, survival),
+              by = c("stock", "Time")) %>% 
     group_by(ID) %>% 
     mutate(obs_mean_logit = mean(qlogis(survival), na.rm = T)) %>%
     ungroup() %>% 
@@ -125,7 +156,7 @@ real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
 
 # one version of figure with full ylimit range
 real_surv_ylims <- c(0, max(raw_data$survival, na.rm = T))
-real_surv_fit <- pmap(list(real_surv_pred_list, surv_tbl$group_labs, x_axes), 
+real_surv_fit <- pmap(list(real_surv_pred_list, group_labs, x_axes), 
                  .f = function(x, y, z) {
                    plot_fitted_pred_real(x, y_lims = real_surv_ylims,
                                     print_x = z,
@@ -138,7 +169,7 @@ real_surv_fit_panel <- cowplot::plot_grid(
   real_surv_fit[[1]], real_surv_fit[[2]], real_surv_fit[[3]], real_surv_fit[[4]], 
   real_surv_fit[[5]],
   axis = c("r"), align = "v", 
-  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  rel_heights = c(2/11, 2/11, 3/11, 1/11, 3/11),
   ncol=1 
 ) %>% 
   arrangeGrob(., 
@@ -149,9 +180,12 @@ real_surv_fit_panel <- cowplot::plot_grid(
 
 
 # predicted gen length fits
-gen_pred_list <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years), 
+gen_pred_list1 <- pmap(list(gen_dfa, gen_names$names, gen_tbl$years), 
                        fitted_preds,
                        descend_order = FALSE)
+# reorder to match group_labs
+gen_pred_list <- gen_pred_list1[c(1, 4, 2, 3, 5)]
+
 # scale colors based on observed range over entire dataset
 col_ramp_gen <- gen_pred_list %>% 
   bind_rows() %>% 
@@ -160,7 +194,7 @@ col_ramp_gen <- gen_pred_list %>%
   abs() %>% 
   max() * c(-1, 1)
 
-gen_fit <- pmap(list(gen_pred_list, gen_tbl$group_labs, x_axes), 
+gen_fit <- pmap(list(gen_pred_list, group_labs, x_axes), 
                 .f = function(x, y, z) {
                   plot_fitted_pred(x, print_x = z,
                                    col_ramp = col_ramp_gen,
@@ -176,8 +210,7 @@ gen_fit <- pmap(list(gen_pred_list, gen_tbl$group_labs, x_axes),
 gen_fit_panel <- cowplot::plot_grid(
   gen_fit[[1]], gen_fit[[2]], gen_fit[[3]], gen_fit[[4]], gen_fit[[5]],
   axis = c("r"), align = "v", 
-  # rel_heights = c(rep(.195, 4), .22), #to account for text on bottom  
-  rel_heights = c(2/11, 3/11, 1/11, 2/11, 3/11),
+  rel_heights = c(2/11, 2/11, 3/11, 1/11, 3/11),
   ncol=1
 ) %>% 
   arrangeGrob(., 
@@ -186,35 +219,18 @@ gen_fit_panel <- cowplot::plot_grid(
                               rot = 90)) %>% 
   grid.arrange()
 
-# make one version with a legend to use in panel fig
-# leg_plot_g <- plot_fitted_pred(gen_pred_list[[1]], col_ramp = col_ramp_gen,
-#                              # facet_col = 5,
-#                              col_ramp_direction = 1,
-#                              leg_name = "5-year Mean of Centered Mean Age") +
-#   theme(legend.position = "top")
-# 
-# gen_fit_panel2 <- cowplot::plot_grid(
-#   cowplot::get_legend(leg_plot_g),
-#   gen_fit_panel,
-#   ncol=1, rel_heights=c(.075, .925)
-# )
 
-# pdf(here::here("figs", "fits_both_vars.pdf"), height = 12, width = 8)
-# surv_fit_panel2
-# gen_fit_panel2
-# dev.off()
-
-png(here::here("figs", "ms_figs", "survival_fit.png"), height = 10, width = 8, 
+png(here::here("figs", "ms_figs", "survival_fit.png"), height = 11, width = 9, 
     res = 300, units = "in")
 cowplot::plot_grid(surv_fit_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "survival_fit_real.png"), height = 10, width = 8, 
+png(here::here("figs", "ms_figs", "survival_fit_real.png"), height = 11, width = 9, 
     res = 300, units = "in")
 cowplot::plot_grid(real_surv_fit_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "age_fit.png"), height = 10, width = 8, 
+png(here::here("figs", "ms_figs", "age_fit.png"), height = 11, width = 9, 
     res = 300, units = "in")
 cowplot::plot_grid(gen_fit_panel)
 dev.off()
@@ -509,7 +525,7 @@ gen_load_panel <-
   
 # survival loadings
 surv_load_dat <- pmap(list(surv_tbl$rot_surv, surv_tbl$names, 
-                           surv_tbl$group_labs),
+                           group_labs),
                      .f = prep_loadings) 
 
 #make list of figures

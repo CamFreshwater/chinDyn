@@ -46,42 +46,42 @@ stk_tbl <- gen %>%
   ungroup() %>% 
   select(stock, stock_name, max_age, max_ocean_age, smolt, run, 
          j_group1:j_group4, a_group1:a_group4, j_group1b, j_group2b, j_group3b,
-         j_group4b, j_group5b) %>% 
+         j_group4b) %>% 
   distinct() 
 
 
 ## EXPLORATORY -----------------------------------------------------------------
 # 
-# #plot raw generation length data
-# raw_gen <- gen %>% 
-#   ggplot(.) +
-#   geom_point(aes(x = year, y = gen_length, fill = a_group2), shape = 21) +
-#   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
-#   theme(legend.position = "top") +
-#   labs(y = "Mean Generation Length") +
-#   ggsidekick::theme_sleek()
-# 
-# pdf(here::here("figs", "raw_gen_trends.pdf"), width = 10, height = 7)
-# raw_gen
-# dev.off()
-# 
-# #distribution of generation length 
-# gen %>%
-#   group_by(stock) %>% 
-#   ggplot(.) +
-#   geom_histogram(aes(x = log(gen_length), fill = a_group)) +
-#   facet_wrap(~ fct_reorder(stock, as.numeric(a_group))) +
-#   theme(legend.position = "top") +
-#   ggsidekick::theme_sleek()
-# 
-# gen %>% 
-#   ggplot(.) +
-#   geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
-#   geom_point(aes(x = year, y = gen_cent, fill = a_group2), shape = 24) +
-#   facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
-#   theme(legend.position = "top") +
-#   labs(y = "Mean Generation Length") +
-#   ggsidekick::theme_sleek()
+#plot raw generation length data
+raw_gen <- gen %>%
+  ggplot(.) +
+  geom_point(aes(x = year, y = gen_length, fill = a_group2), shape = 21) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
+  theme(legend.position = "top") +
+  labs(y = "Mean Generation Length") +
+  ggsidekick::theme_sleek()
+
+pdf(here::here("figs", "raw_gen_trends.pdf"), width = 10, height = 7)
+raw_gen
+dev.off()
+
+#distribution of generation length
+gen %>%
+  group_by(stock) %>%
+  ggplot(.) +
+  geom_histogram(aes(x = gen_length, fill = a_group4)) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(a_group4))) +
+  theme(legend.position = "top") +
+  ggsidekick::theme_sleek()
+
+gen %>%
+  ggplot(.) +
+  geom_point(aes(x = year, y = gen_z, fill = a_group2), shape = 21) +
+  geom_point(aes(x = year, y = gen_cent, fill = a_group2), shape = 24) +
+  facet_wrap(~ fct_reorder(stock, as.numeric(a_group2))) +
+  theme(legend.position = "top") +
+  labs(y = "Mean Generation Length") +
+  ggsidekick::theme_sleek()
 
 
 ## MARSS MODEL RUNS ------------------------------------------------------------
@@ -199,7 +199,7 @@ gen_tbl <- tibble(group = levels(gen$j_group3b)) %>%
     gen_mat = gen %>% 
       filter(!is.na(gen_length)) %>% 
       group_split(j_group3b) %>% 
-      map(., make_mat)
+      map(., make_mat, resp = "gen_length")
   ) %>% 
   filter(group %in% kept_grps$j_group3b)
 gen_tbl$names <- map(gen_tbl$gen_mat, function (x) {
@@ -212,28 +212,28 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
 })
 
 #fit 
-# furrr::future_map2(
-#   gen_tbl$gen_mat,
-#   gen_tbl$group,
-#   .f = function (y, group) {
-#     fit <- fit_dfa(
-#       y = y, num_trends = 2, zscore = FALSE, 
-#       # estimate_nu = TRUE, 
-#       estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
-#       iter = 3000, chains = 4, thin = 1,
-#       control = list(adapt_delta = 0.99, max_treedepth = 20)
-#     )
-#     f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-#     saveRDS(fit, here::here("data", "generation_fits", f_name))
-#   },
-#   .progress = TRUE,
-#   .options = furrr::furrr_options(seed = TRUE)
-# )
+furrr::future_map2(
+  gen_tbl$gen_mat,
+  gen_tbl$group,
+  .f = function (y, group) {
+    fit <- fit_dfa(
+      y = y, num_trends = 2, zscore = FALSE,
+      # estimate_nu = TRUE, estimate_trend_ma = TRUE,
+      estimate_trend_ar = TRUE, 
+      iter = 3000, chains = 4, thin = 1,
+      control = list(adapt_delta = 0.99, max_treedepth = 20)
+    )
+    f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+    saveRDS(fit, here::here("data", "generation_fits", f_name))
+  },
+  .progress = TRUE,
+  .options = furrr::furrr_options(seed = TRUE)
+)
  
 
 # read outputs
 dfa_fits <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
@@ -259,21 +259,22 @@ post <- map(dfa_fits, function (x) {
   as.array(x$samples)
 })
 np <- map(dfa_fits, function (x) {
-  nuts_params(x$model)
+  bayesplot::nuts_params(x$model)
 })
 
 all_pars <- dimnames(post[[1]])[3] %>% unlist() %>% as.character()
-to_match <- c("theta", "phi", "xstar", "sigma")
+to_match <- c(#"theta", 
+  "phi", "xstar", "sigma")
 pars <- all_pars[grepl(paste(to_match, collapse = "|"), all_pars)]
 
 trace_list <- pmap(list(post, np, gen_tbl$group),
                    .f = function(x, y, z) {
-                     mcmc_trace(x, pars = pars, np = y) +
+                     bayesplot::mcmc_trace(x, pars = pars, np = y) +
                        labs(title = z)
                      })
 
 pdf(here::here("figs", "dfa", "bayes", "generation_length", "diagnostics",
-               "trace_plots.pdf"))
+               "trace_plots_ar.pdf"))
 trace_list
 dev.off()
 

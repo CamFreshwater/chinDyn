@@ -11,6 +11,8 @@
 #    from EscGraphs2018_Master_4.5.19.xlsx)
 # Updated Sep 28 - switch survival data to updated version provided by C. Parken
 # (original file surv rate stats raw_2020 analysis.xlsx)
+# Updated June 24 - swiwtch survival to updated version provided by AVE and gen
+# to updated version provided C. Parken
 # -----
 
 require(tidyverse); require(here)
@@ -59,26 +61,9 @@ by_dat3 <- rbind(by_dat1,
 
 
 # mean generation length data
-gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time.csv")) %>% 
-  mutate(stock = as.factor(Stock)) %>% 
-  select(stock, brood_year = BY, 
-         gen_length = GenTim.fishing.mortality.represented.in.calcuations.)
-
-
-
-# Code snippet to calculate mean age for one stock; incorrect because cohort
-# size still includes fishery removals
-# dat_can %>% 
-#   filter(stock_code == "ATN") %>% 
-#   select(brood_year, Age, Cohort.Size.ANM, Mat.Rate) %>% 
-#   mutate(spawners = Mat.Rate * Cohort.Size.ANM) %>% 
-#   group_by(brood_year) %>% 
-#   mutate(tot_spawners = sum(spawners)) %>%
-#   ungroup() %>% 
-#   mutate(rel_spawners = spawners * Age) %>%
-#   group_by(brood_year) %>% 
-#   mutate(mean_age = sum(rel_spawners) / tot_spawners) 
-
+gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time_v2.csv")) %>% 
+  mutate(stock = as.factor(stock)) %>%
+  select(stock, brood_year = by, gen_length = gen_time_nofishing)
 
 
 ## Generate metadata using old survival as a template than modify in excel
@@ -118,6 +103,7 @@ size1 <- read.csv(here::here("data/salmon_data/chinook_releaseweight_weightedavg
          age == dom_release_age) %>% 
   rename(brood_year = BROOD)
 names(size1) <- tolower(names(size1))
+
 
 by_dat <- metadata %>% 
   left_join(.,
@@ -200,15 +186,15 @@ by_dat <- metadata %>%
          j_group3b  = as.factor(paste(j_group3, smolt, sep = "_")),
          j_group2b  = as.factor(paste(j_group2, smolt, sep = "_")),
          j_group1b = as.factor(paste(j_group1, smolt, sep = "_"))
-         ) %>% 
+         ) #%>% 
   #add final category that separates SoG/PS for subyearlings, but not 
   #yearlings
-  mutate(j_group5b = case_when(
-    j_group2 == "salish" & smolt == "streamtype" ~ "salish_streamtype",
-    TRUE ~ as.character(j_group3b)
-  ) %>% 
-    as.factor()
-  )
+  # mutate(j_group5b = case_when(
+  #   j_group2 == "salish" & smolt == "streamtype" ~ "salish_streamtype",
+  #   TRUE ~ as.character(j_group3b)
+  # ) %>% 
+  #   as.factor()
+  # )
 
 saveRDS(by_dat,
         here::here("data", "salmon_data", "cwt_indicator_surv_clean.RDS"))

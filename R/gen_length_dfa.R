@@ -262,16 +262,18 @@ np <- map(dfa_fits, function (x) {
   bayesplot::nuts_params(x$model)
 })
 
-all_pars <- dimnames(post[[1]])[3] %>% unlist() %>% as.character()
-to_match <- c(#"theta", 
-  "phi", "xstar", "sigma")
-pars <- all_pars[grepl(paste(to_match, collapse = "|"), all_pars)]
 
-trace_list <- pmap(list(post, np, gen_tbl$group),
-                   .f = function(x, y, z) {
-                     bayesplot::mcmc_trace(x, pars = pars, np = y) +
-                       labs(title = z)
-                     })
+trace_list <- pmap(
+  list(post, np, gen_tbl$group),
+  .f = function(x, y, z) {
+    all_pars <- dimnames(x)[3] %>% unlist() %>% as.character()
+    to_match <- c(#"theta", 
+      "Z", "phi", "xstar", "sigma")
+    pars <- all_pars[grepl(paste(to_match, collapse = "|"), all_pars)]
+    bayesplot::mcmc_trace(x, pars = pars, np = y) +
+      labs(title = z)
+  }
+)
 
 pdf(here::here("figs", "dfa", "bayes", "generation_length", "diagnostics",
                "trace_plots_ar.pdf"))
@@ -280,7 +282,7 @@ dev.off()
 
 
 # rotate trends and add to gen_tbl (keep DFA separate because they're huge)
-gen_tbl$rot_gen <- map(dfa_fit, rotate_trends)
+gen_tbl$rot_gen <- map(dfa_fits, rotate_trends)
 
 # hidden markov model for regimes
 hmm_list_g <- furrr::future_map(gen_tbl$rot_gen, regime_f)

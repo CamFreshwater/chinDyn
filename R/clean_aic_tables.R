@@ -18,8 +18,8 @@ foo <- function(x) {
       ),
       H3 = case_when(
         grepl("group1", H) ~ "coarse",
-        grepl("group2", H) ~ "intermediate 1",
-        grepl("group3", H) ~ "intermediate 2",
+        grepl("group2", H) ~ "intermediate 2",
+        grepl("group3", H) ~ "intermediate 1",
         grepl("group4", H) ~ "fine",
         TRUE ~ NA_character_
       ),

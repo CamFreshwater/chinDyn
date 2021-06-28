@@ -235,7 +235,7 @@ groupings_table <- by_dat %>%
          adult_int2 = a_group2, adult_coarse = a_group1) %>% 
   distinct() 
 
-write.csv(groupings_table, here::here("data", "salmon_data", 
+write.csv(groupings_table, here::here("data", "manuscript_tables", 
                                       "groupings_table.csv"),
           row.names = FALSE)
 

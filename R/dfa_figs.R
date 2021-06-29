@@ -26,8 +26,9 @@ gen_dfa <- map(gen_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   # f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   readRDS(here::here("data", "generation_fits", f_name))
-})
+})[c(1, 4, 2, 3, 5)]
 
+gen_dfa <- gen_dfa1 
 
 # make labels for stock groupings and edit stock names to fit
 group_labs <- c(
@@ -37,7 +38,6 @@ group_labs <- c(
   "Puget\nYearling", 
   "South\nSubyearling"
 )
-#reorder to match above
 
 surv_names <- surv_tbl %>% 
   select(group, names) %>% 
@@ -90,11 +90,11 @@ set.seed(345)
 x_axes <- c(F, F, F, F, T)
 
 # predicted survival fits
-surv_pred_list1 <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years), 
+surv_pred_list <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years), 
                   fitted_preds,
                   descend_order = FALSE)
 # reorder to match group_labs
-surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
+# surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
 
 # scale colors based on observed range over entire dataset
 col_ramp_surv <- surv_pred_list %>% 
@@ -130,13 +130,6 @@ surv_fit_panel <- cowplot::plot_grid(
   ) %>% 
   grid.arrange()
 
-
-# surv_fit_panel2 <- cowplot::plot_grid(
-#   cowplot::get_legend(leg_plot),
-#   surv_fit_panel,
-#   ncol=1, rel_heights=c(.075, .925)
-# )
-
 # real space fits
 real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
   # calculate estimated uncentered survival rate in real space 
@@ -158,12 +151,12 @@ real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
 
 
 # one version of figure with full ylimit range
-real_surv_ylims <- c(0, max(raw_data$survival, na.rm = T))
+# real_surv_ylims <- c(0, max(raw_data$survival, na.rm = T))
 real_surv_fit <- pmap(list(real_surv_pred_list, group_labs, x_axes), 
                  .f = function(x, y, z) {
-                   plot_fitted_pred_real(x, y_lims = real_surv_ylims,
-                                    print_x = z,
-                                    facet_col = 5
+                   plot_fitted_pred_real(x, 
+                                         print_x = z,
+                                         facet_col = 5
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis()) 
@@ -183,12 +176,9 @@ real_surv_fit_panel <- cowplot::plot_grid(
 
 
 # predicted gen length fits
-gen_pred_list1 <- pmap(list(gen_dfa, gen_names$names, gen_tbl$years), 
+gen_pred_list <- pmap(list(gen_dfa, gen_names$names, gen_tbl$years), 
                        fitted_preds,
                        descend_order = FALSE)
-
-# reorder to match group_labs
-gen_pred_list <- gen_pred_list1[c(1, 4, 2, 3, 5)]
 
 # scale colors based on observed range over entire dataset
 col_ramp_gen <- gen_pred_list %>% 
@@ -435,7 +425,7 @@ surv_r_one <- regimes %>%
   filter(trend == "One", 
          State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High Mortality Regime")
+  plot_one_regime(y_lab = "Probability of High SurvivalRegime")
 surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
 
 # second survival trend
@@ -447,7 +437,7 @@ surv_r_two <- regimes %>%
   filter(trend == "Two", 
          State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High Mortality Regime")
+  plot_one_regime(y_lab = "Probability of High Survival Regime")
 surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
 
 # first age trend
@@ -507,7 +497,7 @@ dev.off()
 # ESTIMATED LOADINGS -----------------------------------------------------------
 
 # generation length loadings
-gen_load_dat <- pmap(list(rot_gen, gen_tbl$names, gen_tbl$group),
+gen_load_dat <- pmap(list(gen_tbl$rot_gen, gen_tbl$names, gen_tbl$group),
                       .f = prep_loadings) 
 
 #make list of figures
@@ -552,12 +542,6 @@ surv_load_panel <-
   arrangeGrob(., 
               bottom = textGrob("Mortality Model Loadings",
                                 gp = gpar(col = "grey30", fontsize = 12)))
-
-# 
-# pdf(here::here("figs", "loadings_both_vars.pdf"), height = 7, width = 10)
-# grid.arrange(gen_load_panel)
-# grid.arrange(surv_load_panel)
-# dev.off()
 
 png(here::here("figs", "ms_figs", "surv_loadings.png"), height = 7, width = 10, 
     res = 300, units = "in")

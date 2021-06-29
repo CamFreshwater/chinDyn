@@ -180,7 +180,9 @@ surv_tbl <- tibble(group = levels(surv$j_group3b)) %>%
       group_split(j_group3b) %>% 
       map2(., "logit_surv", make_mat)
   ) %>% 
-  filter(group %in% kept_grps$j_group3b)
+  filter(group %in% kept_grps$j_group3b) %>% 
+  mutate(group = fct_relevel(as.factor(group),"sog_oceantype", after = 1)) %>% 
+  arrange(group)
 surv_tbl$names <- map(surv_tbl$surv_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., surv %>% select(stock, stock_name) %>% distinct(),

@@ -1,6 +1,6 @@
 ## function to prepare predicted fits for plot_fitted_bayes
 # modelfit <- surv_dfa[[1]]; names <- surv_tbl$names[[1]]; years <- surv_tbl$years[[1]]
-# descend_order = TRUE
+# descend_order = FALSE
 fitted_preds <- function(modelfit, names = NULL, years = NULL,
                          descend_order = FALSE, subset = NULL) {
   n_ts <- dim(modelfit$data)[1]
@@ -64,7 +64,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                              facet_row = NULL, facet_col = NULL,
                              leg_name = NULL) {  
   #limits for y axis
-  y_lims <- max(df_pred$obs_y, na.rm = T) * c(-1, 1)
+  y_lims <- max(abs(df_pred$obs_y), na.rm = T) * c(-1, 1)
   x_int <- max(df_pred$Time, na.rm = T) - 5
   
   #make palette for last five year mean based on bins and col_ramp values 
@@ -79,37 +79,36 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
   # col_pal <- c("#e41a1c", "#377eb8")
   # names(col_pal) <- levels(df_pred$last_anomaly)
   
-  p <- ggplot(df_pred %>% filter(Time >= x_int),
+  dum <- df_pred %>% 
+    group_by(stock) %>% 
+    #calculate SD of ts for horizontal line
+    mutate(ts_mean_sd = sd(mean)) %>% 
+    ungroup()
+  
+  p <- ggplot(dum %>% filter(Time >= x_int),
               aes_string(x = "Time", y = "mean")) + 
     geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids",
                            fill = "color_ids"), alpha = 0.6) + 
     geom_line(aes_string(colour = "color_ids"), 
               size = 1.25) +
-    geom_ribbon(data = df_pred %>% filter(Time <= x_int),
+    geom_ribbon(data = dum %>% filter(Time <= x_int),
                 aes_string(ymin = "lo", ymax = "hi"),
                 fill = "grey60", colour = "grey60", alpha = 0.6) +
-    geom_line(data = df_pred %>% filter(Time <= x_int), 
+    geom_line(data = dum %>% filter(Time <= x_int),
               size = 1) +
     geom_hline(yintercept = 0, lty = 2) +
+    geom_hline(aes(yintercept = 0 + ts_mean_sd), lty = 3) +
+    geom_hline(aes(yintercept = 0 - ts_mean_sd), lty = 3) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
-    # scale_fill_brewer(type = "qual", 
-    #                      # limit = col_ramp, 
-    #                      direction = col_ramp_direction, 
-    #                      palette = "Set1", name = leg_name) +
-    # scale_colour_brewer(type = "qual", 
-    #                        # limit = col_ramp, 
-    #                        direction = col_ramp_direction, 
-    #                        palette = "Set1", name = leg_name) +
-    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
-    geom_point(data = df_pred, 
+    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 0)) +
+    geom_point(data = dum %>% filter(!is.na(obs_y)), 
                aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
     facet_wrap(~ID, nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
-    # scale_y_continuous(breaks = seq(0,50, by=5)) +
     theme(axis.title.x = element_blank(),
           axis.title.y.left = element_blank(),
           legend.position = "none",
@@ -187,7 +186,7 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     facet_wrap(~ID_key,  
                nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
-    coord_cartesian(y = y_lims) +
+    coord_cartesian(y = c(0, 0.2), expand = 0) +
     # scale_y_continuous(breaks = seq(0, round(max(y_lims), 1), length = 3)) + 
     scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
     theme(axis.title.x = element_blank(),
@@ -208,11 +207,15 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
 
 ## function to calculate probability that estimates below average in last 
 # n_years
-final_prob <- function(modelfit, names, n_years = 5) {
+final_prob <- function(modelfit, names, 
+                       n_years = 5
+                       # min_year = 2011
+                       ) {
   tt <- reshape2::melt(predicted(modelfit), 
                        varnames = c("iter", "chain", "year", "stock")) 
   tt$stock <- as.factor(names$stock[tt$stock])
   yr_range <- seq(max(tt$year) - (n_years - 1), max(tt$year), by = 1)
+  # yr_range <- seq(min_year, max(tt$year), by = 1)
   tt %>% 
     filter(year %in% yr_range) %>% 
     group_by(stock, iter) %>%

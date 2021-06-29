@@ -201,7 +201,9 @@ gen_tbl <- tibble(group = levels(gen$j_group3b)) %>%
       group_split(j_group3b) %>% 
       map(., make_mat, resp = "gen_length")
   ) %>% 
-  filter(group %in% kept_grps$j_group3b)
+  filter(group %in% kept_grps$j_group3b) %>% 
+  mutate(group = fct_relevel(as.factor(group),"sog_oceantype", after = 1)) %>% 
+  arrange(group)
 gen_tbl$names <- map(gen_tbl$gen_mat, function (x) {
   data.frame(stock = row.names(x)) %>% 
     left_join(., gen %>% select(stock, stock_name) %>% distinct(),
@@ -217,13 +219,13 @@ furrr::future_map2(
   gen_tbl$group,
   .f = function (y, group) {
     fit <- fit_dfa(
-      y = y, num_trends = 1, zscore = FALSE,
+      y = y, num_trends = 2, zscore = FALSE,
       # estimate_nu = TRUE, estimate_trend_ma = TRUE,
       estimate_trend_ar = TRUE, 
       iter = 3000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
-    f_name <- paste(group, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+    f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "generation_fits", f_name))
   },
   .progress = TRUE,
@@ -233,7 +235,7 @@ furrr::future_map2(
 
 # read outputs
 dfa_fits <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
 

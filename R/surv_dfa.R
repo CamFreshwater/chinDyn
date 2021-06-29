@@ -15,8 +15,7 @@ surv <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS")) %>%
   mutate(logit_surv = boot::logit(survival)) %>% 
   #remove stocks that are aggregates of others on CP's advice
   # TST combines STI/TAK and AKS combines SSA and NSA
-  filter(!stock %in% c("TST", "AKS"),
-         year < 2017) %>%
+  filter(!stock %in% c("TST", "AKS")) %>%
   group_by(stock) %>% 
   mutate(logit_surv_z = as.numeric(scale(logit_surv)),
          logit_surv_cent = as.numeric(scale(logit_surv, center = TRUE, 
@@ -30,7 +29,7 @@ stk_tbl <- surv %>%
   ungroup() %>% 
   select(stock, stock_name, smolt, run, 
          j_group1:j_group4, a_group1:a_group4, j_group1b, j_group2b, j_group3b,
-         j_group4b, j_group5b) %>% 
+         j_group4b) %>% 
   distinct() 
 
 # subset of stocks for test run
@@ -155,8 +154,6 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
 
 saveRDS(marss_aic_tab, here::here("data", "survival_fits",
                                   "marss_aic_tab.RDS"))
-marss_aic_tab <- readRDS(here::here("data", "survival_fits",
-                                    "marss_aic_tab.RDS"))
 
 
 ## Bayesian DFA ----------------------------------------------------------------
@@ -170,7 +167,7 @@ options(mc.cores = parallel::detectCores())
 
 # number of stocks per group
 kept_grps <- stk_tbl %>% 
-  group_by(j_group3) %>% 
+  group_by(j_group3b) %>% 
   tally() %>% 
   filter(n > 2) %>% 
   droplevels()
@@ -201,11 +198,11 @@ furrr::future_map2(
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE,
       # estimate_nu = TRUE,
-      estimate_trend_ar = TRUE, estimate_trend_ma = TRUE,
+      estimate_trend_ar = TRUE, #estimate_trend_ma = TRUE,
       iter = 3500, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
-    f_name <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+    f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "survival_fits", f_name))
   },
   .progress = TRUE,
@@ -214,7 +211,7 @@ furrr::future_map2(
 
 # read outputs
 dfa_fits <- map(surv_tbl$group, function(y) {
-  f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "survival_fits", f_name))
 })
 

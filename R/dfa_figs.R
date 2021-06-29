@@ -3,6 +3,7 @@
 # Use juvenile mortality and mean generation length DFAs to generate manuscript
 # figures
 # Updated June 2 to use logit survival
+# Updated June 28 to use AR only model
 
 library(tidyverse)
 library(bayesdfa)
@@ -14,7 +15,7 @@ raw_data <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS"))
 # import juvenile mortality data
 surv_tbl <- readRDS(here::here("data", "survival_fits", "surv_tbl.RDS"))
 surv_dfa <- map(surv_tbl$group, function(y) {
-  f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   # f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "survival_fits", f_name))
 })
@@ -22,19 +23,21 @@ surv_dfa <- map(surv_tbl$group, function(y) {
 # import mean gen length
 gen_tbl <- readRDS(here::here("data", "generation_fits", "gen_tbl.RDS"))
 gen_dfa <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_")
-  # f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_")
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+  # f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
+
 # make labels for stock groupings and edit stock names to fit
-group_labs <- group_labs <- c(
+group_labs <- c(
   "North\nYearling", 
   "SoG\nSubyearling", 
   "Puget\nSubyearling", 
   "Puget\nYearling", 
   "South\nSubyearling"
 )
+#reorder to match above
 
 surv_names <- surv_tbl %>% 
   select(group, names) %>% 
@@ -55,7 +58,7 @@ surv_names <- surv_tbl %>%
   ) %>%
   nest(names = c(stock, stock_name))
 
-gen_names <- surv_tbl %>% 
+gen_names <- gen_tbl %>% 
   select(group, names) %>% 
   unnest(cols = c(names)) %>%
   mutate(
@@ -83,6 +86,9 @@ source(here::here("R", "functions", "plotting_functions.R"))
 #set seed to ensure same stocks are sampled
 set.seed(345)
 
+#remove x_axes except for last plot
+x_axes <- c(F, F, F, F, T)
+
 # predicted survival fits
 surv_pred_list1 <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years), 
                   fitted_preds,
@@ -97,9 +103,6 @@ col_ramp_surv <- surv_pred_list %>%
   range() %>% 
   abs() %>% 
   max() * c(-1, 1)
-
-#remove x_axes except for last plot
-x_axes <- c(F, F, F, F, T)
 
 surv_fit <- pmap(list(surv_pred_list, group_labs, x_axes), 
                  .f = function(x, y, z) {
@@ -183,6 +186,7 @@ real_surv_fit_panel <- cowplot::plot_grid(
 gen_pred_list1 <- pmap(list(gen_dfa, gen_names$names, gen_tbl$years), 
                        fitted_preds,
                        descend_order = FALSE)
+
 # reorder to match group_labs
 gen_pred_list <- gen_pred_list1[c(1, 4, 2, 3, 5)]
 
@@ -220,17 +224,17 @@ gen_fit_panel <- cowplot::plot_grid(
   grid.arrange()
 
 
-png(here::here("figs", "ms_figs", "survival_fit.png"), height = 11, width = 9, 
+png(here::here("figs", "ms_figs", "survival_fit_ar1.png"), height = 11, width = 9, 
     res = 300, units = "in")
 cowplot::plot_grid(surv_fit_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "survival_fit_real.png"), height = 11, width = 9, 
+png(here::here("figs", "ms_figs", "survival_fit_real_ar1.png"), height = 11, width = 9, 
     res = 300, units = "in")
 cowplot::plot_grid(real_surv_fit_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "age_fit.png"), height = 11, width = 9, 
+png(here::here("figs", "ms_figs", "age_fit_ar1.png"), height = 11, width = 9, 
     res = 300, units = "in")
 cowplot::plot_grid(gen_fit_panel)
 dev.off()
@@ -262,7 +266,8 @@ pull_par_f <- function(x, group) {
     pivot_longer(cols = -iterations,
                  names_sep = "\\.",
                  names_to = c("chains", "parameter")) %>% 
-    filter(grepl("theta", parameter) | grepl("phi", parameter) |
+    filter(#grepl("theta", parameter) | 
+      grepl("phi", parameter) |
              grepl("nu", parameter)) %>% 
     mutate(group = group,
            trend = case_when(
@@ -271,7 +276,7 @@ pull_par_f <- function(x, group) {
              grepl("[2]", parameter) ~ "Trend 2"
            ),
            parameter = case_when(
-             grepl("theta", parameter) ~ "theta",
+             # grepl("theta", parameter) ~ "theta",
              grepl("phi", parameter) ~ "phi",
              grepl("nu", parameter) ~ "nu",
              TRUE ~ parameter

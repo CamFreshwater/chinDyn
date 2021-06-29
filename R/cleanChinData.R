@@ -203,20 +203,20 @@ saveRDS(by_dat,
 gen_years <- by_dat %>%
   filter(!is.na(gen_length)) %>% 
   group_by(stock) %>% 
-  summarize(min_year_gen = min(brood_year),
-            max_year_gen = max(brood_year)) %>% 
+  summarize(min_year_gen = min(year),
+            max_year_gen = max(year)) %>% 
   mutate(gen_year_range = paste(min_year_gen, max_year_gen, sep = "-")) 
 surv_years <- by_dat %>%
   filter(!is.na(survival)) %>% 
   group_by(stock) %>% 
-  summarize(min_year_surv = min(brood_year),
-            max_year_surv = max(brood_year)) %>% 
+  summarize(min_year_surv = min(year),
+            max_year_surv = max(year)) %>% 
   mutate(surv_year_range = paste(min_year_surv, max_year_surv, sep = "-")) 
 size_years <- by_dat %>%
   filter(!is.na(avg_weight)) %>% 
   group_by(stock) %>% 
-  summarize(min_year_size = min(brood_year),
-            max_year_size = max(brood_year)) %>% 
+  summarize(min_year_size = min(year),
+            max_year_size = max(year)) %>% 
   mutate(size_year_range = paste(min_year_size, max_year_size, sep = "-")) 
 
 groupings_table <- by_dat %>% 

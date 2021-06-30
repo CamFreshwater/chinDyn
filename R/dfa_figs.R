@@ -92,7 +92,7 @@ x_axes <- c(F, F, F, F, T)
 # predicted survival fits
 surv_pred_list <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years), 
                   fitted_preds,
-                  descend_order = FALSE)
+                  descend_order = FALSE, year1_last_mean = 2011)
 # reorder to match group_labs
 # surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
 
@@ -108,7 +108,9 @@ surv_fit <- pmap(list(surv_pred_list, group_labs, x_axes),
                  .f = function(x, y, z) {
                    plot_fitted_pred(x, print_x = z,
                                     col_ramp = col_ramp_surv,
-                                    facet_col = 5
+                                    facet_col = 5,
+                                    #where should vert line be drawn
+                                    year1_last_mean = 2011
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis(),
@@ -136,7 +138,7 @@ real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
   x %>% 
     left_join(., 
               raw_data %>% 
-                select(stock, Time = brood_year, survival),
+                select(stock, Time = year, survival),
               by = c("stock", "Time")) %>% 
     group_by(ID) %>% 
     mutate(obs_mean_logit = mean(qlogis(survival), na.rm = T)) %>%
@@ -156,7 +158,8 @@ real_surv_fit <- pmap(list(real_surv_pred_list, group_labs, x_axes),
                  .f = function(x, y, z) {
                    plot_fitted_pred_real(x, 
                                          print_x = z,
-                                         facet_col = 5
+                                         facet_col = 5,
+                                         year1_last_mean = 2011
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis()) 

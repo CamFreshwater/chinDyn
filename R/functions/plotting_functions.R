@@ -1,8 +1,10 @@
 ## function to prepare predicted fits for plot_fitted_bayes
-# modelfit <- surv_dfa[[1]]; names <- surv_tbl$names[[1]]; years <- surv_tbl$years[[1]]
+# modelfit <- surv_dfa[[2]]; names <- surv_tbl$names[[2]]; 
+# years <- surv_tbl$years[[2]]
 # descend_order = FALSE
 fitted_preds <- function(modelfit, names = NULL, years = NULL,
-                         descend_order = FALSE, subset = NULL) {
+                         descend_order = FALSE, subset = NULL,
+                         year1_last_mean = 2010) {
   n_ts <- dim(modelfit$data)[1]
   n_years <- dim(modelfit$data)[2]
   if (is.null(years)) {
@@ -11,8 +13,7 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
   pred <- predicted(modelfit)
   
   df_pred <- data.frame(ID = rep(seq_len(n_ts), n_years),
-                        Time = sort(rep(years,
-                                        n_ts)),
+                        Time = sort(rep(years, n_ts)),
                         mean = c(t(apply(pred, c(3, 4), mean))),
                         lo = c(t(apply(pred, c(3, 4), quantile, 0.025))),
                         hi = c(t(apply(pred, c(3, 4), quantile, 0.975)))
@@ -34,7 +35,9 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
   #   summarize(last_mean = mean(mean))
   # new categorical version
   last_gen_mean <-  final_prob(modelfit = modelfit, names = names, 
-                               n_years = 5) %>% 
+                               years = years, year1_last_mean = year1_last_mean
+                               # n_years = 5
+                               ) %>% 
     mutate(prob = ifelse(last_mean > 0, prob_above_0, prob_below_0)) %>% 
     select(-c(prob_above_0, prob_below_0))
   
@@ -62,10 +65,11 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                              col_ramp = c(-1, 1),
                              col_ramp_direction = -1,
                              facet_row = NULL, facet_col = NULL,
-                             leg_name = NULL) {  
+                             leg_name = NULL,
+                             year1_last_mean = 2011) {  
   #limits for y axis
   y_lims <- max(abs(df_pred$obs_y), na.rm = T) * c(-1, 1)
-  x_int <- max(df_pred$Time, na.rm = T) - 5
+  x_int <- year1_last_mean
   
   #make palette for last five year mean based on bins and col_ramp values 
   breaks <- seq(min(col_ramp), max(col_ramp), length.out = 9)
@@ -125,19 +129,22 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
 }
 
 ## function to plot fits in real space (based on bayesdfa::plot_fitted)
-# df_pred <- real_surv_pred_list[[3]]
+df_pred <- real_surv_pred_list[[3]]
 plot_fitted_pred_real <- function(df_pred, #ylab = NULL, 
                              y_lims = NULL, 
                              print_x = TRUE, 
-                             facet_row = NULL, facet_col = NULL
+                             facet_row = NULL, facet_col = NULL,
+                             year1_last_mean = 2011
                              ) {  
-  x_int <- max(df_pred$Time, na.rm = T) - 5
+  x_int <- year1_last_mean
   y_int <- df_pred %>% 
     group_by(ID) %>% 
     summarize(ts_mean = mean(uncent_mean_logit),
               sd_mean = sd(uncent_mean_logit), 
               ts_mean_sd_hi = plogis(ts_mean + (qnorm(0.9) * sd_mean)),
               ts_mean_sd_lo = plogis(ts_mean + (qnorm(0.1) * sd_mean)),
+              ts_mean_sd_hi2 = plogis(ts_mean + (qnorm(0.9) * sd_mean)),
+              ts_mean_sd_lo2 = plogis(ts_mean + (qnorm(0.1) * sd_mean)),
               ts_uncent_mean = mean(uncent_mean), 
               .groups = "drop") %>% 
     distinct()
@@ -150,6 +157,12 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
         ts_mean_sd_lo < last_mean & last_mean < ts_uncent_mean ~ "low",
         ts_mean_sd_hi > last_mean & last_mean  > ts_uncent_mean ~ "high",
         last_mean > ts_mean_sd_hi ~ "very high"
+      ),
+      color_id2 = case_when(
+        last_mean < uncent_lo ~ "very low",
+        uncent_lo < last_mean & last_mean < ts_uncent_mean ~ "low",
+        uncent_hi > last_mean & last_mean  > ts_uncent_mean ~ "high",
+        last_mean > uncent_hi ~ "very high"
       ),
       color_ids = fct_reorder(as.factor(color_id),
                              last_mean),
@@ -208,24 +221,32 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
 ## function to calculate probability that estimates below average in last 
 # n_years
 final_prob <- function(modelfit, names, 
-                       n_years = 5
-                       # min_year = 2011
+                       #n_years = 5
+                       years = years, year1_last_mean = 2010
                        ) {
   tt <- reshape2::melt(predicted(modelfit), 
-                       varnames = c("iter", "chain", "year", "stock")) 
+                       varnames = c("iter", "chain", "time", "stock")) %>% 
+    left_join(., 
+              data.frame(year = years,
+                         time = unique(.$time)),
+              by = "time") 
   tt$stock <- as.factor(names$stock[tt$stock])
-  yr_range <- seq(max(tt$year) - (n_years - 1), max(tt$year), by = 1)
-  # yr_range <- seq(min_year, max(tt$year), by = 1)
+  
+  # yr_range <- seq(max(tt$year) - (n_years - 1), max(tt$year), by = 1)
+  yr_range <- seq(year1_last_mean, max(tt$year), by = 1)
   tt %>% 
-    filter(year %in% yr_range) %>% 
+    filter(year %in% yr_range) %>%
     group_by(stock, iter) %>%
+    # ggplot(.) +
+    # geom_histogram(aes(x = value)) +
+    # facet_grid(time~stock)
     mutate(mean_value = mean(value)) %>% 
     group_by(stock) %>% 
-    summarize( 
-      last_mean = mean(mean_value),
-      prob_below_0 = sum(mean_value < 0) / length(mean_value),
-      prob_above_0 = sum(mean_value > 0) / length(mean_value)
-    ) 
+      summarize( 
+        last_mean = mean(mean_value),
+        prob_below_0 = sum(mean_value < 0) / length(mean_value),
+        prob_above_0 = sum(mean_value > 0) / length(mean_value)
+      ) 
 }
 
 

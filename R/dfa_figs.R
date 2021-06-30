@@ -26,9 +26,7 @@ gen_dfa <- map(gen_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   # f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   readRDS(here::here("data", "generation_fits", f_name))
-})[c(1, 4, 2, 3, 5)]
-
-gen_dfa <- gen_dfa1 
+})
 
 # make labels for stock groupings and edit stock names to fit
 group_labs <- c(
@@ -181,7 +179,7 @@ real_surv_fit_panel <- cowplot::plot_grid(
 # predicted gen length fits
 gen_pred_list <- pmap(list(gen_dfa, gen_names$names, gen_tbl$years), 
                        fitted_preds,
-                       descend_order = FALSE)
+                       descend_order = FALSE, year1_last_mean = 2011)
 
 # scale colors based on observed range over entire dataset
 col_ramp_gen <- gen_pred_list %>% 
@@ -195,8 +193,7 @@ gen_fit <- pmap(list(gen_pred_list, group_labs, x_axes),
                 .f = function(x, y, z) {
                   plot_fitted_pred(x, print_x = z,
                                    col_ramp = col_ramp_gen,
-                                   # col_ramp_direction = 1,
-                                   facet_col = 5
+                                   facet_col = 5, year1_last_mean = 2011
                   ) +
                     scale_y_continuous(
                       name = y, position = 'right', sec.axis = dup_axis(),
@@ -291,7 +288,7 @@ surv_par_plot <- ggplot(surv_pars,
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
   scale_x_discrete(limits = rev) +
-  ylab("Posterior Estimates from Mortality Model") +
+  ylab("Posterior Estimates from Survival Rate Model") +
   xlab("Stock Grouping") +
   # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +
@@ -306,7 +303,7 @@ gen_par_plot <- ggplot(gen_pars,
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
   scale_x_discrete(limits = rev) +
-  ylab("Posterior Estimates from Mean Age Model") +
+  ylab("Posterior Estimates from Mean Age-At-Maturity Model") +
   xlab("Stock Grouping") +
   # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +
@@ -518,7 +515,7 @@ gen_load_panel <-
   nrow = 2
 ) %>% 
   arrangeGrob(., 
-              bottom = textGrob("Mean Age Model Loadings",
+              bottom = textGrob("Mean Age-At-Maturity Model Loadings",
                                 gp = gpar(col = "grey30", fontsize = 12))) 
   
 # survival loadings
@@ -543,7 +540,7 @@ surv_load_panel <-
     nrow = 2
   ) %>% 
   arrangeGrob(., 
-              bottom = textGrob("Mortality Model Loadings",
+              bottom = textGrob("Survival Rate Model Loadings",
                                 gp = gpar(col = "grey30", fontsize = 12)))
 
 png(here::here("figs", "ms_figs", "surv_loadings.png"), height = 7, width = 10, 

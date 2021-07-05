@@ -229,7 +229,7 @@ map2(dfa_fits, surv_tbl$group, function (x, y) {
 
 map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
-    filter(n_eff < 500 | Rhat > 1.05)
+    filter(n_eff < 250 | Rhat > 1.01)
 })
 
 div_trans <- map(dfa_fits, function (y) {

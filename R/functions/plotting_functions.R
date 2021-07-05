@@ -4,7 +4,7 @@
 # descend_order = FALSE
 fitted_preds <- function(modelfit, names = NULL, years = NULL,
                          descend_order = FALSE, subset = NULL,
-                         year1_last_mean = 2010) {
+                         year1_last_mean = 2011) {
   n_ts <- dim(modelfit$data)[1]
   n_years <- dim(modelfit$data)[2]
   if (is.null(years)) {
@@ -196,7 +196,7 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
                nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = c(0, 0.2), expand = 0) +
-    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
+    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 0)) +
     theme(axis.title.x = element_blank(),
           axis.title.y.left = element_blank(),
           legend.position = "none",
@@ -216,8 +216,8 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
 ## function to calculate probability that estimates below average in last 
 # n_years
 final_prob <- function(modelfit, names, 
-                       #n_years = 5
-                       years = years, year1_last_mean = 2010
+                       years = years, year1_last_mean = 2010,
+                       year2_last_mean = NULL
                        ) {
   tt <- reshape2::melt(predicted(modelfit), 
                        varnames = c("iter", "chain", "time", "stock")) %>% 
@@ -228,19 +228,22 @@ final_prob <- function(modelfit, names,
   tt$stock <- as.factor(names$stock[tt$stock])
   
   # yr_range <- seq(max(tt$year) - (n_years - 1), max(tt$year), by = 1)
-  yr_range <- seq(year1_last_mean, max(tt$year), by = 1)
+  if (is.null(year2_last_mean)) {
+    year2_last_mean <- max(tt$year)
+  }
+  yr_range <- seq(year1_last_mean, year2_last_mean, by = 1)
   tt %>% 
+    group_by(stock) %>% 
+    filter(!year > year2_last_mean) %>%
+    mutate(overall_mean = mean(value)) %>% 
     filter(year %in% yr_range) %>%
     group_by(stock, iter) %>%
-    # ggplot(.) +
-    # geom_histogram(aes(x = value)) +
-    # facet_grid(time~stock)
     mutate(mean_value = mean(value)) %>% 
     group_by(stock) %>% 
       summarize( 
         last_mean = mean(mean_value),
-        prob_below_0 = sum(mean_value < 0) / length(mean_value),
-        prob_above_0 = sum(mean_value > 0) / length(mean_value)
+        prob_below_0 = sum(mean_value < overall_mean) / length(mean_value),
+        prob_above_0 = sum(mean_value > overall_mean) / length(mean_value)
       ) 
 }
 

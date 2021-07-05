@@ -233,19 +233,23 @@ dev.off()
 # CALCULATE FINAL FIVE YEAR MEANS ----------------------------------------------
 
 # generation length means in last five years
-gen_prob <- map2(gen_dfa, gen_tbl$names, final_prob, n_years = 5) %>% 
+gen_prob <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years),
+                 final_prob, year1_last_mean = 2011, year2_last_mean = 2016) %>% 
   bind_rows() %>% 
   mutate(
     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
   )
 sum(gen_prob$thresh) / nrow(gen_prob)
 
-surv_prob <- map2(surv_dfa, surv_tbl$names, final_prob, n_years = 5) %>% 
+surv_prob <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years),
+                  final_prob, year1_last_mean = 2011, 
+                  year2_last_mean = 2016) %>% 
   bind_rows() %>% 
   mutate(
     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
   )
 sum(surv_prob$thresh) / nrow(surv_prob)
+
 
 
 # ESTIMATES OF PARS ------------------------------------------------------------

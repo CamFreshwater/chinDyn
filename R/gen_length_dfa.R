@@ -222,7 +222,7 @@ furrr::future_map2(
       y = y, num_trends = 2, zscore = FALSE,
       # estimate_nu = TRUE, estimate_trend_ma = TRUE,
       estimate_trend_ar = TRUE, 
-      iter = 3000, chains = 4, thin = 1,
+      iter = 4000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
@@ -252,7 +252,7 @@ map2(dfa_fits, gen_tbl$group, function (x, y) {
 
 map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
-    filter(n_eff < 500 | Rhat > 1.05)
+    filter(n_eff < 300 | Rhat > 1.02)
 })
 
 

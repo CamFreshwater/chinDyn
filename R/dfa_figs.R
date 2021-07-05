@@ -280,12 +280,17 @@ pull_par_f <- function(x, group) {
 
 # clean parameter samples
 surv_pars <- map2(surv_dfa, group_labs, pull_par_f) %>% 
-  bind_rows() 
+  bind_rows() %>% 
+  mutate(model = "Survival Rate")
 gen_pars <- map2(gen_dfa, group_labs, pull_par_f) %>% 
-  bind_rows() 
+  bind_rows() %>% 
+  mutate(model = "Age-At-Maturity")
 
-surv_par_plot <- ggplot(surv_pars, 
-                         aes(x = group, y = value, fill = trend)) + 
+phi_plot <- rbind(surv_pars, gen_pars) %>% 
+  mutate(group = fct_relevel(as.factor(group), "SoG\nSubyearling", 
+                             after = 1)) %>% 
+  ggplot(., 
+         aes(x = group, y = value, fill = trend)) + 
   scale_fill_brewer(name = "", palette = "Set2") +
   geom_violin(position = position_dodge(0.3),
               draw_quantiles = 0.5) + 
@@ -294,39 +299,14 @@ surv_par_plot <- ggplot(surv_pars,
   scale_x_discrete(limits = rev) +
   ylab("Posterior Estimates from Survival Rate Model") +
   xlab("Stock Grouping") +
-  # scale_y_continuous(expand = c(0, 0)) +
   ggsidekick::theme_sleek() +
   guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
-  facet_wrap(~parameter, scales = "free_x")
+  facet_wrap(~model, scales = "free_x")
 
-gen_par_plot <- ggplot(gen_pars, 
-                       aes(x = group, y = value, fill = trend)) + 
-  scale_fill_brewer(name = "", palette = "Set2") +
-  geom_violin(position = position_dodge(0.3),
-              draw_quantiles = 0.5) + 
-  geom_hline(aes(yintercept = y_int), lty = 2) + 
-  coord_flip() + 
-  scale_x_discrete(limits = rev) +
-  ylab("Posterior Estimates from Mean Age-At-Maturity Model") +
-  xlab("Stock Grouping") +
-  # scale_y_continuous(expand = c(0, 0)) +
-  ggsidekick::theme_sleek() +
-  guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +
-  facet_wrap(~parameter, scales = "free_x")
 
-# pdf(here::here("figs", "pars_both_vars.pdf"))
-# surv_par_plot
-# gen_par_plot
-# dev.off()
-
-png(here::here("figs", "ms_figs", "surv_pars.png"), height = 7, width = 8, 
+png(here::here("figs", "ms_figs", "phi_pars.png"), height = 7, width = 8, 
     res = 300, units = "in")
-surv_par_plot
-dev.off()
-
-png(here::here("figs", "ms_figs", "age_pars.png"), height = 7, width = 8, 
-    res = 300, units = "in")
-gen_par_plot
+phi_plot
 dev.off()
 
 

@@ -279,7 +279,7 @@ plot_one_trend <- function(trend_dat, facet_var = FALSE) {
     geom_hline(yintercept = 0, lty = 2) +
     xlab("Brood Year") + 
     ylab("Estimated Trend") +
-    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
+    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 1.5)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() + 
     theme(legend.position = "none")
@@ -355,7 +355,7 @@ plot_one_regime <- function(regime_dat, facet_var = FALSE, y_lab = NULL) {
     scale_fill_brewer(type = "qual", name = "") +
     xlab("Brood Year") + 
     ylab(y_lab) +
-    scale_x_continuous(limits = c(1972, 2016), expand = c(0, 0)) +
+    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 1.5)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() +
     theme(legend.position = "none")

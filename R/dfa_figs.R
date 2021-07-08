@@ -81,9 +81,6 @@ source(here::here("R", "functions", "plotting_functions.R"))
 
 # PREDICTED FITS ---------------------------------------------------------------
 
-#set seed to ensure same stocks are sampled
-set.seed(345)
-
 #remove x_axes except for last plot
 x_axes <- c(F, F, F, F, T)
 

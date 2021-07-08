@@ -8,6 +8,8 @@
 library(tidyverse)
 library(bayesdfa)
 library(rstan)
+library(grid)
+library(gridExtra)
 
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
@@ -16,7 +18,7 @@ ncores <- parallel::detectCores()
 future::plan(future::multisession, workers = ncores - 2)
 
 
-esc <- read.csv(here::here("data", "salmonData", 
+esc <- read.csv(here::here("data", "salmon_data", 
                            "clean_escapement_data.csv")) %>% 
   group_by(stock) %>% 
   mutate(
@@ -30,23 +32,23 @@ esc <- read.csv(here::here("data", "salmonData",
 
 
 # plot raw
-esc %>%
-  filter(!is.na(esc_z)) %>%
-  ggplot(.) +
-  geom_point(aes(x = year, y = log(escapement), fill = j_group3b), shape = 21) +
-  facet_wrap(~ fct_reorder(stock, as.numeric(j_group3b))) +
-  theme(legend.position = "top") +
-  labs(y = "Centered Escapement") +
-  ggsidekick::theme_sleek()
-
-# check distribution
-esc %>%
-  group_by(stock) %>% 
-  ggplot(.) +
-  geom_histogram(aes(x = log(escapement), fill = j_group3b)) +
-  facet_wrap(~ fct_reorder(stock, as.numeric(j_group3b))) +
-  theme(legend.position = "top") +
-  ggsidekick::theme_sleek()
+# esc %>%
+#   filter(!is.na(esc_z)) %>%
+#   ggplot(.) +
+#   geom_point(aes(x = year, y = esc_cent, fill = j_group3b), shape = 21) +
+#   facet_wrap(~ fct_reorder(stock, as.numeric(j_group3b))) +
+#   theme(legend.position = "top") +
+#   labs(y = "Centered Escapement") +
+#   ggsidekick::theme_sleek()
+# 
+# # check distribution
+# esc %>%
+#   group_by(stock) %>% 
+#   ggplot(.) +
+#   geom_histogram(aes(x = esc_cent, fill = j_group3b)) +
+#   facet_wrap(~ fct_reorder(stock, as.numeric(j_group3b))) +
+#   theme(legend.position = "top") +
+#   ggsidekick::theme_sleek()
 
 
 ## BAYES DFA -------------------------------------------------------------------
@@ -90,13 +92,13 @@ esc_tbl$years <- map(esc_tbl$esc_mat, function (x) {
 
 ## fit DFA
 furrr::future_map2(
-  esc_tbl$esc_mat[1],
-  esc_tbl$group[1],
+  esc_tbl$esc_mat,
+  esc_tbl$group,
   .f = function (y, group) {
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = TRUE,
       estimate_trend_ar = TRUE, #estimate_nu = TRUE,
-      iter = 4000, chains = 4, thin = 1,
+      iter = 3500, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     f_name <- paste(group, "two-trend", "bayesdfa_scaled.RDS", sep = "_")
@@ -127,7 +129,7 @@ map2(dfa_fits, esc_tbl$group, function (x, y) {
 
 map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
-    filter(n_eff < 500 | Rhat > 1.05)
+    filter(n_eff < 300 | Rhat > 1.02)
 })
 
 
@@ -157,43 +159,47 @@ dev.off()
 
 ## EXPORT ----------------------------------------------------------------------
 
+# source(here::here("R", "functions", "data_cleaning_functions.R"))
+
+
 # rotate trends and add to surv_tbl (keep DFA separate because they're huge)
-esc_tbl$rot_esc <- map(dfa_fits, rotate_trends)
-
-# test for evidence of regimes 
-regime_f <- function(rots_in) {
-  dum <- vector(nrow(rots_in$trends_mean), mode = "list")
-  for(i in 1:nrow(rots_in$trends_mean)) {
-    dum[[i]] <- find_regimes(
-      rots_in$trends_mean[i, ], 
-      sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
-      max_regimes = 3,
-      iter = 3000,
-      control = list(adapt_delta = 0.99, max_treedepth = 20)
-    )
-  }
-  return(dum)
-}
-
-hmm_list_g[[1]] <- regime_f(esc_tbl$rot_gen[[1]])#furrr::future_map(esc_tbl$rot_gen, regime_f)
-map(hmm_list_g, function(x) {
-  map(x, ~.$table)
-} )
-#uniformly greatest support for two regimes
-
-
-map(hmm_list_g, function(x) {
-  map(x, function (y) plot_regime_model(y$best_model))
-} )
-
-esc_tbl$regime_trend1 <- map(hmm_list_g, function(x) x[[1]]$best_model)
-esc_tbl$regime_trend2 <- map(hmm_list_g, function(x) x[[2]]$best_model)
-
-saveRDS(esc_tbl, here::here("data", "escapement_fits", "esc_tbl.RDS"))
-
+# esc_tbl$rot_esc <- map(dfa_fits, rotate_trends)
+# 
+# # test for evidence of regimes 
+# regime_f <- function(rots_in) {
+#   dum <- vector(nrow(rots_in$trends_mean), mode = "list")
+#   for(i in 1:nrow(rots_in$trends_mean)) {
+#     dum[[i]] <- find_regimes(
+#       rots_in$trends_mean[i, ],
+#       sds = (rots_in$trends_upper - rots_in$trends_mean)[i, ] / 1.96,
+#       max_regimes = 2,
+#       iter = 3000,
+#       control = list(adapt_delta = 0.99, max_treedepth = 20)
+#     )
+#   }
+#   return(dum)
+# }
+# 
+# hmm_list_g <- furrr::future_map(esc_tbl$rot_esc, regime_f)
+# # map(hmm_list_g, function(x) {
+# #   map(x, ~.$table)
+# # } )
+# #uniformly greatest support for two regimes
+# 
+# 
+# map(hmm_list_g, function(x) {
+#   map(x, function (y) plot_regime_model(y$best_model))
+# } )
+# 
+# esc_tbl$regime_trend1 <- map(hmm_list_g, function(x) x[[1]]$best_model)
+# esc_tbl$regime_trend2 <- map(hmm_list_g, function(x) x[[2]]$best_model)
+# 
+# saveRDS(esc_tbl, here::here("data", "escapement_fits", "esc_tbl.RDS"))
 
 
 ## TEMP PLOTS ------------------------------------------------------------------
+
+esc_tbl <- readRDS(here::here("data", "escapement_fits", "esc_tbl.RDS"))
 
 # plotting functions
 source(here::here("R", "functions", "plotting_functions.R"))
@@ -209,12 +215,26 @@ esc_tbl$group_labs <- c(
   "Puget\nYearling"
 )
 
+#remove x_axes except for last plot
+x_axes <- c(F, F, F, F, F, F, T)
+
 ## Fits
 
 # predicted survival fits
 esc_pred_list <- pmap(list(dfa_fits, esc_tbl$names, esc_tbl$years), 
-                       fitted_preds,
-                       descend_order = FALSE)
+                      fitted_preds,
+                      descend_order = FALSE, year1_last_mean = 2011)
+
+# add dummy stock names if fewer than facet_col levels
+for (i in seq_along(esc_pred_list)) {
+  n_stks <- length(levels(esc_pred_list[[i]]$ID)) 
+  if (n_stks < 6) {
+    blanks <- paste("blank", seq(1, 7 - n_stks, by = 1), sep = "")
+    new_dat <- esc_pred_list[[i]] %>% 
+      mutate(ID = factor(ID, levels = c(levels(ID), blanks)))
+    esc_pred_list[[i]] <- new_dat
+  }
+}
 
 # scale colors based on observed range over entire dataset
 col_ramp_esc <- esc_pred_list %>% 
@@ -225,22 +245,62 @@ col_ramp_esc <- esc_pred_list %>%
   max() * c(-1, 1)
 
 
-esc_fit <- pmap(list(esc_pred_list, esc_tbl$group_labs), 
-                 .f = function(x, y) {
-                   plot_fitted_pred(x, print_x = TRUE,
+esc_fit <- pmap(list(esc_pred_list, esc_tbl$group_labs, x_axes), 
+                 .f = function(x, y, z) {
+                   plot_fitted_pred(x, print_x = z,
+                                    facet_col = 7,
                                     col_ramp = col_ramp_esc,
-                                    col_ramp_direction = 1
+                                    #where should vert line be drawn
+                                    year1_last_mean = 2011
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis(),
                        labels = scales::number_format(accuracy = 0.1)
-                     ) +
-                     theme(legend.position = "top")  
+                     )
                  })
+
+
+# remove dummy panels from relevant stocks
+for (i in seq_along(esc_fit)) {
+  n_stocks <- length(unique(esc_pred_list[[i]]$stock))
+  if (n_stocks < 7) {
+    blank_seq <- seq(n_stocks + 1, 7, by = 1)
+    grobs_to_remove <- c(paste("panel", blank_seq, "1", sep = "-"),
+                         paste("strip-t", blank_seq, "1", sep = "-"))
+    g <- ggplotGrob(esc_fit[[i]])
+    # get the grobs that must be removed
+    rm_grobs <- g$layout$name %in% grobs_to_remove
+    # remove grobs
+    g$grobs[rm_grobs] <- NULL
+    g$layout <- g$layout[!rm_grobs, ]
+    esc_fit[[i]] <- g
+  }
+}
+
+esc_fit_panel <- cowplot::plot_grid(
+  esc_fit[[1]], esc_fit[[2]], esc_fit[[3]], esc_fit[[4]], esc_fit[[5]],
+  esc_fit[[6]], esc_fit[[7]],
+  axis = c("r"), align = "v", 
+  rel_heights = c(3/13, 4/13, 1/13, 2/13, 1/13, 1/13, 1.2/13),
+  ncol = 1 
+) %>% 
+  arrangeGrob(
+    ., 
+    left = textGrob("Centered Escapement (log transformed)", 
+                    gp = gpar(col = "grey30", fontsize = 12),
+                    rot = 90)
+  ) %>% 
+  grid.arrange()
 
 pdf(here::here("figs", "ms_figs", "esc_fits.pdf"))
 esc_fit
 dev.off()
+
+png(here::here("figs", "ms_figs", "esc_fit_ar1.png"), height = 12, width = 9, 
+    res = 300, units = "in")
+cowplot::plot_grid(esc_fit_panel)
+dev.off()
+
 
 
 ## Trends

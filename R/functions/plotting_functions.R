@@ -60,6 +60,7 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
 }
 
 ## function to plot fits in link sapce (based on bayesdfa::plot_fitted)
+# df_pred <- esc_pred_list[[1]]
 plot_fitted_pred <- function(df_pred, #ylab = NULL, 
                              print_x = TRUE, 
                              col_ramp = c(-1, 1),
@@ -80,8 +81,6 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
   col_pal <- c("#a50f15", "#de2d26", "#fb6a4a", "#fc9272", "#9ecae1", "#6baed6",
                "#3182bd", "#08519c", "grey60")
   names(col_pal) <- c(levels(df_pred$color_ids), "historic")
-  # col_pal <- c("#e41a1c", "#377eb8")
-  # names(col_pal) <- levels(df_pred$last_anomaly)
   
   dum <- df_pred %>% 
     group_by(stock) %>% 
@@ -110,7 +109,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     geom_point(data = dum %>% filter(!is.na(obs_y)), 
                aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
-    facet_wrap(~ID, nrow = facet_row, ncol = facet_col) +
+    facet_wrap(~ID, nrow = facet_row, ncol = facet_col, drop = FALSE) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
     theme(axis.title.x = element_blank(),
@@ -141,10 +140,8 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     group_by(ID) %>% 
     summarize(ts_mean_logit = mean(uncent_mean_logit),
               sd_mean_logit = sd(uncent_mean_logit), 
-              ts_mean_sd_hi = plogis(ts_mean_logit + 
-                                       (qnorm(0.9) * sd_mean_logit)),
-              ts_mean_sd_lo = plogis(ts_mean_logit + 
-                                       (qnorm(0.1) * sd_mean_logit)),
+              ts_mean_sd_hi = plogis(ts_mean_logit + sd_mean_logit),
+              ts_mean_sd_lo = plogis(ts_mean_logit - sd_mean_logit),
               ts_uncent_mean = mean(uncent_mean), 
               .groups = "drop") %>% 
     distinct()

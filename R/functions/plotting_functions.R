@@ -67,7 +67,8 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                              col_ramp_direction = -1,
                              facet_row = NULL, facet_col = NULL,
                              leg_name = NULL,
-                             year1_last_mean = 2011) {  
+                             year1_last_mean = 2011,
+                             drop = TRUE) {  
   #limits for y axis
   y_lims <- max(abs(df_pred$obs_y), na.rm = T) * c(-1, 1)
   x_int <- year1_last_mean
@@ -109,7 +110,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     geom_point(data = dum %>% filter(!is.na(obs_y)), 
                aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
-    facet_wrap(~ID, nrow = facet_row, ncol = facet_col, drop = FALSE) +
+    facet_wrap(~ID, nrow = facet_row, ncol = facet_col, drop = drop) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = y_lims) +
     theme(axis.title.x = element_blank(),
@@ -140,8 +141,8 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     group_by(ID) %>% 
     summarize(ts_mean_logit = mean(uncent_mean_logit),
               sd_mean_logit = sd(uncent_mean_logit), 
-              ts_mean_sd_hi = plogis(ts_mean_logit + sd_mean_logit),
-              ts_mean_sd_lo = plogis(ts_mean_logit - sd_mean_logit),
+              ts_mean_sd_hi = plogis(ts_mean_logit + (qnorm(0.025) * sd_mean_logit)),
+              ts_mean_sd_lo = plogis(ts_mean_logit + (qnorm(0.975) * sd_mean_logit)),
               ts_uncent_mean = mean(uncent_mean), 
               .groups = "drop") %>% 
     distinct()

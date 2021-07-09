@@ -159,6 +159,7 @@ real_surv_fit <- pmap(list(real_surv_pred_list, group_labs, x_axes),
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis()) 
                  })
+
 real_surv_fit_panel <- cowplot::plot_grid(
   real_surv_fit[[1]], real_surv_fit[[2]], real_surv_fit[[3]], real_surv_fit[[4]], 
   real_surv_fit[[5]],
@@ -205,23 +206,23 @@ gen_fit_panel <- cowplot::plot_grid(
   ncol=1
 ) %>% 
   arrangeGrob(., 
-              left = textGrob("Centered Mean Age", 
+              left = textGrob("Centered Mean Age-At-Maturity", 
                               gp = gpar(col = "grey30", fontsize = 12),
                               rot = 90)) %>% 
   grid.arrange()
 
 
-png(here::here("figs", "ms_figs", "survival_fit_ar1.png"), height = 11, width = 9, 
-    res = 300, units = "in")
+png(here::here("figs", "ms_figs", "survival_fit_ar1.png"), height = 11.5, 
+    width = 10, res = 300, units = "in")
 cowplot::plot_grid(surv_fit_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "survival_fit_real_ar1.png"), height = 11, width = 9, 
-    res = 300, units = "in")
+png(here::here("figs", "ms_figs", "survival_fit_real_ar1.png"), height = 11.5, 
+    width = 10, res = 300, units = "in")
 cowplot::plot_grid(real_surv_fit_panel)
 dev.off()
 
-png(here::here("figs", "ms_figs", "age_fit_ar1.png"), height = 11, width = 9, 
+png(here::here("figs", "ms_figs", "age_fit_ar1.png"), height = 11.5, width = 10, 
     res = 300, units = "in")
 cowplot::plot_grid(gen_fit_panel)
 dev.off()
@@ -406,7 +407,7 @@ surv_r_one <- regimes %>%
   filter(trend == "One", 
          State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High SurvivalRegime")
+  plot_one_regime(y_lab = "Probability of High Survival Regime")
 surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
 
 # second survival trend
@@ -430,7 +431,7 @@ gen_r_one <- regimes %>%
   filter(trend == "One", 
          State == "State 1",
          var == "Mean Age") %>% 
-  plot_one_regime(y_lab = "Probability of Low Mean Age Regime")
+  plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
 gen_one_panel <- cowplot::plot_grid(gen_t_one, gen_r_one, ncol = 2)
 
 # second age trend
@@ -442,7 +443,7 @@ gen_r_two <- regimes %>%
   filter(trend == "Two", 
          State == "State 1",
          var == "Mean Age") %>% 
-  plot_one_regime(y_lab = "Probability of Low Mean Age Regime")
+  plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
 gen_two_panel <- cowplot::plot_grid(gen_t_two, gen_r_two, ncol = 2)
 
 #output plots

@@ -251,7 +251,8 @@ esc_fit <- pmap(list(esc_pred_list, esc_tbl$group_labs, x_axes),
                                     facet_col = 7,
                                     col_ramp = col_ramp_esc,
                                     #where should vert line be drawn
-                                    year1_last_mean = 2011
+                                    year1_last_mean = 2011,
+                                    drop = FALSE
                    ) +
                      scale_y_continuous(
                        name = y, position = 'right', sec.axis = dup_axis(),

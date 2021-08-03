@@ -3,7 +3,7 @@ AKB,Alaska Hatchery Springs - Behm Canal,AK,streamtype,Spring,SEAK,55.962925,-13
 AKS,Alaska Spring,AK,streamtype,Spring,SEAK,55.962925,-131.219612,55.962925,-131.219612
 ATN,Atnarko River,BC,oceantype,Summer,CBC,52.376631,-126.093529,52.389323,-126.124755
 ATS,Atnarko Yearling,BC,streamtype,Spring,CBC,52.376631,-126.093529,52.389323,-126.124755
-BQR,Big Qualicum River Fall,BC,oceantype,Fall,ECVI,49.39884,-124.609144,49.393739,-124.617400
+BQR,Big Qualicum River Fall,BC,oceantype,Fall,ECVI,49.39884,-124.609144,49.393739,-124.6174
 CHI,Chilliwack River Fall,BC,oceantype,Fall,LFR,49.125664,-122.098166,49.079849,-121.704191
 CHK,Chilkat River,AK,streamtype,Spring,SEAK,59.302,-135.739,59.368352,-135.935884
 COW,Cowichan River Fall,BC,oceantype,Fall,ECVI,48.753551,-123.637015,48.770933,-123.664652
@@ -18,13 +18,13 @@ HAR,Harrison River,BC,oceantype,Fall,LFR,49.218903,-121.945066,49.218903,-121.94
 HOK,Hoko Falls,WA,oceantype,Fall,WACST,48.2565,-124.3545,48.2565,-124.3545
 KLM,Kitsumkalum River Summer,BC,oceantype,Summer,NBC,54.520959,-128.660892,54.520959,-128.660892
 KLY,Kitsumkalum Yearling,BC,streamtype,Summer,NBC,54.520959,-128.660892,54.520959,-128.660892
-LRH,Lower River Hatchery Tule,CR,oceantype,Fall,LCOLR,46.215,-123.862,46.151340,-123.558337
+LRH,Lower River Hatchery Tule,CR,oceantype,Fall,LCOLR,46.215,-123.862,46.15134,-123.558337
 LRW,Lewis River Wild,CR,oceantype,Fall,LCOLR,46.215,-123.862,45.919469,-122.724177
 LYF,Lyons Ferry Fingerling,CR,oceantype,Fall,UCOLR,46.215,-123.862,46.596566,-118.227758
 LYY,Lyons Ferry Yearling,CR,streamtype,Fall,UCOLR,46.215,-123.862,46.596566,-118.227758
-MSH,Middle Shuswap River Summer,BC,oceantype,Summer,MFR,50.722286,-119.047641,50.722286,-119.047641
+MSH,Middle Shuswap River Summer,BC,oceantype,Summer,MFR,50.30133,-118.8187,50.30133,-118.8187
 NAN,Nanaimo River Fall,BC,oceantype,Fall,ECVI,49.137895,-123.895779,49.137895,-123.895779
-NIC,Nicola River Spring,BC,streamtype,Spring,MFR,50.427138,-121.316685,50.427138,-121.316685
+NIC,Nicola River Spring,BC,streamtype,Spring,MFR,50.14580278,-121.0151,50.14580278,-121.0151
 NIS,Nisqually Fall Fingerling,WA,oceantype,Fall,SPGSD,47.0857,-122.7073,47.0857,-122.7073
 NKS,Nooksack Spring Yearling,WA,streamtype,Spring,NPGSD,48.7841,-122.5883,48.7841,-122.5883
 NSA,NE Alaska Spring,AK,streamtype,Spring,SEAK,59.237124,-135.398152,59.237124,-135.398152
@@ -35,7 +35,7 @@ QUE,Queets Fall Fingerling,WA,oceantype,Fall,WACST,47.5425,-124.3539,47.5425,-12
 QUI,Quinsam River Fall,BC,oceantype,Fall,ECVI,50.037646,-125.29471,50.037646,-125.29471
 RBT,Robertson Creek Fall,BC,oceantype,Fall,WCVI,49.246176,-124.820148,49.246176,-124.820148
 SAM,Samish Fall Fingerling,WA,oceantype,Fall,NPGSD,48.5564,-122.4605,48.5564,-122.4605
-SHU,Lower Shuswap River Summer,BC,oceantype,Summer,MFR,50.721419,-119.046825,50.721419,-119.046825
+SHU,Lower Shuswap River Summer,BC,oceantype,Summer,MFR,50.60282778,-118.8477,50.60282778,-118.8477
 SKF,Skagit Spring Fingerling,WA,oceantype,Spring,NPGSD,48.3873,-122.3686,48.3873,-122.3686
 SKS,Skagit Spring Yearling,WA,streamtype,Spring,NPGSD,48.3873,-122.3686,48.3873,-122.3686
 SKY,Skykomish Fall Fingerling,WA,oceantype,Summer,NPGSD,48.0173,-122.1898,48.0173,-122.1898

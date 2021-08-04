@@ -17,10 +17,10 @@ foo <- function(x) {
         TRUE ~ NA_character_
       ),
       H3 = case_when(
-        grepl("group1", H) ~ "coarse",
-        grepl("group2", H) ~ "intermediate 2",
-        grepl("group3", H) ~ "intermediate 1",
-        grepl("group4", H) ~ "fine",
+        grepl("group1", H) ~ "very coarse",
+        grepl("group2", H) ~ "coarse",
+        grepl("group3", H) ~ "fine",
+        grepl("group4", H) ~ "very fine",
         TRUE ~ NA_character_
       ),
       H_new = case_when(

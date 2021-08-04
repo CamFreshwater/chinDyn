@@ -170,13 +170,16 @@ age_marss_aic_tab <- purrr::map(marss_list, "out") %>%
 
 saveRDS(age_marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab_scalingA_raw.RDS"))
+print(readRDS(here::here("data", "survival_fits", 
+                         "marss_aic_tab_scalingA_raw.RDS")))
 
 # marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
 #                                     "marss_aic_tab_scalingA_centered.RDS"))
 # marss_aic_tab2 <- readRDS(here::here("data", "generation_fits", 
 #                                      "marss_aic_tab_zeroA_centered.RDS"))
-marss_aic_tab3 <- readRDS(here::here("data", "generation_fits",
-                                     "marss_aic_tab_scalingA_raw.RDS"))
+# marss_aic_tab3 <- readRDS(here::here("data", "generation_fits",
+#                                      "marss_aic_tab_scalingA_raw.RDS"))
+
 
 
 ## FIT BAYESIAN DFA ------------------------------------------------------------

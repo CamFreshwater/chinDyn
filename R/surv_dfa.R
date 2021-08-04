@@ -155,6 +155,8 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
 saveRDS(marss_aic_tab, here::here("data", "survival_fits",
                                   "marss_aic_tab.RDS"))
 
+print(readRDS(here::here("data", "survival_fits", "marss_aic_tab.RDS")))
+
 
 ## Bayesian DFA ----------------------------------------------------------------
 

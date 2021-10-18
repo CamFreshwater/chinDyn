@@ -91,6 +91,15 @@ surv_pred_list <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years),
 # reorder to match group_labs
 # surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
 
+# check what last mean is relative to long-term and sd
+map(surv_pred_list, .f = function (x) {
+  x %>% 
+    dplyr::select(ID, last_mean, prob) %>% 
+    distinct() %>% 
+    arrange(last_mean)
+}) %>% 
+  bind_rows() 
+
 # scale colors based on observed range over entire dataset
 col_ramp_surv <- surv_pred_list %>% 
   bind_rows() %>% 
@@ -113,6 +122,7 @@ surv_fit <- pmap(list(surv_pred_list, group_labs, x_axes),
                      ) 
 })
 
+
 surv_fit_panel <- cowplot::plot_grid(
   surv_fit[[1]], surv_fit[[2]], surv_fit[[3]], surv_fit[[4]], surv_fit[[5]],
   axis = c("r"), align = "v", 
@@ -126,6 +136,7 @@ surv_fit_panel <- cowplot::plot_grid(
                     rot = 90)
   ) %>% 
   grid.arrange()
+
 
 # real space fits
 real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {

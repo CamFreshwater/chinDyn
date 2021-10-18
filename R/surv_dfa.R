@@ -99,7 +99,7 @@ names(z_models) <- z_model_inputs
 
 
 U <- "unequal"
-R <- "diagonal and unequal"
+R <- "diagonal and equal"#"diagonal and unequal"
 A <- "scaling" 
 B <- "identity"
 x0 <- "unequal"
@@ -153,9 +153,10 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          aic_weight = rel_like / sum(rel_like))
 
 saveRDS(marss_aic_tab, here::here("data", "survival_fits",
-                                  "marss_aic_tab.RDS"))
+                                  "marss_aic_tab_diag_equal.RDS"))
 
-print(readRDS(here::here("data", "survival_fits", "marss_aic_tab.RDS")))
+print(readRDS(here::here("data", "survival_fits", 
+                         "marss_aic_tab_diag_equal.RDS")))
 
 
 ## Bayesian DFA ----------------------------------------------------------------
@@ -192,6 +193,10 @@ surv_tbl$names <- map(surv_tbl$surv_mat, function (x) {
 })
 surv_tbl$years <- map(surv_tbl$surv_mat, function (x) {
   as.numeric(colnames(x))
+})
+# define vector specifying unique variance term for each stock
+surv_tbl$var_index <- map(surv_tbl$names, function (x) {
+  seq(1, length(x), by = 1)
 })
 
 # fit model

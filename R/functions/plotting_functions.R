@@ -26,17 +26,9 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
                        obs_y = c(modelfit$data)) %>%
     filter(!is.na(obs_y)) 
   
-  # calculate mean over last generation to color code
-  # old gradient version
-  # gen_seq <- seq(max(df_pred$Time - 5), max(df_pred$Time), by = 1)
-  # last_gen_mean <- df_pred %>%
-  #   filter(Time %in% gen_seq) %>%
-  #   group_by(ID) %>% 
-  #   summarize(last_mean = mean(mean))
   # new categorical version
   last_gen_mean <-  final_prob(modelfit = modelfit, names = names, 
                                years = years, year1_last_mean = year1_last_mean
-                               # n_years = 5
                                ) %>% 
     mutate(prob = ifelse(last_mean > 0, prob_above_0, prob_below_0)) %>% 
     select(-c(prob_above_0, prob_below_0))
@@ -59,8 +51,8 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
              fct_reorder(., last_mean, .desc = descend_order)) 
 }
 
-## function to plot fits in link sapce (based on bayesdfa::plot_fitted)
-# df_pred <- esc_pred_list[[1]]
+## function to plot fits in link space (based on bayesdfa::plot_fitted)
+# df_pred <- surv_pred_list[[1]]
 plot_fitted_pred <- function(df_pred, #ylab = NULL, 
                              print_x = TRUE, 
                              col_ramp = c(-1, 1),
@@ -82,6 +74,10 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
   col_pal <- c("#a50f15", "#de2d26", "#fb6a4a", "#fc9272", "#9ecae1", "#6baed6",
                "#3182bd", "#08519c", "grey60")
   names(col_pal) <- c(levels(df_pred$color_ids), "historic")
+  # replace color ID label so that low probabilities are historic (i.e. grey)
+  df_pred$color_ids2 <- ifelse(df_pred$prob < 0.80, 
+                               "historic", 
+                               as.character(df_pred$color_ids))
   
   dum <- df_pred %>% 
     group_by(stock) %>% 
@@ -91,9 +87,9 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
   
   p <- ggplot(dum %>% filter(Time >= x_int),
               aes_string(x = "Time", y = "mean")) + 
-    geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids",
-                           fill = "color_ids"), alpha = 0.6) + 
-    geom_line(aes_string(colour = "color_ids"), 
+    geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids2",
+                           fill = "color_ids2"), alpha = 0.6) + 
+    geom_line(aes_string(colour = "color_ids2"), 
               size = 1.25) +
     geom_ribbon(data = dum %>% filter(Time <= x_int),
                 aes_string(ymin = "lo", ymax = "hi"),
@@ -129,7 +125,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
 }
 
 ## function to plot fits in real space (based on bayesdfa::plot_fitted)
-# df_pred <- real_surv_pred_list[[3]]
+# df_pred <- real_surv_pred_list[[1]]
 plot_fitted_pred_real <- function(df_pred, #ylab = NULL, 
                              y_lims = NULL, 
                              print_x = TRUE, 
@@ -141,8 +137,10 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     group_by(ID) %>% 
     summarize(ts_mean_logit = mean(uncent_mean_logit),
               sd_mean_logit = sd(uncent_mean_logit), 
-              ts_mean_sd_hi = plogis(ts_mean_logit + (qnorm(0.025) * sd_mean_logit)),
-              ts_mean_sd_lo = plogis(ts_mean_logit + (qnorm(0.975) * sd_mean_logit)),
+              ts_mean_sd_lo = plogis(ts_mean_logit + 
+                                       (qnorm(0.025) * sd_mean_logit)),
+              ts_mean_sd_hi = plogis(ts_mean_logit + 
+                                       (qnorm(0.975) * sd_mean_logit)),
               ts_uncent_mean = mean(uncent_mean), 
               .groups = "drop") %>% 
     distinct()
@@ -151,6 +149,7 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     left_join(., y_int, by = c("ID")) %>% 
     mutate(
       color_id = case_when(
+        prob < 0.8 ~ "historic",
         last_mean < ts_mean_sd_lo ~ "very low",
         ts_mean_sd_lo < last_mean & last_mean < ts_uncent_mean ~ "low",
         ts_mean_sd_hi > last_mean & last_mean  > ts_uncent_mean ~ "high",

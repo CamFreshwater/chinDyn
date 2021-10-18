@@ -115,7 +115,7 @@ names(z_models) <- z_model_inputs
 # a_models <- c("scaling", "zero")
 
 U <- "unequal"
-R <- "diagonal and unequal"
+R <- "diagonal and equal"#"diagonal and unequal"
 A <- "scaling"
 B <- "identity"
 x0 <- "unequal"
@@ -169,9 +169,9 @@ age_marss_aic_tab <- purrr::map(marss_list, "out") %>%
          aic_weight = rel_like / sum(rel_like))
 
 saveRDS(age_marss_aic_tab, here::here("data", "generation_fits",
-                                  "marss_aic_tab_scalingA_raw.RDS"))
-print(readRDS(here::here("data", "survival_fits", 
-                         "marss_aic_tab_scalingA_raw.RDS")))
+                                  "marss_aic_tab_diag_equal.RDS"))
+print(readRDS(here::here("data", "generation_fits", 
+                         "marss_aic_tab_diag_equal.RDS")))
 
 # marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
 #                                     "marss_aic_tab_scalingA_centered.RDS"))

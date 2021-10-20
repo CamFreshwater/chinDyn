@@ -20,9 +20,9 @@ require(tidyverse); require(here)
 
 # exploitation rate analysis output - provides updated juvenile survival est.
 # for many stocks
-dat_can <- read.csv(here::here("data/salmon_data/ctc_era_output_canada_may2021.csv")) %>% 
+dat_can <- read.csv(here::here("data/salmon_data/hidden_data/ctc_era_output_canada_may2021.csv")) %>% 
   select(age = Age, stock = stock_code, brood_year, survival = Marine.Survival) 
-dat_us <- read.csv(here::here("data/salmon_data/ctc_era_output_usa_may2021.csv")) %>% 
+dat_us <- read.csv(here::here("data/salmon_data/hidden_data/ctc_era_output_usa_may2021.csv")) %>% 
   select(age, stock = stock_code, brood_year, survival = Marine.Survival) 
 
 by_dat1 <- rbind(dat_can, dat_us) %>%
@@ -35,7 +35,7 @@ by_dat1 <- rbind(dat_can, dat_us) %>%
 
 # survival data provided by Chuck -- not updated but includes historical/defunct
 # TS
-by_raw <- read.csv(here::here("data","salmon_data",
+by_raw <- read.csv(here::here("data","salmon_data/hidden_data",
                               "cwt_indicator_surv_sep2020.csv"),
                       stringsAsFactors = FALSE)
 colnames(by_raw)[1] <- "year"
@@ -61,7 +61,7 @@ by_dat3 <- rbind(by_dat1,
 
 
 # mean generation length data
-gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time_v2.csv")) %>% 
+gen1 <- read.csv(here::here("data/salmon_data/hidden_data/cwt_indicator_generation_time_v2.csv")) %>% 
   mutate(stock = as.factor(stock)) %>%
   select(stock, brood_year = by, gen_length = gen_time_nofishing)
 
@@ -86,11 +86,12 @@ gen1 <- read.csv(here::here("data/salmon_data/cwt_indicator_generation_time_v2.c
 # write.csv(temp_out, here::here("data", "salmonData", "metadata.csv"))
 
 # import version cleaned by hand (added lat/longs and two systems HOK and SMK)
-metadata <- read.csv(here::here("data", "salmon_data", "metadata_clean.csv")) 
+metadata <- read.csv(here::here("data", "salmon_data", "hidden_data", "metadata_clean.csv")) 
 
 
 # mean release size data
-size1 <- read.csv(here::here("data/salmon_data/chinook_releaseweight_weightedavg.csv")) %>% 
+size1 <- read.csv(here::here("data", "salmon_data", "hidden_data", 
+                             "chinook_releaseweight_weightedavg.csv")) %>% 
   # for now remove some potential mistakes
   filter(!(STOCK == "SPR" & BROOD == "2016" & ReleaseYear == "2018"),
          !(STOCK == "WSH" & BROOD == "2015" & ReleaseYear == "2016" & 
@@ -276,7 +277,8 @@ dev.off()
 
 ## Prep escapement data
 # Focus only on Salish Sea stocks
-esc_wide <- read.csv(here::here("data", "salmon_data", "escapement_data_wide.csv"), 
+esc_wide <- read.csv(here::here("data", "salmon_data", "hidden_data",
+                                "escapement_data_wide.csv"), 
                        stringsAsFactors = FALSE)
 
 esc_long <- esc_wide %>% 
@@ -284,7 +286,8 @@ esc_long <- esc_wide %>%
   mutate(stock = tolower(stock))
 
 # import escapement key (made by hand)
-esc_key <- read.csv(here::here("data", "salmon_data", "esc_stock_key.csv"))
+esc_key <- read.csv(here::here("data", "salmon_data", "hidden_data",
+                               "esc_stock_key.csv"))
 
 esc <- esc_long %>% 
   left_join(., esc_key, by = "stock") %>% 
@@ -301,6 +304,7 @@ esc <- esc_long %>%
   ) %>%
   select(year, stock = new_stock, j_group3b = juv_group3b, esc) 
 
-write.csv(esc, here::here("data", "salmon_data", "clean_escapement_data.csv"),
+write.csv(esc, here::here("data", "salmon_data", "hidden_data",
+                          "clean_escapement_data.csv"),
           row.names = FALSE)
 

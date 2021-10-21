@@ -24,8 +24,9 @@ Rmd/
 R/defunct
 myNotes.*
 figs/ms_figs/old_version/
+figs/unused/
 data/salmon_data/raw_data/
-#data/salmon_data/hidden_data/
+data/salmon_data/hidden_data/
 data/dfaBayesFits/
 data/gamFits/
 data/escapement_fits/

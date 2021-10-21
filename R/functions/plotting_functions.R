@@ -125,7 +125,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
 }
 
 ## function to plot fits in real space (based on bayesdfa::plot_fitted)
-# df_pred <- real_surv_pred_list[[1]]
+df_pred <- real_surv_pred_list[[1]]
 plot_fitted_pred_real <- function(df_pred, #ylab = NULL, 
                              y_lims = NULL, 
                              print_x = TRUE, 
@@ -145,6 +145,7 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
               .groups = "drop") %>% 
     distinct()
   
+  # specify that color greyed out if relatively uncertain (in logit space)
   df_pred2 <- df_pred %>% 
     left_join(., y_int, by = c("ID")) %>% 
     mutate(

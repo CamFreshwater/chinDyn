@@ -46,7 +46,7 @@ shape_pal <- c(21, 23)
 names(shape_pal) <- c("Subyearling", "Yearling")
 
 oey_map <- base_map +
-  geom_jitter(data = dat, #%>% filter(stock %in% c("HOK", "ELK", "QUE", "SOO", "SRH")),
+  geom_jitter(data = dat, 
              aes(x = hatch_long, y = hatch_lat, 
                  fill = juv_region, shape = life_history),
              height = 0.25, width = 0.25, size = 3,
@@ -69,7 +69,6 @@ inset_map <- ggplot() +
   geom_polygon(data = w_can, mapping = aes(x = long, y = lat, group = group), 
                color = "black", fill = "darkgrey") + 
   labs(x = "", y = "") +
-  # ggsidekick::theme_sleek() +
   geom_rect(aes(xmin = -136.5, xmax = -118, ymin = 42, ymax = 60),
             fill = NA, lty = 2, col = "black") +
   theme_linedraw() +
@@ -79,12 +78,10 @@ inset_map <- ggplot() +
         axis.ticks = element_blank(),
         axis.text = element_blank()) +
   coord_map("azequalarea", orientation = c(60, -140, 20))
-  # coord_fixed(ratio = 1.3)
 
 
 png(here::here("figs", "ms_figs", "stock_locs.png"), 
     height = 7, width = 6, units = "in", res = 300)
 cowplot::ggdraw(oey_map) +
-  # cowplot::draw_plot() +
   cowplot::draw_plot(inset_map, x = 0.09, y = 0.01, width = 0.35, height = 0.35)
 dev.off()

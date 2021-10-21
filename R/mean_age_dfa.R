@@ -1,9 +1,11 @@
-## Fit MARSS then Bayes DFA models to mean generation time data
-# Jan 8 2021
-# Update on surv_bayesDFA; instead of deciding groupings a priori, first perform
-# model selection for groupings with MARSS (faster to converge than bayesDFA), 
-# then fit group specific models with bayesdfa
-# Updated Feb 23 with groupings edited by AVE
+## Fit MARSS state space and Bayesian DFA models to mean age-at-maturity data
+# MARSS component is used to identify ecological groupings of Chinook salmon 
+# with common demographic trends, while DFA used to estimate group-specific 
+# trends, generate predictions, and evaluate evidence for regime shifts using 
+# hidden Markov models
+# All data originates with PST Chinook technical committee and was provided by
+# C. Parken
+
 
 library(MARSS)
 library(tidyverse)
@@ -51,7 +53,7 @@ stk_tbl <- gen %>%
 
 
 ## EXPLORATORY -----------------------------------------------------------------
-# 
+ 
 #plot raw generation length data
 raw_gen <- gen %>%
   ggplot(.) +
@@ -111,17 +113,17 @@ z_models <- map(z_model_inputs, function (x) {
 })
 names(z_models) <- z_model_inputs
 
-# q_models <- c("diagonal and unequal", "unconstrained")
-# a_models <- c("scaling", "zero")
 
+# additional MARSS model parameters are fixed
 U <- "unequal"
-R <- "diagonal and equal"#"diagonal and unequal"
+R <- "diagonal and equal" 
 A <- "scaling"
 B <- "identity"
 x0 <- "unequal"
 V0 <- "zero"
 Q <- 'unconstrained'
 model_constants <- list(U = U, B = B, x0 = x0, A = A, V0 = V0, Q = Q)
+
 
 # function to fit models
 fit_marss <- function(z_name, z_in) {
@@ -168,17 +170,11 @@ age_marss_aic_tab <- purrr::map(marss_list, "out") %>%
          rel_like = exp(-1 * deltaAICc / 2),
          aic_weight = rel_like / sum(rel_like))
 
+
 saveRDS(age_marss_aic_tab, here::here("data", "generation_fits",
                                   "marss_aic_tab_diag_equal.RDS"))
 print(readRDS(here::here("data", "generation_fits", 
                          "marss_aic_tab_diag_equal.RDS")))
-
-# marss_aic_tab1 <- readRDS(here::here("data", "generation_fits",
-#                                     "marss_aic_tab_scalingA_centered.RDS"))
-# marss_aic_tab2 <- readRDS(here::here("data", "generation_fits", 
-#                                      "marss_aic_tab_zeroA_centered.RDS"))
-# marss_aic_tab3 <- readRDS(here::here("data", "generation_fits",
-#                                      "marss_aic_tab_scalingA_raw.RDS"))
 
 
 
@@ -190,7 +186,7 @@ library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
 
-# number of stocks per group
+# only retain stock groups that contain more than two stocks
 kept_grps <- stk_tbl %>%
   group_by(j_group3b) %>%
   tally() %>%
@@ -223,9 +219,8 @@ furrr::future_map2(
   .f = function (y, group) {
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE,
-      # estimate_nu = TRUE, estimate_trend_ma = TRUE,
       estimate_trend_ar = TRUE, 
-      iter = 4000, chains = 4, thin = 1,
+      iter = 6000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
@@ -243,7 +238,9 @@ dfa_fits <- map(gen_tbl$group, function(y) {
 })
 
 
-# check diagnostics
+##  CHECK DFA DIAGNOSTICS ------------------------------------------------------
+
+# histograms of effective sample size ratio
 map2(dfa_fits, gen_tbl$group, function (x, y) {
   data.frame(neff_ratio = bayesplot::neff_ratio(x$model),
              group = y)
@@ -253,9 +250,10 @@ map2(dfa_fits, gen_tbl$group, function (x, y) {
   geom_histogram(aes(x = neff_ratio)) +
   facet_wrap(~group)
 
+# check for parameters outside n_eff and rhat threshold
 map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
-    filter(n_eff < 300 | Rhat > 1.02)
+    filter(n_eff < 200 | Rhat > 1.03)
 })
 
 
@@ -267,24 +265,23 @@ np <- map(dfa_fits, function (x) {
   bayesplot::nuts_params(x$model)
 })
 
-
 trace_list <- pmap(
   list(post, np, gen_tbl$group),
   .f = function(x, y, z) {
     all_pars <- dimnames(x)[3] %>% unlist() %>% as.character()
-    to_match <- c(#"theta", 
-      "Z", "phi", "xstar", "sigma")
+    to_match <- c("Z", "phi", "xstar", "sigma")
     pars <- all_pars[grepl(paste(to_match, collapse = "|"), all_pars)]
     bayesplot::mcmc_trace(x, pars = pars, np = y) +
       labs(title = z)
   }
 )
 
-pdf(here::here("figs", "dfa", "bayes", "generation_length", "diagnostics",
-               "trace_plots_ar_onetrend.pdf"))
-trace_list
-dev.off()
+# pdf(here::here("figs", "hidden", "dfa", "mean_age", "trace_plots_ar.pdf"))
+# trace_list
+# dev.off()
 
+
+##  SAVE DFA OUTPUTS -----------------------------------------------------------
 
 # rotate trends and add to gen_tbl (keep DFA separate because they're huge)
 gen_tbl$rot_gen <- map(dfa_fits, rotate_trends)
@@ -304,40 +301,3 @@ gen_tbl$regime_trend2 <- map(hmm_list_g, function(x) x[[2]]$best_model)
 
 saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl.RDS"))
 
-
-## MODEL COMPARISON ------------------------------------------------------------
-
-# dfa_fits_one <- map(gen_tbl$group, function(y) {
-#   f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
-#   readRDS(here::here("data", "generation_fits", f_name))
-# })
-# dfa_fits_two <- map(gen_tbl$group, function(y) {
-#   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
-#   readRDS(here::here("data", "generation_fits", f_name))
-# })
-# dfa_fits_arma <- map(gen_tbl$group, function(y) {
-#   f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
-#   readRDS(here::here("data", "generation_fits", f_name))
-# })
-# 
-# 
-# # model comparison
-# loo_tbl <- tibble(group = rep(gen_tbl$group, 3),
-#                   m = rep(c(2, 2, 1), each = length(gen_tbl$group)),
-#                   fits = c(dfa_fits_two, dfa_fits_arma, dfa_fits_one),
-#                   model = rep(c("ar", "arma", "ar"), 
-#                               each = length(gen_tbl$group))) %>% 
-#   filter(model == "arma")
-# loo_tbl$loo <- map(loo_tbl$fits, bayesdfa::loo)
-# loo_tbl$looic <- map(loo_tbl$loo, function(x) x$estimates["looic", "Estimate"]) %>%
-#   unlist()
-# loo_tbl_out <- rbind(loo_tbl, loo_tbl_trends2) %>%
-#   group_by(group) %>%
-#   mutate(min_looic = min(looic),
-#             delta_loo = looic - min_looic) 
-# saveRDS(loo_tbl_out,
-#         here::here("data", "generation_fits", "gen_bayes_dfa_loo_tbl.RDS"))
-# two trend model heavily supported for all groups
-
-# loo_tbl_out <- readRDS(here::here("data", "generation_fits",
-#                                   "gen_bayes_dfa_loo_tbl.RDS"))

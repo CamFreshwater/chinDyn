@@ -1,7 +1,10 @@
-## Fit MARSS then Bayes DFA models to logit survival data
-# June 1, 2021
-# Copied m_dfa and retweaked response variable to from -log(survival) to 
-# logit(survival)
+## Fit MARSS state space and Bayesian DFA models to logit survival data
+# MARSS component is used to identify ecological groupings of Chinook salmon 
+# with common demographic trends, while DFA used to estimate group-specific 
+# trends, generate predictions, and evaluate evidence for regime shifts using 
+# hidden Markov models
+# All data originates with PST Chinook technical committee and was provided by
+# C. Parken
 
 library(MARSS)
 library(tidyverse)
@@ -31,22 +34,6 @@ stk_tbl <- surv %>%
          j_group1:j_group4, a_group1:a_group4, j_group1b, j_group2b, j_group3b,
          j_group4b) %>% 
   distinct() 
-
-# subset of stocks for test run
-# keep_stks <- surv %>% 
-#   filter(year > 1980,
-#          year < 2010,
-#          !is.na(M)) %>% 
-#   group_by(stock) %>% 
-#   tally() %>% 
-#   filter(n == 29)
-# 
-# surv_sub <- surv %>% 
-#   filter(#year > 1980,
-#          #year < 2010,
-#          stock %in% keep_stks$stock)
-# stk_tbl_sub <- stk_tbl %>% 
-#   filter(stock %in% keep_stks$stock)
 
 
 ## EXPLORATORY -----------------------------------------------------------------
@@ -85,8 +72,6 @@ n_ts <- nrow(surv_mat)
 tt <- ncol(surv_mat)
 
 
-## Generic MARSS approach
-
 # specify the z models based on different groupings (smolt, run, a dist, j dist)
 z_model_inputs <- colnames(surv)[which(colnames(surv) %in% c("smolt", "run") |
                                          str_detect(colnames(surv), "group"))]
@@ -99,13 +84,14 @@ names(z_models) <- z_model_inputs
 
 
 U <- "unequal"
-R <- "diagonal and equal"#"diagonal and unequal"
+R <- "diagonal and equal"
 A <- "scaling" 
 B <- "identity"
 x0 <- "unequal"
 V0 <- "zero"
 Q <- "unconstrained"
 model_constants <- list(U = U, B = B, x0 = x0, V0 = V0, Q = Q)
+
 
 # function to fit models
 fit_marss <- function(z_name, z_in) {
@@ -130,6 +116,7 @@ fit_marss <- function(z_name, z_in) {
   list(fit = fit, out = out)
 }
 
+
 # tibble containing model combinations
 mod_names = expand.grid(z = names(z_models)) %>% 
   mutate(name = paste(z, sep = "-"))
@@ -139,12 +126,14 @@ mod_tbl <- tibble(
   z_models = z_models
 )
 
+
 # fit generic MARSS models
 marss_list <- furrr::future_pmap(list(z_name = mod_tbl$z_name,
                                       z_in = mod_tbl$z_models),
                                  .f = fit_marss,
                                  .progress = TRUE)
 
+# save AIC table
 marss_aic_tab <- purrr::map(marss_list, "out") %>% 
   bind_rows() %>% 
   arrange(AICc) %>% 
@@ -152,9 +141,9 @@ marss_aic_tab <- purrr::map(marss_list, "out") %>%
          rel_like = exp(-1 * deltaAICc / 2),
          aic_weight = rel_like / sum(rel_like))
 
+
 saveRDS(marss_aic_tab, here::here("data", "survival_fits",
                                   "marss_aic_tab_diag_equal.RDS"))
-
 print(readRDS(here::here("data", "survival_fits", 
                          "marss_aic_tab_diag_equal.RDS")))
 
@@ -224,7 +213,9 @@ dfa_fits <- map(surv_tbl$group, function(y) {
   readRDS(here::here("data", "survival_fits", f_name))
 })
 
-# check diagnostics
+
+##  CHECK DFA DIAGNOSTICS ------------------------------------------------------
+
 map2(dfa_fits, surv_tbl$group, function (x, y) {
   data.frame(neff_ratio = bayesplot::neff_ratio(x$model),
              group = y)
@@ -234,21 +225,38 @@ map2(dfa_fits, surv_tbl$group, function (x, y) {
   geom_histogram(aes(x = neff_ratio)) +
   facet_wrap(~group)
 
-map(dfa_fits, function (x) {
+purrr::map(dfa_fits, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
-    filter(n_eff < 250 | Rhat > 1.01)
+    filter(n_eff < 200 | Rhat > 1.03)
 })
 
-div_trans <- map(dfa_fits, function (y) {
-  par_list <- get_sampler_params(y$model, inc_warmup = FALSE)
-  map(par_list, function (x) {
-    sum(x[ , "divergent__"]) 
-  }) %>% 
-    unlist() %>% 
-    sum()
-})
-surv_tbl$divergent <- div_trans %>% unlist()
 
+# chain plots for key pars
+post <- map(dfa_fits, function (x) {
+  as.array(x$samples)
+})
+np <- map(dfa_fits, function (x) {
+  bayesplot::nuts_params(x$model)
+})
+
+trace_list <- pmap(
+  list(post, np, gen_tbl$group),
+  .f = function(x, y, z) {
+    all_pars <- dimnames(x)[3] %>% unlist() %>% as.character()
+    to_match <- c(#"theta", 
+      "Z", "phi", "xstar", "sigma")
+    pars <- all_pars[grepl(paste(to_match, collapse = "|"), all_pars)]
+    bayesplot::mcmc_trace(x, pars = pars, np = y) +
+      labs(title = z)
+  }
+)
+
+pdf(here::here("figs", "hidden", "dfa", "survival", "trace_plots_ar.pdf"))
+trace_list
+dev.off()
+
+
+##  SAVE DFA OUTPUTS -----------------------------------------------------------
 
 # rotate trends and add to surv_tbl (keep DFA separate because they're huge)
 surv_tbl$rot_surv <- map(dfa_fits, rotate_trends)

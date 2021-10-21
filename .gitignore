@@ -25,7 +25,7 @@ R/hidden_scripts/
 R/unused_scripts/
 myNotes.*
 figs/ms_figs/old_version/
-figs/unused/
+figs/hidden/
 data/salmon_data/raw_data/
 data/salmon_data/hidden_data/
 data/dfaBayesFits/

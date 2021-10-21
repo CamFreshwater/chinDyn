@@ -21,7 +21,8 @@ knitr-cache
 .Rapp.history
 
 Rmd/
-R/defunct
+R/hidden_scripts/
+R/unused_scripts/
 myNotes.*
 figs/ms_figs/old_version/
 figs/unused/

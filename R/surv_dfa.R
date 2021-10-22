@@ -58,7 +58,7 @@ surv %>%
 
 ## MARSS MODEL RUNS ------------------------------------------------------------
 
-# make matrix of natural mortality rates
+# make matrix of logit survival rates
 surv_mat <- surv %>% 
   select(year, stock, logit_surv) %>% 
   pivot_wider(names_from = stock, values_from = logit_surv) %>% 
@@ -195,8 +195,7 @@ furrr::future_map2(
   .f = function (y, group) {
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE,
-      # estimate_nu = TRUE,
-      estimate_trend_ar = TRUE, #estimate_trend_ma = TRUE,
+      estimate_trend_ar = TRUE,
       iter = 3500, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )

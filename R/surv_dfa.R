@@ -183,10 +183,7 @@ surv_tbl$names <- map(surv_tbl$surv_mat, function (x) {
 surv_tbl$years <- map(surv_tbl$surv_mat, function (x) {
   as.numeric(colnames(x))
 })
-# define vector specifying unique variance term for each stock
-surv_tbl$var_index <- map(surv_tbl$names, function (x) {
-  seq(1, length(x), by = 1)
-})
+
 
 # fit model
 furrr::future_map2(
@@ -196,7 +193,7 @@ furrr::future_map2(
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE,
       estimate_trend_ar = TRUE,
-      iter = 3500, chains = 4, thin = 1,
+      iter = 4000, warmup = 2000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")

@@ -212,17 +212,28 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
   as.numeric(colnames(x))
 })
 
+
+
 #fit 
 furrr::future_map2(
-  gen_tbl$gen_mat,
-  gen_tbl$group,
+  gen_tbl$gen_mat[c(2,3)],
+  gen_tbl$group[2:3],
   .f = function (y, group) {
+    
+    # convergence issues when estimating phi for this stock group
+    if (group == "puget_oceantype") {
+      est_ar <- FALSE
+    } else {
+      est_ar <- TRUE
+    }
+    
     fit <- fit_dfa(
       y = y, num_trends = 2, zscore = FALSE,
-      estimate_trend_ar = TRUE, 
-      iter = 6000, chains = 4, thin = 1,
+      estimate_trend_ar = est_ar, 
+      iter = 6000, warmup = 2000, chains = 1, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
+    
     f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "generation_fits", f_name))
   },
@@ -230,6 +241,15 @@ furrr::future_map2(
   .options = furrr::furrr_options(seed = TRUE)
 )
  
+# fit2 <- fit_dfa(
+#   y = gen_tbl$gen_mat[[3]], num_trends = 2, zscore = FALSE,
+#   # estimate_trend_ar = TRUE, 
+#   iter = 4000, chains = 4, thin = 1,
+#   control = list(adapt_delta = 0.99, max_treedepth = 20)
+# )
+# 
+# f_name <- paste(gen_tbl$group[3], "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+# saveRDS(fit2, here::here("data", "generation_fits", f_name))
 
 # read outputs
 dfa_fits <- map(gen_tbl$group, function(y) {
@@ -283,10 +303,11 @@ trace_list <- pmap(
 
 ##  SAVE DFA OUTPUTS -----------------------------------------------------------
 
-# rotate trends and add to gen_tbl (keep DFA separate because they're huge)
+# rotate trends and add to gen_tbl (keep DFA separate because the posterior 
+# estimates require a large amount of memory)
 gen_tbl$rot_gen <- map(dfa_fits, rotate_trends)
 
-# hidden markov model for regimes
+# apply hidden markov model for regimes to rotated trends
 hmm_list_g <- furrr::future_map(gen_tbl$rot_gen, regime_f)
 map(hmm_list_g, function(x) {
   map(x, ~.$table)

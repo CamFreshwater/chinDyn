@@ -91,14 +91,16 @@ surv_pred_list <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years),
 # reorder to match group_labs
 # surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
 
+
 # check what last mean is relative to long-term and sd
-map(surv_pred_list, .f = function (x) {
-  x %>% 
-    dplyr::select(ID, last_mean, prob) %>% 
-    distinct() %>% 
-    arrange(last_mean)
-}) %>% 
-  bind_rows() 
+# map(surv_pred_list, .f = function (x) {
+#   x %>% 
+#     dplyr::select(ID, last_mean, prob) %>% 
+#     distinct() %>% 
+#     arrange(last_mean)
+# }) %>% 
+#   bind_rows() 
+
 
 # scale colors based on observed range over entire dataset
 col_ramp_surv <- surv_pred_list %>% 
@@ -138,7 +140,7 @@ surv_fit_panel <- cowplot::plot_grid(
   grid.arrange()
 
 
-# real space fits
+## predicted survival in real space 
 real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
   # calculate estimated uncentered survival rate in real space 
   x %>% 
@@ -157,9 +159,6 @@ real_surv_pred_list <- purrr::map(surv_pred_list, function (x) {
            last_mean = plogis(obs_mean_logit + last_mean))
 })
 
-
-# one version of figure with full ylimit range
-# real_surv_ylims <- c(0, max(raw_data$survival, na.rm = T))
 real_surv_fit <- pmap(list(real_surv_pred_list, group_labs, x_axes), 
                  .f = function(x, y, z) {
                    plot_fitted_pred_real(x, 
@@ -223,6 +222,7 @@ gen_fit_panel <- cowplot::plot_grid(
   grid.arrange()
 
 
+# export all figures
 png(here::here("figs", "ms_figs", "survival_fit_ar1.png"), height = 11.5, 
     width = 10, res = 300, units = "in")
 cowplot::plot_grid(surv_fit_panel)
@@ -306,7 +306,7 @@ phi_plot <- rbind(surv_pars, gen_pars) %>%
   geom_hline(aes(yintercept = y_int), lty = 2) + 
   coord_flip() + 
   scale_x_discrete(limits = rev) +
-  ylab("Posterior Estimates from Survival Rate Model") +
+  ylab("Posterior Probability Density") +
   xlab("Stock Grouping") +
   ggsidekick::theme_sleek() +
   guides(alpha = guide_legend(override.aes = list(fill = "grey"))) +

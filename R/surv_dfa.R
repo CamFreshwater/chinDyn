@@ -198,6 +198,15 @@ furrr::future_map2(
     )
     f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "survival_fits", f_name))
+    
+    # fit2 <- fit_dfa(
+    #   y = y, num_trends = 2, zscore = FALSE,
+    #   # estimate_trend_ar = TRUE,
+    #   iter = 4000, warmup = 2000, chains = 4, thin = 1,
+    #   control = list(adapt_delta = 0.97, max_treedepth = 20)
+    # )
+    # f_name2 <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
+    # saveRDS(fit2, here::here("data", "survival_fits", f_name2))
   },
   .progress = TRUE,
   .options = furrr::furrr_options(seed = TRUE)
@@ -208,6 +217,10 @@ dfa_fits <- map(surv_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "survival_fits", f_name))
 })
+# dfa_fits_2 <- map(surv_tbl$group, function(y) {
+#   f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
+#   readRDS(here::here("data", "survival_fits", f_name))
+# })
 
 
 ##  CHECK DFA DIAGNOSTICS ------------------------------------------------------
@@ -222,6 +235,10 @@ map2(dfa_fits, surv_tbl$group, function (x, y) {
   facet_wrap(~group)
 
 purrr::map(dfa_fits, function (x) {
+  as.data.frame(summary(x$model)$summary) %>% 
+    filter(n_eff < 200 | Rhat > 1.03)
+})
+purrr::map(dfa_fits_2, function (x) {
   as.data.frame(summary(x$model)$summary) %>% 
     filter(n_eff < 200 | Rhat > 1.03)
 })

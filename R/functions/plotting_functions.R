@@ -1,5 +1,5 @@
 ## function to prepare predicted fits for plot_fitted_bayes
-# modelfit <- surv_dfa[[2]]; names <- surv_tbl$names[[2]]; 
+# modelfit <- surv_dfa[[2]]; names <- surv_tbl$names[[2]];
 # years <- surv_tbl$years[[2]]
 # descend_order = FALSE
 fitted_preds <- function(modelfit, names = NULL, years = NULL,
@@ -102,7 +102,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
-    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 0)) +
+    scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
     geom_point(data = dum %>% filter(!is.na(obs_y)), 
                aes_string(x = "Time", y = "obs_y"),  
                size = 1, alpha = 0.6, shape = 21, fill = "black") + 
@@ -125,7 +125,7 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
 }
 
 ## function to plot fits in real space (based on bayesdfa::plot_fitted)
-df_pred <- real_surv_pred_list[[1]]
+# df_pred <- real_surv_pred_list[[1]]
 plot_fitted_pred_real <- function(df_pred, #ylab = NULL, 
                              y_lims = NULL, 
                              print_x = TRUE, 
@@ -194,7 +194,7 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
                nrow = facet_row, ncol = facet_col) +
     ggsidekick::theme_sleek() +
     coord_cartesian(y = c(0, 0.2), expand = 0) +
-    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 0)) +
+    scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
     theme(axis.title.x = element_blank(),
           axis.title.y.left = element_blank(),
           legend.position = "none",
@@ -277,7 +277,7 @@ plot_one_trend <- function(trend_dat, facet_var = FALSE) {
     geom_hline(yintercept = 0, lty = 2) +
     xlab("Brood Year") + 
     ylab("Estimated Trend") +
-    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 1.5)) +
+    scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() + 
     theme(legend.position = "none")
@@ -353,7 +353,7 @@ plot_one_regime <- function(regime_dat, facet_var = FALSE, y_lab = NULL) {
     scale_fill_brewer(type = "qual", name = "") +
     xlab("Brood Year") + 
     ylab(y_lab) +
-    scale_x_continuous(limits = c(1972, 2020), expand = c(0, 1.5)) +
+    scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() +
     theme(legend.position = "none")

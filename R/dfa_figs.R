@@ -381,9 +381,6 @@ dev.off()
 
 # ESTIMATED TRENDS -------------------------------------------------------------
 
-brewer.pal(n = 10, name = "PuOr")
-"#E08214" "#FDB863"
-"#8073AC" "#B2ABD2"
 
 # prep dataframes for each
 surv_trends <- pmap(
@@ -458,17 +455,20 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
          life_history = case_when(
            grepl("Sub", group) ~ "subyearling",
            TRUE ~ "yearling"
-         ),
+         ) %>% 
+           as.factor(),
          group = fct_relevel(as.factor(group), "North\nYearling", 
                              "SoG\nSubyearling", "Puget\nYearling",
-                             "Puget\nSubyearling", "South\nSubyearling")#,
-         # var = fct_relevel(as.factor(var), "Juvenile Mortality Rate", 
-         #                   "Mean Age")
-  ) 
+                             "Puget\nSubyearling", "South\nSubyearling")) 
+
 
 trend_1_pal <- c("#E08214", "#8073AC" )
 trend_2_pal <- c("#FDB863", "#B2ABD2")
 names(trend_1_pal) <- names(trend_2_pal) <- unique(trends$life_history)
+
+
+source(here::here("R", "functions", "plotting_functions.R"))
+
 
 # dummy version just for legend
 leg_plot <- trends %>% 
@@ -513,7 +513,64 @@ surv_r_two <- regimes %>%
 # surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
 
 surv_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, 
-                                 surv_t_two, surv_r_two, ncol = 4)
+                                 surv_t_two, surv_r_two, nrow = 4)
+
+
+dum1 <- trends %>% 
+  mutate(trend = as.numeric(trend),
+         life_history = as.factor(life_history),
+         data = "trend") %>% 
+  select(median = x, lo, hi, trend, time, group, var, life_history,
+         data)
+dum2 <- regimes %>% 
+  mutate(trend = as.numeric(as.factor(trend)),
+         data = "regime") %>% 
+  filter(State == "State 2") %>% 
+  select(median, lo = lwr, hi = upr, trend, time, group, var, life_history,
+         data)
+
+rbind(dum1, dum2) %>% 
+  mutate(facet_var = paste(trend, data, sep = "_") %>% 
+           factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
+         trend = as.factor(trend)) %>% 
+  filter(var == "Juvenile Mortality Rate") %>% 
+  ggplot(data = ., aes(x = time, y = median)) +
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
+                         fill = "life_history"), 
+              alpha = 0.4) + 
+  geom_line(aes_string(colour = "life_history"), size = 1.2) + 
+  scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
+  facet_grid(facet_var~group, scales = "free_y") +
+  ggsidekick::theme_sleek() + 
+  labs(y = "") +
+  theme(
+    legend.position = "top",
+    strip.background = element_blank(),
+    strip.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
+    )
+
+
+ggplot(trend_dat, 
+       aes_string(x = "time", y = "x")) + 
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
+                         fill = "life_history"), 
+              alpha = 0.4) + 
+  geom_line(aes_string(colour = "life_history"), size = 1.2) + 
+  # scale_colour_brewer(type = "qual", name = "") +
+  # scale_fill_brewer(type = "qual", name = "") +
+  geom_hline(yintercept = 0, lty = 2) +
+  # xlab("Brood Year") + 
+  ylab("Estimated Trend") +
+  scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
+  facet_wrap(~group, nrow = 1) +
+  ggsidekick::theme_sleek() + 
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    axis.title.x = element_blank())
 
 
 # first age trend
@@ -628,4 +685,7 @@ png(here::here("figs", "ms_figs", "age_loadings.png"), height = 7, width = 10,
     res = 300, units = "in")
 grid.arrange(gen_load_panel)
 dev.off()
+
+
+
 

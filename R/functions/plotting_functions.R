@@ -276,15 +276,15 @@ plot_one_trend <- function(trend_dat, facet_var = FALSE) {
     # scale_fill_brewer(type = "qual", name = "") +
     geom_hline(yintercept = 0, lty = 2) +
     # xlab("Brood Year") + 
-    labs(y = "Estimated Trend", title = "") +
+    ylab("Estimated Trend") +
     scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
-    facet_wrap(~group, ncol = 1) +
+    facet_wrap(~group, nrow = 1) +
     ggsidekick::theme_sleek() + 
-    theme(legend.position = "none",
-          strip.background = element_blank(),
-          strip.text.x = element_blank(),
-          axis.title.x = element_blank()
-          )
+    theme(
+      legend.position = "none",
+      strip.background = element_blank(),
+      strip.text.x = element_blank(),
+      axis.title.x = element_blank())
   
   if (facet_var == TRUE) {
     p <- p + 
@@ -356,14 +356,16 @@ plot_one_regime <- function(regime_dat, facet_var = FALSE, y_lab = NULL) {
     # scale_colour_brewer(type = "qual", name = "") +
     # scale_fill_brewer(type = "qual", name = "") +
     # xlab("Brood Year") + 
-    labs(y = ylab, title = "") +
+    ylab(y_lab) +
     scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
-    facet_wrap(~group, ncol = 1) +
+    facet_wrap(~group, nrow = 1) +
     ggsidekick::theme_sleek() +
-    theme(legend.position = "none",
-          strip.background = element_blank(),
-          strip.text.x = element_blank(),
-          axis.title.x = element_blank())
+    theme(
+      legend.position = "none",
+      strip.background = element_blank(),
+      strip.text.x = element_blank(),
+      axis.title.x = element_blank()
+      )
   
   if (facet_var == TRUE) {
     p <- p +

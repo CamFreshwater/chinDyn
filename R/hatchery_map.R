@@ -61,7 +61,7 @@ oey_map <- base_map +
 oey_map
 
 # inset map
-w_can <- map_data("world", region = c("usa", "canada")) %>%
+w_can <- map_data("world", region = c("usa", "canada", "mexico", "russia")) %>%
   filter(lat > 25 & lat < 80,
          long >-175 & long < -60) %>% 
   fortify(.)

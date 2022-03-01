@@ -216,44 +216,35 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
 
 #fit 
 furrr::future_map2(
-  gen_tbl$gen_mat[c(2,3)],
-  gen_tbl$group[2:3],
+  gen_tbl$gen_mat,
+  gen_tbl$group,
   .f = function (y, group) {
     
     # convergence issues when estimating phi for this stock group
-    if (group == "puget_oceantype") {
-      est_ar <- FALSE
-    } else {
+    # if (group == "puget_oceantype") {
+    #   est_ar <- FALSE
+    # } else {
       est_ar <- TRUE
-    }
+    # }
     
     fit <- fit_dfa(
-      y = y, num_trends = 2, zscore = FALSE,
+      y = y, num_trends = 1, zscore = FALSE,
       estimate_trend_ar = est_ar, 
-      iter = 6000, warmup = 2000, chains = 1, thin = 1,
+      iter = 4000, warmup = 2000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     
-    f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+    f_name <- paste(group, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "generation_fits", f_name))
   },
   .progress = TRUE,
   .options = furrr::furrr_options(seed = TRUE)
 )
  
-# fit2 <- fit_dfa(
-#   y = gen_tbl$gen_mat[[3]], num_trends = 2, zscore = FALSE,
-#   # estimate_trend_ar = TRUE, 
-#   iter = 4000, chains = 4, thin = 1,
-#   control = list(adapt_delta = 0.99, max_treedepth = 20)
-# )
-# 
-# f_name <- paste(gen_tbl$group[3], "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
-# saveRDS(fit2, here::here("data", "generation_fits", f_name))
 
 # read outputs
 dfa_fits <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
+  f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
@@ -296,9 +287,9 @@ trace_list <- pmap(
   }
 )
 
-# pdf(here::here("figs", "hidden", "dfa", "mean_age", "trace_plots_ar.pdf"))
-# trace_list
-# dev.off()
+pdf(here::here("figs", "hidden", "dfa", "mean_age", "trace_plots_ar_onetrend.pdf"))
+trace_list
+dev.off()
 
 
 ##  SAVE DFA OUTPUTS -----------------------------------------------------------
@@ -320,5 +311,5 @@ map(hmm_list_g, function(x) {
 gen_tbl$regime_trend1 <- map(hmm_list_g, function(x) x[[1]]$best_model)
 gen_tbl$regime_trend2 <- map(hmm_list_g, function(x) x[[2]]$best_model)
 
-saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl.RDS"))
+saveRDS(gen_tbl, here::here("data", "generation_fits", "gen_tbl_onetrend.RDS"))
 

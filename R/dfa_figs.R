@@ -9,6 +9,7 @@ library(tidyverse)
 library(bayesdfa)
 library(grid)
 library(gridExtra)
+library(RColorBrewer)
 
 raw_data <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS"))
 
@@ -77,6 +78,65 @@ gen_names <- gen_tbl %>%
 
 # plotting functions
 source(here::here("R", "functions", "plotting_functions.R"))
+
+
+# RAW BOX PLOTS ----------------------------------------------------------------
+
+mean_data <- raw_data %>% 
+  group_by(j_group3b, year) %>% 
+  summarize(mean_surv = mean(survival, na.rm = T),
+            mean_age = mean(gen_length, na.rm = T))
+
+raw_data <- raw_data %>% 
+  mutate(
+    group = factor(
+      j_group3b, 
+      levels = c("north_oceantype", "north_streamtype", "sog_oceantype",
+                 "sog_streamtype", "puget_oceantype", "puget_streamtype",    
+                 "south_oceantype", "south_streamtype"),
+      labels = c("North\nSubyearling", "North\nYearling", "SoG\nSubyearling", 
+                 "SoG\nYearling", "Puget\nSubyearling", "Puget\nYearling", 
+                 "South\nSubyearling",  "South\nYearling")
+      ),
+    smolt = factor(smolt, labels = c("Yearling", "Subyearling")),
+    region_juv = factor(j_group3, levels = c("north", "sog", "puget", "south"),
+                        labels = c("North", "SoG", "Puget", "South"))
+  ) %>% 
+  filter(!stock %in% c("TST", "AKS")) 
+
+scale_1 <- c("#E08214",
+             "#8073AC")
+names(scale_1) <- levels(raw_data$smolt)
+
+
+
+png(here::here("figs", "ms_figs", "survival_box.png"), height = 10, 
+    width = 7.5, res = 300, units = "in")
+ggplot() +
+  geom_boxplot(data = raw_data, aes(x = as.factor(year), y = survival,
+                                    fill = smolt)) +
+  facet_grid(region_juv ~ smolt) +
+  labs(x = "Ocean Entry Year", y = "Juvenile Marine Survival Rate") +
+  scale_x_discrete(
+    breaks = seq(1970, 2020, by = 10)
+  ) +
+  scale_fill_manual(values = scale_1) +
+  ggsidekick::theme_sleek()
+dev.off()
+
+png(here::here("figs", "ms_figs", "age_box.png"), height = 10, 
+    width = 7.5, res = 300, units = "in")
+age_box <- ggplot() +
+  geom_boxplot(data = raw_data, aes(x = as.factor(year), y = gen_length,
+                                    fill = smolt)) +
+  facet_grid(region_juv ~ smolt) +
+  labs(x = "Ocean Entry Year", y = "Mean Age-At-Maturity") +
+  scale_x_discrete(
+    breaks = seq(1970, 2020, by = 10)
+  ) +
+  scale_fill_manual(values = scale_1) +
+  ggsidekick::theme_sleek()
+dev.off()
 
 
 # PREDICTED FITS ---------------------------------------------------------------
@@ -300,7 +360,7 @@ phi_plot <- rbind(surv_pars, gen_pars) %>%
                              after = 1)) %>% 
   ggplot(., 
          aes(x = group, y = value, fill = trend)) + 
-  scale_fill_brewer(name = "", palette = "Set2") +
+  scale_fill_brewer(name = "", palette = "Paired") +
   geom_violin(position = position_dodge(0.3),
               draw_quantiles = 0.5) + 
   geom_hline(aes(yintercept = y_int), lty = 2) + 
@@ -320,6 +380,10 @@ dev.off()
 
 
 # ESTIMATED TRENDS -------------------------------------------------------------
+
+brewer.pal(n = 10, name = "PuOr")
+"#E08214" "#FDB863"
+"#8073AC" "#B2ABD2"
 
 # prep dataframes for each
 surv_trends <- pmap(
@@ -402,36 +466,55 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
          #                   "Mean Age")
   ) 
 
+trend_1_pal <- c("#E08214", "#8073AC" )
+trend_2_pal <- c("#FDB863", "#B2ABD2")
+names(trend_1_pal) <- names(trend_2_pal) <- unique(trends$life_history)
+
 # dummy version just for legend
 leg_plot <- trends %>% 
   filter(trend == "Trend 1", 
          var == "Juvenile Mortality Rate") %>% 
   plot_one_trend() +
-  theme(legend.position = "top")
+  theme(legend.position = "top") +
+  scale_colour_manual(values = scale_1) +
+  scale_fill_manual(values = scale_1)
+
   
 # first survival trend
 surv_t_one <- trends %>% 
   filter(trend == "Trend 1", 
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_trend()
+  plot_one_trend() +
+  scale_fill_manual(values = trend_1_pal) +
+  scale_colour_manual(values = trend_1_pal)
 surv_r_one <- regimes %>% 
   filter(trend == "One", 
          State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High Survival Regime")
-surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
+  plot_one_regime(y_lab = "Probability of High Survival Regime") +
+  scale_fill_manual(values = trend_1_pal) +
+  scale_colour_manual(values = trend_1_pal)
+# surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
 
 # second survival trend
 surv_t_two <- trends %>% 
   filter(trend == "Trend 2", 
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_trend()
+  plot_one_trend() +
+  scale_fill_manual(values = trend_2_pal) +
+  scale_colour_manual(values = trend_2_pal)
 surv_r_two <- regimes %>% 
   filter(trend == "Two", 
          State == "State 2",
          var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High Survival Regime")
-surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
+  plot_one_regime(y_lab = "Probability of High Survival Regime") + 
+  scale_fill_manual(values = trend_2_pal) +
+  scale_colour_manual(values = trend_2_pal)
+# surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
+
+surv_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, 
+                                 surv_t_two, surv_r_two, ncol = 4)
+
 
 # first age trend
 gen_t_one <- trends %>% 

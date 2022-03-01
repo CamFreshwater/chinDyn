@@ -272,15 +272,19 @@ plot_one_trend <- function(trend_dat, facet_var = FALSE) {
                            fill = "life_history"), 
                 alpha = 0.4) + 
     geom_line(aes_string(colour = "life_history"), size = 1.2) + 
-    scale_colour_brewer(type = "qual", name = "") +
-    scale_fill_brewer(type = "qual", name = "") +
+    # scale_colour_brewer(type = "qual", name = "") +
+    # scale_fill_brewer(type = "qual", name = "") +
     geom_hline(yintercept = 0, lty = 2) +
-    xlab("Brood Year") + 
-    ylab("Estimated Trend") +
+    # xlab("Brood Year") + 
+    labs(y = "Estimated Trend", title = "") +
     scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() + 
-    theme(legend.position = "none")
+    theme(legend.position = "none",
+          strip.background = element_blank(),
+          strip.text.x = element_blank(),
+          axis.title.x = element_blank()
+          )
   
   if (facet_var == TRUE) {
     p <- p + 
@@ -349,14 +353,17 @@ plot_one_regime <- function(regime_dat, facet_var = FALSE, y_lab = NULL) {
                            fill = "life_history"), 
                 alpha = 0.4, lty = 6) + 
     geom_line(aes_string(colour = "life_history"), size = 1.2, lty = 6) + 
-    scale_colour_brewer(type = "qual", name = "") +
-    scale_fill_brewer(type = "qual", name = "") +
-    xlab("Brood Year") + 
-    ylab(y_lab) +
+    # scale_colour_brewer(type = "qual", name = "") +
+    # scale_fill_brewer(type = "qual", name = "") +
+    # xlab("Brood Year") + 
+    labs(y = ylab, title = "") +
     scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
     facet_wrap(~group, ncol = 1) +
     ggsidekick::theme_sleek() +
-    theme(legend.position = "none")
+    theme(legend.position = "none",
+          strip.background = element_blank(),
+          strip.text.x = element_blank(),
+          axis.title.x = element_blank())
   
   if (facet_var == TRUE) {
     p <- p +

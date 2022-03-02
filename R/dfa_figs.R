@@ -524,8 +524,14 @@ dum1 <- trends %>%
          data)
 dum2 <- regimes %>% 
   mutate(trend = as.numeric(as.factor(trend)),
-         data = "regime") %>% 
-  filter(State == "State 2") %>% 
+         data = "regime",
+         keep = ifelse(
+           State == "State 2" & var == "Juvenile Mortality Rate" |
+             State == "State 1" & var == "Mean Age",
+           "yes",
+           "no"
+         )) %>%
+  filter(keep == "yes") %>% 
   select(median, lo = lwr, hi = upr, trend, time, group, var, life_history,
          data)
 
@@ -534,6 +540,29 @@ rbind(dum1, dum2) %>%
            factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
          trend = as.factor(trend)) %>% 
   filter(var == "Juvenile Mortality Rate") %>% 
+  ggplot(data = ., aes(x = time, y = median)) +
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
+                         fill = "life_history", lty = "data"), 
+              alpha = 0.4) + 
+  geom_line(aes_string(colour = "life_history", lty = "data"), size = 1.2) + 
+  scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
+  facet_grid(facet_var~group, scales = "free_y") +
+  ggsidekick::theme_sleek() + 
+  labs(y = "") +
+  theme(
+    legend.position = "top",
+    strip.background = element_blank(),
+    # strip.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
+    )
+
+
+rbind(dum1, dum2) %>% 
+  mutate(facet_var = paste(trend, data, sep = "_") %>% 
+           factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
+         trend = as.factor(trend)) %>% 
+  filter(var == "Mean Age") %>% 
   ggplot(data = ., aes(x = time, y = median)) +
   geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
                          fill = "life_history"), 
@@ -546,31 +575,10 @@ rbind(dum1, dum2) %>%
   theme(
     legend.position = "top",
     strip.background = element_blank(),
-    strip.text.y = element_blank(),
+    # strip.text.y = element_blank(),
     axis.title.x = element_blank(),
     plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
-    )
-
-
-ggplot(trend_dat, 
-       aes_string(x = "time", y = "x")) + 
-  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
-                         fill = "life_history"), 
-              alpha = 0.4) + 
-  geom_line(aes_string(colour = "life_history"), size = 1.2) + 
-  # scale_colour_brewer(type = "qual", name = "") +
-  # scale_fill_brewer(type = "qual", name = "") +
-  geom_hline(yintercept = 0, lty = 2) +
-  # xlab("Brood Year") + 
-  ylab("Estimated Trend") +
-  scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
-  facet_wrap(~group, nrow = 1) +
-  ggsidekick::theme_sleek() + 
-  theme(
-    legend.position = "none",
-    strip.background = element_blank(),
-    strip.text.x = element_blank(),
-    axis.title.x = element_blank())
+  )
 
 
 # first age trend

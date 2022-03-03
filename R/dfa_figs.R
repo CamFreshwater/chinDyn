@@ -15,7 +15,7 @@ raw_data <- readRDS(here::here("data/salmon_data/cwt_indicator_surv_clean.RDS"))
 
 # import juvenile mortality data
 surv_tbl <- readRDS(here::here("data", "survival_fits", "surv_tbl.RDS"))
-surv_dfa <- map(surv_tbl$group, function(y) {
+surv_dfa <- purrr::map(surv_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   # f_name <- paste(y, "two-trend", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "survival_fits", f_name))
@@ -23,7 +23,7 @@ surv_dfa <- map(surv_tbl$group, function(y) {
 
 # import mean gen length
 gen_tbl <- readRDS(here::here("data", "generation_fits", "gen_tbl.RDS"))
-gen_dfa <- map(gen_tbl$group, function(y) {
+gen_dfa <- purrr::map(gen_tbl$group, function(y) {
   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   # f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   readRDS(here::here("data", "generation_fits", f_name))
@@ -100,8 +100,7 @@ raw_data <- raw_data %>%
   ) %>% 
   filter(!stock %in% c("TST", "AKS")) 
 
-scale_1 <- c("#E08214",
-             "#8073AC")
+scale_1 <- c("#E08214", "#8073AC")
 names(scale_1) <- levels(raw_data$smolt)
 
 
@@ -295,9 +294,6 @@ uncent_gen_pred_list <- purrr::map(gen_pred_list, function (x) {
     ungroup() %>% 
     # uncenter predictions and calculate in real space
     mutate(
-      #uncent_mean = mean + obs_mean_age,
-      # uncent_lo = mean + lo,
-      # uncent_hi = mean + hi,
       obs_y = gen_length,
       mean = mean + obs_mean_age,
       lo = obs_mean_age + lo,
@@ -348,6 +344,11 @@ dev.off()
 png(here::here("figs", "ms_figs", "age_fit_ar1.png"), height = 11.5, width = 10, 
     res = 300, units = "in")
 cowplot::plot_grid(gen_fit_panel)
+dev.off()
+
+png(here::here("figs", "ms_figs", "age_fit_uncent_ar1.png"), height = 11.5,
+    width = 10,  res = 300, units = "in")
+cowplot::plot_grid(uncent_gen_fit_panel)
 dev.off()
 
 
@@ -433,7 +434,6 @@ dev.off()
 
 # ESTIMATED TRENDS -------------------------------------------------------------
 
-
 # prep dataframes for each
 surv_trends <- pmap(
   list(surv_tbl$rot_surv, surv_tbl$years, group_labs), 
@@ -513,59 +513,10 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
                              "SoG\nSubyearling", "Puget\nYearling",
                              "Puget\nSubyearling", "South\nSubyearling")) 
 
-
-trend_1_pal <- c("#E08214", "#8073AC" )
-trend_2_pal <- c("#FDB863", "#B2ABD2")
-names(trend_1_pal) <- names(trend_2_pal) <- unique(trends$life_history)
-
-
-source(here::here("R", "functions", "plotting_functions.R"))
-
-
-# dummy version just for legend
-leg_plot <- trends %>% 
-  filter(trend == "Trend 1", 
-         var == "Juvenile Mortality Rate") %>% 
-  plot_one_trend() +
-  theme(legend.position = "top") +
-  scale_colour_manual(values = scale_1) +
-  scale_fill_manual(values = scale_1)
-
-  
-# first survival trend
-surv_t_one <- trends %>% 
-  filter(trend == "Trend 1", 
-         var == "Juvenile Mortality Rate") %>% 
-  plot_one_trend() +
-  scale_fill_manual(values = trend_1_pal) +
-  scale_colour_manual(values = trend_1_pal)
-surv_r_one <- regimes %>% 
-  filter(trend == "One", 
-         State == "State 2",
-         var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High Survival Regime") +
-  scale_fill_manual(values = trend_1_pal) +
-  scale_colour_manual(values = trend_1_pal)
-# surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
-
-# second survival trend
-surv_t_two <- trends %>% 
-  filter(trend == "Trend 2", 
-         var == "Juvenile Mortality Rate") %>% 
-  plot_one_trend() +
-  scale_fill_manual(values = trend_2_pal) +
-  scale_colour_manual(values = trend_2_pal)
-surv_r_two <- regimes %>% 
-  filter(trend == "Two", 
-         State == "State 2",
-         var == "Juvenile Mortality Rate") %>% 
-  plot_one_regime(y_lab = "Probability of High Survival Regime") + 
-  scale_fill_manual(values = trend_2_pal) +
-  scale_colour_manual(values = trend_2_pal)
-# surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
-
-surv_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, 
-                                 surv_t_two, surv_r_two, nrow = 4)
+# 
+# trend_1_pal <- c("#E08214", "#8073AC" )
+# trend_2_pal <- c("#FDB863", "#B2ABD2")
+# names(trend_1_pal) <- names(trend_2_pal) <- unique(trends$life_history)
 
 
 dum1 <- trends %>% 
@@ -587,104 +538,175 @@ dum2 <- regimes %>%
   select(median, lo = lwr, hi = upr, trend, time, group, var, life_history,
          data)
 
-rbind(dum1, dum2) %>% 
-  mutate(facet_var = paste(trend, data, sep = "_") %>% 
-           factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
-         trend = as.factor(trend)) %>% 
-  filter(var == "Juvenile Mortality Rate") %>% 
-  ggplot(data = ., aes(x = time, y = median)) +
-  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
-                         fill = "life_history", lty = "data"), 
+dum3 <- rbind(dum1, dum2) %>% 
+  mutate(
+    facet_var = paste(trend, data, sep = "_") %>% 
+      factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
+    color_var = paste(trend, life_history, sep = "_") %>% 
+      factor(., 
+             levels = c("1_yearling", "1_subyearling", "2_yearling",
+                        "2_subyearling"))
+  ) 
+
+trend_pal <- c("#E08214", "#FDB863", "#8073AC", "#B2ABD2")
+names(trend_pal) <- unique(dum3$color_var)
+
+surv_trend_regime <- ggplot(
+  data = dum3 %>% filter(var == "Juvenile Mortality Rate"), 
+  aes(x = time, y = median)) +
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_var",
+                         fill = "color_var", lty = "data"), 
               alpha = 0.4) + 
-  geom_line(aes_string(colour = "life_history", lty = "data"), size = 1.2) + 
+  geom_line(aes_string(colour = "color_var", lty = "data"), size = 1.2) + 
   scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
   facet_grid(facet_var~group, scales = "free_y") +
   ggsidekick::theme_sleek() + 
-  labs(y = "") +
+  labs(y = "Juvenile Survival Rate") +
   theme(
-    legend.position = "top",
+    legend.position = "none",
     strip.background = element_blank(),
     # strip.text.y = element_blank(),
     axis.title.x = element_blank(),
     plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
-    )
+    )+
+  scale_colour_manual(values = trend_pal) +
+  scale_fill_manual(values = trend_pal)
 
 
-rbind(dum1, dum2) %>% 
-  mutate(facet_var = paste(trend, data, sep = "_") %>% 
-           factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
-         trend = as.factor(trend)) %>% 
-  filter(var == "Mean Age") %>% 
-  ggplot(data = ., aes(x = time, y = median)) +
-  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "life_history",
-                         fill = "life_history"), 
+gen_trend_regime <- ggplot(
+  data = dum3 %>% filter(var == "Mean Age"), 
+  aes(x = time, y = median)
+) +
+  geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_var",
+                         fill = "color_var"), 
               alpha = 0.4) + 
-  geom_line(aes_string(colour = "life_history"), size = 1.2) + 
+  geom_line(aes_string(colour = "color_var"), size = 1.2) + 
   scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
   facet_grid(facet_var~group, scales = "free_y") +
   ggsidekick::theme_sleek() + 
-  labs(y = "") +
+  labs(y = "Mean Age") +
   theme(
-    legend.position = "top",
+    legend.position = "none",
     strip.background = element_blank(),
     # strip.text.y = element_blank(),
     axis.title.x = element_blank(),
     plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
-  )
+  ) +
+  scale_colour_manual(values = trend_pal) +
+  scale_fill_manual(values = trend_pal)
 
-
-# first age trend
-gen_t_one <- trends %>% 
-  filter(trend == "Trend 1", 
-         var == "Mean Age") %>% 
-  plot_one_trend()
-gen_r_one <- regimes %>% 
-  filter(trend == "One", 
-         State == "State 1",
-         var == "Mean Age") %>% 
-  plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
-gen_one_panel <- cowplot::plot_grid(gen_t_one, gen_r_one, ncol = 2)
-
-# second age trend
-gen_t_two <- trends %>% 
-  filter(trend == "Trend 2", 
-         var == "Mean Age") %>% 
-  plot_one_trend()
-gen_r_two <- regimes %>% 
-  filter(trend == "Two", 
-         State == "State 1",
-         var == "Mean Age") %>% 
-  plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
-gen_two_panel <- cowplot::plot_grid(gen_t_two, gen_r_two, ncol = 2)
-
-#output plots
-plot_out <- function(x) {
-  cowplot::plot_grid(
-    cowplot::get_legend(leg_plot),
-    x,
-    ncol=1, rel_heights=c(.075, .925)
-  )
-}
-
-png(here::here("figs", "ms_figs", "trend_regime_surv1.png"), 
-    height = 8.5, width = 6, res = 300, units = "in")
-plot_out(surv_one_panel)
+png(here::here("figs", "ms_figs", "surv_trend_regime.png"), 
+    width = 8.5, height = 6, res = 300, units = "in")
+surv_trend_regime
 dev.off()
 
-png(here::here("figs", "ms_figs", "trend_regime_surv2.png"), 
-    height = 8.5, width = 6, res = 300, units = "in")
-plot_out(surv_two_panel)
+png(here::here("figs", "ms_figs", "age_trend_regime.png"), 
+    width = 8.5, height = 6, res = 300, units = "in")
+gen_trend_regime
 dev.off()
 
-png(here::here("figs", "ms_figs", "trend_regime_gen1.png"), 
-    height = 8.5, width = 6, res = 300, units = "in")
-plot_out(gen_one_panel)
-dev.off()
+# ORIGINAL SUBMISSION
+# # first age trend
+# gen_t_one <- trends %>% 
+#   filter(trend == "Trend 1", 
+#          var == "Mean Age") %>% 
+#   plot_one_trend()
+# gen_r_one <- regimes %>% 
+#   filter(trend == "One", 
+#          State == "State 1",
+#          var == "Mean Age") %>% 
+#   plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
+# gen_one_panel <- cowplot::plot_grid(gen_t_one, gen_r_one, ncol = 2)
+# 
+# # second age trend
+# gen_t_two <- trends %>% 
+#   filter(trend == "Trend 2", 
+#          var == "Mean Age") %>% 
+#   plot_one_trend()
+# gen_r_two <- regimes %>% 
+#   filter(trend == "Two", 
+#          State == "State 1",
+#          var == "Mean Age") %>% 
+#   plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
+# gen_two_panel <- cowplot::plot_grid(gen_t_two, gen_r_two, ncol = 2)
+# 
+# #output plots
+# plot_out <- function(x) {
+#   cowplot::plot_grid(
+#     cowplot::get_legend(leg_plot),
+#     x,
+#     ncol=1, rel_heights=c(.075, .925)
+#   )
+# }
 
-png(here::here("figs", "ms_figs", "trend_regime_gen2.png"), 
-    height = 8.5, width = 6, res = 300, units = "in")
-plot_out(gen_two_panel)
-dev.off()
+
+
+# FIRST ATTEMPT ALTERNATE
+# dummy version just for legend
+# leg_plot <- trends %>% 
+#   filter(trend == "Trend 1", 
+#          var == "Juvenile Mortality Rate") %>% 
+#   plot_one_trend() +
+#   theme(legend.position = "top") +
+#   scale_colour_manual(values = trend_1_pal) +
+#   scale_fill_manual(values = trend_1_pal)
+# 
+#   
+# # first survival trend
+# surv_t_one <- trends %>% 
+#   filter(trend == "Trend 1", 
+#          var == "Juvenile Mortality Rate") %>% 
+#   plot_one_trend() +
+#   scale_fill_manual(values = trend_1_pal) +
+#   scale_colour_manual(values = trend_1_pal)
+# surv_r_one <- regimes %>% 
+#   filter(trend == "One", 
+#          State == "State 2",
+#          var == "Juvenile Mortality Rate") %>% 
+#   plot_one_regime(y_lab = "Probability of High Survival Regime") +
+#   scale_fill_manual(values = trend_1_pal) +
+#   scale_colour_manual(values = trend_1_pal)
+# # surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
+# 
+# # second survival trend
+# surv_t_two <- trends %>% 
+#   filter(trend == "Trend 2", 
+#          var == "Juvenile Mortality Rate") %>% 
+#   plot_one_trend() +
+#   scale_fill_manual(values = trend_2_pal) +
+#   scale_colour_manual(values = trend_2_pal)
+# surv_r_two <- regimes %>% 
+#   filter(trend == "Two", 
+#          State == "State 2",
+#          var == "Juvenile Mortality Rate") %>% 
+#   plot_one_regime(y_lab = "Probability of High Survival Regime") + 
+#   scale_fill_manual(values = trend_2_pal) +
+#   scale_colour_manual(values = trend_2_pal)
+# # surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
+# 
+# surv_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, 
+#                                  surv_t_two, surv_r_two, nrow = 4)
+
+
+# png(here::here("figs", "ms_figs", "trend_regime_surv1.png"), 
+#     height = 8.5, width = 6, res = 300, units = "in")
+# plot_out(surv_one_panel)
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "trend_regime_surv2.png"), 
+#     height = 8.5, width = 6, res = 300, units = "in")
+# plot_out(surv_two_panel)
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "trend_regime_gen1.png"), 
+#     height = 8.5, width = 6, res = 300, units = "in")
+# plot_out(gen_one_panel)
+# dev.off()
+# 
+# png(here::here("figs", "ms_figs", "trend_regime_gen2.png"), 
+#     height = 8.5, width = 6, res = 300, units = "in")
+# plot_out(gen_two_panel)
+# dev.off()
 
 
 # ESTIMATED LOADINGS -----------------------------------------------------------

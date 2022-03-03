@@ -76,10 +76,6 @@ gen_names <- gen_tbl %>%
   nest(names = c(stock, stock_name))
 
 
-# plotting functions
-source(here::here("R", "functions", "plotting_functions.R"))
-
-
 # RAW BOX PLOTS ----------------------------------------------------------------
 
 mean_data <- raw_data %>% 
@@ -140,6 +136,10 @@ dev.off()
 
 
 # PREDICTED FITS ---------------------------------------------------------------
+
+
+# plotting functions
+source(here::here("R", "functions", "plotting_functions.R"))
 
 #remove x_axes except for last plot
 x_axes <- c(F, F, F, F, T)
@@ -244,7 +244,7 @@ real_surv_fit_panel <- cowplot::plot_grid(
   grid.arrange()
 
 
-# predicted gen length fits
+## predicted gen length fits
 gen_pred_list <- pmap(list(gen_dfa, gen_names$names, gen_tbl$years), 
                        fitted_preds,
                        descend_order = FALSE, year1_last_mean = 2011)
@@ -277,6 +277,58 @@ gen_fit_panel <- cowplot::plot_grid(
 ) %>% 
   arrangeGrob(., 
               left = textGrob("Centered Mean Age-At-Maturity", 
+                              gp = gpar(col = "grey30", fontsize = 12),
+                              rot = 90)) %>% 
+  grid.arrange()
+
+
+## predicted uncentered generation length 
+uncent_gen_pred_list <- purrr::map(gen_pred_list, function (x) {
+  # calculate estimated uncentered survival rate in real space 
+  x %>% 
+    left_join(., 
+              raw_data %>% 
+                select(stock, Time = year, gen_length),
+              by = c("stock", "Time")) %>% 
+    group_by(ID) %>% 
+    mutate(obs_mean_age = mean(gen_length, na.rm = T)) %>%
+    ungroup() %>% 
+    # uncenter predictions and calculate in real space
+    mutate(
+      #uncent_mean = mean + obs_mean_age,
+      # uncent_lo = mean + lo,
+      # uncent_hi = mean + hi,
+      obs_y = gen_length,
+      mean = mean + obs_mean_age,
+      lo = obs_mean_age + lo,
+      hi = obs_mean_age + hi,
+      uncent_last_mean = obs_mean_age + last_mean
+    )
+  })
+
+uncent_gen_fit <- pmap(
+  list(uncent_gen_pred_list, group_labs, x_axes), 
+  .f = function(x, y, z) {
+    plot_fitted_pred_uncent(x, print_x = z,
+                            col_ramp = col_ramp_gen,
+                            facet_col = 5, year1_last_mean = 2011
+    ) +
+      scale_y_continuous(
+        name = y, position = 'right', sec.axis = dup_axis(),
+        labels = scales::number_format(accuracy = 0.1)
+      ) 
+  }
+)
+
+uncent_gen_fit_panel <- cowplot::plot_grid(
+  uncent_gen_fit[[1]], uncent_gen_fit[[2]], uncent_gen_fit[[3]], 
+  uncent_gen_fit[[4]], uncent_gen_fit[[5]],
+  axis = c("r"), align = "v", 
+  rel_heights = c(2/11, 2/11, 3/11, 1/11, 3/11),
+  ncol=1
+) %>% 
+  arrangeGrob(., 
+              left = textGrob("Mean Age-At-Maturity", 
                               gp = gpar(col = "grey30", fontsize = 12),
                               rot = 90)) %>% 
   grid.arrange()

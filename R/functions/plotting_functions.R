@@ -96,9 +96,9 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                 fill = "grey60", colour = "grey60", alpha = 0.6) +
     geom_line(data = dum %>% filter(Time <= x_int),
               size = 1) +
-    geom_hline(yintercept = 0, lty = 2) +
-    geom_hline(aes(yintercept = 0 + ts_mean_sd), lty = 3) +
-    geom_hline(aes(yintercept = 0 - ts_mean_sd), lty = 3) +
+    # geom_hline(yintercept = 0, lty = 2) +
+    # geom_hline(aes(yintercept = 0 + ts_mean_sd), lty = 3) +
+    # geom_hline(aes(yintercept = 0 - ts_mean_sd), lty = 3) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
@@ -201,6 +201,80 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
           axis.text.y.right = element_blank(),
           axis.ticks.y.right = element_blank())
 
+  if (print_x == FALSE) {
+    p <- p + 
+      theme(axis.text.x = element_blank(),
+            axis.ticks.x = element_blank())
+  }
+  
+  return(p)
+}
+
+
+# as above but for uncentered data
+plot_fitted_pred_uncent <- function(df_pred, #ylab = NULL, 
+                                    print_x = TRUE, 
+                                    col_ramp = c(-1, 1),
+                                    col_ramp_direction = -1,
+                                    facet_row = NULL, facet_col = NULL,
+                                    leg_name = NULL,
+                                    year1_last_mean = 2011,
+                                    drop = TRUE) {  
+  #limits for y axis
+  y_lims <- c(min(abs(df_pred$obs_y), na.rm = T), 
+              max(abs(df_pred$obs_y), na.rm = T))
+  x_int <- year1_last_mean
+  
+  #make palette for last five year mean based on bins and col_ramp values 
+  breaks <- seq(min(col_ramp), max(col_ramp), length.out = 9)
+  df_pred$color_ids <- cut(df_pred$last_mean, 
+                           breaks=breaks, 
+                           include.lowest=TRUE, 
+                           right=FALSE)
+  col_pal <- c("#a50f15", "#de2d26", "#fb6a4a", "#fc9272", "#9ecae1", "#6baed6",
+               "#3182bd", "#08519c", "grey60")
+  names(col_pal) <- c(levels(df_pred$color_ids), "historic")
+  # replace color ID label so that low probabilities are historic (i.e. grey)
+  df_pred$color_ids2 <- ifelse(df_pred$prob < 0.80, 
+                               "historic", 
+                               as.character(df_pred$color_ids))
+  
+  dum <- df_pred %>% 
+    group_by(stock) %>% 
+    #calculate SD of ts for horizontal line
+    mutate(ts_mean_sd = sd(mean)) %>% 
+    ungroup()
+  
+  p <- ggplot(dum %>% filter(Time >= x_int),
+              aes_string(x = "Time", y = "mean")) + 
+    geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids2",
+                           fill = "color_ids2"), alpha = 0.6) + 
+    geom_line(aes_string(colour = "color_ids2"), 
+              size = 1.25) +
+    geom_ribbon(data = dum %>% filter(Time <= x_int),
+                aes_string(ymin = "lo", ymax = "hi"),
+                fill = "grey60", colour = "grey60", alpha = 0.6) +
+    geom_line(data = dum %>% filter(Time <= x_int),
+              size = 1) +
+    geom_hline(aes(yintercept = obs_mean_age), lty = 2) +
+    geom_hline(aes(yintercept = obs_mean_age + ts_mean_sd), lty = 3) +
+    geom_hline(aes(yintercept = obs_mean_age - ts_mean_sd), lty = 3) +
+    geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
+    scale_fill_manual(values = col_pal) +
+    scale_colour_manual(values = col_pal) +
+    scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
+    geom_point(data = dum %>% filter(!is.na(obs_y)), 
+               aes_string(x = "Time", y = "obs_y"),  
+               size = 1, alpha = 0.6, shape = 21, fill = "black") + 
+    facet_wrap(~ID, nrow = facet_row, ncol = facet_col, drop = drop) +
+    ggsidekick::theme_sleek() +
+    coord_cartesian(y = y_lims) +
+    theme(axis.title.x = element_blank(),
+          axis.title.y.left = element_blank(),
+          legend.position = "none",
+          axis.text.y.right = element_blank(),
+          axis.ticks.y.right = element_blank())
+  
   if (print_x == FALSE) {
     p <- p + 
       theme(axis.text.x = element_blank(),

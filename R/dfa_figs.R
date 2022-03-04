@@ -153,12 +153,12 @@ surv_pred_list <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years),
 
 # check what last mean is relative to long-term and sd
 # map(surv_pred_list, .f = function (x) {
-#   x %>% 
-#     dplyr::select(ID, last_mean, prob) %>% 
-#     distinct() %>% 
+#   x %>%
+#     dplyr::select(ID, last_mean, prob) %>%
+#     distinct() %>%
 #     arrange(last_mean)
-# }) %>% 
-#   bind_rows() 
+# }) %>%
+#   bind_rows()
 
 
 # scale colors based on observed range over entire dataset

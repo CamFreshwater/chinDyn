@@ -75,14 +75,15 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                "#3182bd", "#08519c", "grey60")
   names(col_pal) <- c(levels(df_pred$color_ids), "historic")
   # replace color ID label so that low probabilities are historic (i.e. grey)
-  df_pred$color_ids2 <- ifelse(df_pred$prob < 0.80, 
+  df_pred$color_ids2 <- ifelse(df_pred$prob < 0.90, 
                                "historic", 
                                as.character(df_pred$color_ids))
   
   dum <- df_pred %>% 
     group_by(stock) %>% 
     #calculate SD of ts for horizontal line
-    mutate(ts_mean_sd = sd(mean)) %>% 
+    mutate(ts_mean = mean(mean),
+           ts_mean_sd = sd(mean)) %>% 
     ungroup()
   
   labs <- df_pred %>% 
@@ -101,9 +102,9 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                 fill = "grey60", colour = "grey60", alpha = 0.6) +
     geom_line(data = dum %>% filter(Time <= x_int),
               size = 1) +
-    geom_hline(yintercept = 0, lty = 2) +
-    geom_hline(aes(yintercept = 0 + ts_mean_sd), lty = 3) +
-    geom_hline(aes(yintercept = 0 - ts_mean_sd), lty = 3) +
+    geom_hline(aes(yintercept = ts_mean), lty = 2) +
+    # geom_hline(aes(yintercept = ts_mean + ts_mean_sd), lty = 3) +
+    # geom_hline(aes(yintercept = ts_mean - ts_mean_sd), lty = 3) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
@@ -159,7 +160,7 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     left_join(., y_int, by = c("ID")) %>% 
     mutate(
       color_id = case_when(
-        prob < 0.8 ~ "historic",
+        prob < 0.9 ~ "historic",
         last_mean < ts_mean_sd_lo ~ "very low",
         ts_mean_sd_lo < last_mean & last_mean < ts_uncent_mean ~ "low",
         ts_mean_sd_hi > last_mean & last_mean  > ts_uncent_mean ~ "high",
@@ -196,8 +197,8 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
     geom_line(data = df_pred2 %>% filter(Time <= x_int), 
               size = 1) +
     geom_hline(data = y_int2, aes(yintercept = ts_uncent_mean), lty = 2) +
-    geom_hline(data = y_int2, aes(yintercept = ts_mean_sd_hi), lty = 3) +
-    geom_hline(data = y_int2, aes(yintercept = ts_mean_sd_lo), lty = 3) +
+    # geom_hline(data = y_int2, aes(yintercept = ts_mean_sd_hi), lty = 3) +
+    # geom_hline(data = y_int2, aes(yintercept = ts_mean_sd_lo), lty = 3) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
@@ -253,7 +254,7 @@ plot_fitted_pred_uncent <- function(df_pred, #ylab = NULL,
                "#3182bd", "#08519c", "grey60")
   names(col_pal) <- c(levels(df_pred$color_ids), "historic")
   # replace color ID label so that low probabilities are historic (i.e. grey)
-  df_pred$color_ids2 <- ifelse(df_pred$prob < 0.80, 
+  df_pred$color_ids2 <- ifelse(df_pred$prob < 0.90, 
                                "historic", 
                                as.character(df_pred$color_ids))
   
@@ -280,8 +281,8 @@ plot_fitted_pred_uncent <- function(df_pred, #ylab = NULL,
     geom_line(data = dum %>% filter(Time <= x_int),
               size = 1) +
     geom_hline(aes(yintercept = obs_mean_age), lty = 2) +
-    geom_hline(aes(yintercept = obs_mean_age + ts_mean_sd), lty = 3) +
-    geom_hline(aes(yintercept = obs_mean_age - ts_mean_sd), lty = 3) +
+    # geom_hline(aes(yintercept = obs_mean_age + ts_mean_sd), lty = 3) +
+    # geom_hline(aes(yintercept = obs_mean_age - ts_mean_sd), lty = 3) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
@@ -314,6 +315,8 @@ plot_fitted_pred_uncent <- function(df_pred, #ylab = NULL,
 
 ## function to calculate probability that estimates below average in last 
 # n_years
+# modelfit = surv_dfa[[2]]; names = surv_tbl$names[[2]]; years = surv_tbl$years[[2]]
+
 final_prob <- function(modelfit, names, 
                        years = years, year1_last_mean = 2010,
                        year2_last_mean = NULL

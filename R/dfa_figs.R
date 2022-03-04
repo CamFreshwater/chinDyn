@@ -355,23 +355,191 @@ dev.off()
 # CALCULATE FINAL FIVE YEAR MEANS ----------------------------------------------
 
 # generation length means in last five years
-gen_prob <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years),
-                 final_prob, year1_last_mean = 2011, year2_last_mean = 2016) %>% 
-  bind_rows() %>% 
-  mutate(
-    thresh = ifelse(prob_below_0 > 0.90, 1, 0)
-  )
-sum(gen_prob$thresh) / nrow(gen_prob)
+# gen_prob <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years),
+#                  final_prob, year1_last_mean = 2011, year2_last_mean = 2016) %>% 
+#   bind_rows() %>% 
+#   mutate(
+#     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
+#   )
+# sum(gen_prob$thresh) / nrow(gen_prob)
+# 
+# surv_prob <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years),
+#                   final_prob, year1_last_mean = 2011, 
+#                   year2_last_mean = 2016) %>% 
+#   bind_rows() %>% 
+#   mutate(
+#     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
+#   )
+# sum(surv_prob$thresh) / nrow(surv_prob)
 
-surv_prob <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years),
-                  final_prob, year1_last_mean = 2011, 
-                  year2_last_mean = 2016) %>% 
-  bind_rows() %>% 
-  mutate(
-    thresh = ifelse(prob_below_0 > 0.90, 1, 0)
-  )
-sum(surv_prob$thresh) / nrow(surv_prob)
 
+# CALCULATE SUMMARY STATISTICS -------------------------------------------------
+
+## survival
+surv_iters <- pmap(
+  list(surv_tbl$group, surv_dfa, surv_tbl$names, surv_tbl$years), 
+  function(group, x, y, z) {
+    tt <- reshape2::melt(predicted(x), 
+                         varnames = c("iter", "chain", "time", "stock")) %>% 
+      left_join(., 
+                data.frame(year = z,
+                           time = unique(.$time)),
+                by = "time") %>% 
+      mutate(iter_chain = paste(iter, chain, sep = "_") %>% 
+               as.factor %>% 
+               as.numeric,
+             group = group)
+    tt$stock <- as.factor(y$stock[tt$stock])
+    
+    return(tt)
+  }
+) %>% 
+  bind_rows()
+
+mean_surv <- raw_data %>% 
+  group_by(stock) %>%
+  summarize(mean_logit_surv = mean(qlogis(survival), na.rm = T))
+surv_iters2 <- left_join(surv_iters, mean_surv, by = "stock") %>% 
+  mutate(uncent_value = value + mean_logit_surv,
+         uncent_real_value = plogis(uncent_value))
+
+
+mean_surv_prob <- surv_iters %>% 
+  group_by(group) %>% 
+  mutate(n_stock = length(unique(stock))) %>% 
+  group_by(iter_chain, year, group) %>%
+  summarize( 
+    prob_below_0 = sum(value < 0) / n_stock,
+    prob_above_0 = sum(value > 0) / n_stock,
+    .groups = "drop"
+  ) %>% 
+  group_by(year, group) %>% 
+  summarize(
+    mean_above_0 = mean(prob_above_0),
+    up = quantile(prob_above_0, probs = 0.95),
+    low = quantile(prob_above_0, probs = 0.05)
+  ) %>% 
+  ungroup()
+
+mean_surv_ppn <- ggplot(mean_surv_prob) +
+  geom_pointrange(aes(x = year, y = mean_above_0, ymin = low, ymax = up)) +
+  facet_wrap(~group) +
+  labs(y = "Proportion of Stocks with Above Average Logit Survival") +
+  ggsidekick::theme_sleek()
+
+mean_surv_trends <- surv_iters2 %>% 
+  group_by(year, group) %>% 
+  summarize(
+    mean_surv = mean(uncent_real_value),
+    up = quantile(uncent_real_value, probs = 0.95),
+    low = quantile(uncent_real_value, probs = 0.05),
+    mean_surv_link = mean(value),
+    up_link = quantile(value, probs = 0.95),
+    low_link = quantile(value, probs = 0.05)
+  ) %>% 
+  ungroup()
+
+mean_surv_ribbon <- ggplot(mean_surv_trends) +
+  geom_line(aes(x = year, y = mean_surv)) +
+  geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
+  facet_wrap(~group) + 
+  labs(y = "Mean Survival") +
+  ggsidekick::theme_sleek()
+
+real_mean_surv_ribbon <- ggplot(mean_surv_trends) +
+  geom_line(aes(x = year, y = mean_surv_link)) +
+  geom_ribbon(aes(x = year, ymin = low_link, ymax = up_link), alpha = 0.4) +
+  facet_wrap(~group) + 
+  labs(y = "Mean Centered Logit Survival") +
+  ggsidekick::theme_sleek()
+
+
+## age
+age_iters <- pmap(list(gen_tbl$group, gen_dfa, gen_tbl$names, gen_tbl$years), 
+     function(group, x, y, z) {
+       tt <- reshape2::melt(predicted(x), 
+                            varnames = c("iter", "chain", "time", "stock")) %>% 
+         left_join(., 
+                   data.frame(year = z,
+                              time = unique(.$time)),
+                   by = "time") %>% 
+         mutate(iter_chain = paste(iter, chain, sep = "_") %>% 
+                  as.factor %>% 
+                  as.numeric,
+                group = group)
+       tt$stock <- as.factor(y$stock[tt$stock])
+       
+       return(tt)
+     }) %>% 
+  bind_rows()
+
+mean_gen <- raw_data %>% 
+  group_by(stock) %>%
+  summarize(mean_age = mean(gen_length, na.rm = T))
+age_iters2 <- left_join(age_iters, mean_gen, by = "stock") %>% 
+  mutate(uncent_value = value + mean_age)
+
+mean_prob <- age_iters2 %>% 
+  group_by(group) %>% 
+  mutate(n_stock = length(unique(stock))) %>% 
+  group_by(iter_chain, year, group) %>%
+  summarize( 
+    prob_below_0 = sum(value < 0) / n_stock,
+    prob_above_0 = sum(value > 0) / n_stock,
+    .groups = "drop"
+  ) %>% 
+  group_by(year, group) %>% 
+  summarize(
+    mean_above_0 = mean(prob_above_0),
+    up = quantile(prob_above_0, probs = 0.95),
+    low = quantile(prob_above_0, probs = 0.05)
+  ) %>% 
+  ungroup()
+
+mean_age_ppn <- ggplot(mean_prob) +
+  geom_pointrange(aes(x = year, y = mean_above_0, ymin = low, ymax = up)) +
+  facet_wrap(~group) +
+  labs(y = "Proportion of Stocks with Above Average Mean Age-At-Maturity") +
+  ggsidekick::theme_sleek()
+
+mean_age_trends <- age_iters2 %>% 
+  group_by(year, group) %>% 
+  summarize(
+    mean_age = mean(value),
+    up = quantile(value, probs = 0.95),
+    low = quantile(value, probs = 0.05),
+    mean_age_uncent = mean(uncent_value),
+    up_uncent = quantile(uncent_value, probs = 0.95),
+    low_uncent = quantile(uncent_value, probs = 0.05)
+  ) %>% 
+  ungroup()
+
+mean_age_ribbon <- ggplot(mean_age_trends) +
+  geom_line(aes(x = year, y = mean_age)) +
+  geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
+  facet_wrap(~group) +
+  labs(y = "Mean Centered Age-At-Maturity") +
+  ggsidekick::theme_sleek()
+
+uc_mean_age_ribbon <- ggplot(mean_age_trends) +
+  geom_line(aes(x = year, y = mean_age_uncent)) +
+  geom_ribbon(aes(x = year, ymin = low_uncent, ymax = up_uncent), alpha = 0.4) +
+  facet_wrap(~group) +
+  labs(y = "Mean Age-At-Maturity") +
+  ggsidekick::theme_sleek()
+
+
+pdf(here::here("figs", "supp_figs", "surv_summary_stats.pdf"))
+mean_surv_ppn
+mean_surv_ribbon
+real_mean_surv_ribbon
+dev.off()
+
+pdf(here::here("figs", "supp_figs", "age_summary_stats.pdf"))
+mean_age_ppn
+mean_age_ribbon
+uc_mean_age_ribbon
+dev.off()
 
 
 # ESTIMATES OF PARS ------------------------------------------------------------
@@ -456,9 +624,9 @@ trends <- rbind(surv_trends, gen_trends) %>%
            grepl("Sub", group) ~ "subyearling",
            TRUE ~ "yearling"
          ),
-         group = fct_relevel(as.factor(group), "North\nYearling",
-                             "SoG\nSubyearling", "Puget\nYearling",
-                             "Puget\nSubyearling", "South\nSubyearling"),
+         group = fct_relevel(as.factor(group), "North\nYearling", 
+                             "SoG\nSubyearling", "Puget\nSubyearling", 
+                             "Puget\nYearling","South\nSubyearling"),
          var = fct_relevel(as.factor(var), "Juvenile Mortality Rate",
                            "Mean Age")
          )
@@ -510,8 +678,8 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
          ) %>% 
            as.factor(),
          group = fct_relevel(as.factor(group), "North\nYearling", 
-                             "SoG\nSubyearling", "Puget\nYearling",
-                             "Puget\nSubyearling", "South\nSubyearling")) 
+                             "SoG\nSubyearling", "Puget\nSubyearling", 
+                             "Puget\nYearling","South\nSubyearling")) 
 
 # 
 # trend_1_pal <- c("#E08214", "#8073AC" )
@@ -565,7 +733,6 @@ surv_trend_regime <- ggplot(
   theme(
     legend.position = "none",
     strip.background = element_blank(),
-    # strip.text.y = element_blank(),
     axis.title.x = element_blank(),
     plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
     )+
@@ -588,7 +755,6 @@ gen_trend_regime <- ggplot(
   theme(
     legend.position = "none",
     strip.background = element_blank(),
-    # strip.text.y = element_blank(),
     axis.title.x = element_blank(),
     plot.margin = unit(c(0.5,1,0.5,0.5), "cm") #t,r,b,l
   ) +
@@ -604,6 +770,7 @@ png(here::here("figs", "ms_figs", "age_trend_regime.png"),
     width = 8.5, height = 6, res = 300, units = "in")
 gen_trend_regime
 dev.off()
+
 
 # ORIGINAL SUBMISSION
 # # first age trend

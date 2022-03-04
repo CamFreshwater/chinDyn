@@ -15,8 +15,8 @@ fitted_preds <- function(modelfit, names = NULL, years = NULL,
   df_pred <- data.frame(ID = rep(seq_len(n_ts), n_years),
                         Time = sort(rep(years, n_ts)),
                         mean = c(t(apply(pred, c(3, 4), mean))),
-                        lo = c(t(apply(pred, c(3, 4), quantile, 0.025))),
-                        hi = c(t(apply(pred, c(3, 4), quantile, 0.975)))
+                        lo = c(t(apply(pred, c(3, 4), quantile, 0.05))),
+                        hi = c(t(apply(pred, c(3, 4), quantile, 0.95)))
                         ) %>% 
     mutate(stock = names$stock[ID])
   
@@ -85,6 +85,11 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
     mutate(ts_mean_sd = sd(mean)) %>% 
     ungroup()
   
+  labs <- df_pred %>% 
+    filter(!is.na(obs_y)) %>% 
+    group_by(ID) %>% 
+    tally()
+  
   p <- ggplot(dum %>% filter(Time >= x_int),
               aes_string(x = "Time", y = "mean")) + 
     geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids2",
@@ -96,9 +101,9 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
                 fill = "grey60", colour = "grey60", alpha = 0.6) +
     geom_line(data = dum %>% filter(Time <= x_int),
               size = 1) +
-    # geom_hline(yintercept = 0, lty = 2) +
-    # geom_hline(aes(yintercept = 0 + ts_mean_sd), lty = 3) +
-    # geom_hline(aes(yintercept = 0 - ts_mean_sd), lty = 3) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_hline(aes(yintercept = 0 + ts_mean_sd), lty = 3) +
+    geom_hline(aes(yintercept = 0 - ts_mean_sd), lty = 3) +
     geom_vline(xintercept = x_int, lty = 1, alpha = 0.6) +
     scale_fill_manual(values = col_pal) +
     scale_colour_manual(values = col_pal) +
@@ -113,8 +118,12 @@ plot_fitted_pred <- function(df_pred, #ylab = NULL,
           axis.title.y.left = element_blank(),
           legend.position = "none",
           axis.text.y.right = element_blank(),
-          axis.ticks.y.right = element_blank())
-  
+          axis.ticks.y.right = element_blank()) +
+    geom_text(
+      data = labs, aes(x = -Inf, y = -Inf, label = n),
+      hjust = -0.2, vjust = -0.4
+    )
+
   if (print_x == FALSE) {
     p <- p + 
       theme(axis.text.x = element_blank(),
@@ -169,6 +178,11 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
   col_pal <- c("#a50f15",  "#fc9272", "#9ecae1",  "#08519c", "grey60")
   names(col_pal) <- c("very low", "low", "high", "very high", "historic")
    
+  labs <- df_pred2 %>% 
+    filter(!is.na(obs_y)) %>% 
+    group_by(ID_key) %>% 
+    tally()
+  
   p <- ggplot(df_pred2 %>% filter(Time >= x_int),
               aes_string(x = "Time", y = "uncent_mean")) + 
     geom_ribbon(aes_string(ymin = "uncent_lo", ymax = "uncent_hi", 
@@ -199,7 +213,11 @@ plot_fitted_pred_real <- function(df_pred, #ylab = NULL,
           axis.title.y.left = element_blank(),
           legend.position = "none",
           axis.text.y.right = element_blank(),
-          axis.ticks.y.right = element_blank())
+          axis.ticks.y.right = element_blank()) +
+    geom_text(
+      data = labs, aes(x = -Inf, y = Inf, label = n),
+      hjust = -0.2, vjust = 1.1
+    )
 
   if (print_x == FALSE) {
     p <- p + 
@@ -245,6 +263,11 @@ plot_fitted_pred_uncent <- function(df_pred, #ylab = NULL,
     mutate(ts_mean_sd = sd(mean)) %>% 
     ungroup()
   
+  labs <- dum %>% 
+    filter(!is.na(obs_y)) %>% 
+    group_by(ID) %>% 
+    tally()
+  
   p <- ggplot(dum %>% filter(Time >= x_int),
               aes_string(x = "Time", y = "mean")) + 
     geom_ribbon(aes_string(ymin = "lo", ymax = "hi", colour = "color_ids2",
@@ -273,7 +296,11 @@ plot_fitted_pred_uncent <- function(df_pred, #ylab = NULL,
           axis.title.y.left = element_blank(),
           legend.position = "none",
           axis.text.y.right = element_blank(),
-          axis.ticks.y.right = element_blank())
+          axis.ticks.y.right = element_blank()) +
+    geom_text(
+      data = labs, aes(x = -Inf, y = -Inf, label = n),
+      hjust = -0.2, vjust = -0.4
+    )
   
   if (print_x == FALSE) {
     p <- p + 
@@ -472,7 +499,7 @@ plot_load <- function(x, group = NULL, guides = FALSE, y_lims = c(-0.5, 0.5)) {
   p <- ggplot(x, aes_string(x = "name", y = "value", fill = "trend", 
                             alpha = "prob_diff0")) + 
     scale_alpha_continuous(name = "Probability\nDifferent") +
-    scale_fill_brewer(name = "", palette = "Set2") +
+    scale_fill_brewer(name = "", palette = "Paired") +
     geom_violin(color = NA, position = position_dodge(0.3)) + 
     geom_hline(yintercept = 0, lty = 2) + 
     coord_flip() + 

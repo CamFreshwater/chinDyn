@@ -75,63 +75,10 @@ gen_names <- gen_tbl %>%
   ) %>%
   nest(names = c(stock, stock_name))
 
-
-# RAW BOX PLOTS ----------------------------------------------------------------
-
 mean_data <- raw_data %>% 
   group_by(j_group3b, year) %>% 
   summarize(mean_surv = mean(survival, na.rm = T),
             mean_age = mean(gen_length, na.rm = T))
-
-raw_data <- raw_data %>% 
-  mutate(
-    group = factor(
-      j_group3b, 
-      levels = c("north_oceantype", "north_streamtype", "sog_oceantype",
-                 "sog_streamtype", "puget_oceantype", "puget_streamtype",    
-                 "south_oceantype", "south_streamtype"),
-      labels = c("North\nSubyearling", "North\nYearling", "SoG\nSubyearling", 
-                 "SoG\nYearling", "Puget\nSubyearling", "Puget\nYearling", 
-                 "South\nSubyearling",  "South\nYearling")
-      ),
-    smolt = factor(smolt, labels = c("Yearling", "Subyearling")),
-    region_juv = factor(j_group3, levels = c("north", "sog", "puget", "south"),
-                        labels = c("North", "SoG", "Puget", "South"))
-  ) %>% 
-  filter(!stock %in% c("TST", "AKS")) 
-
-scale_1 <- c("#E08214", "#8073AC")
-names(scale_1) <- levels(raw_data$smolt)
-
-
-
-png(here::here("figs", "ms_figs", "survival_box.png"), height = 10, 
-    width = 7.5, res = 300, units = "in")
-ggplot() +
-  geom_boxplot(data = raw_data, aes(x = as.factor(year), y = survival,
-                                    fill = smolt)) +
-  facet_grid(region_juv ~ smolt) +
-  labs(x = "Ocean Entry Year", y = "Juvenile Marine Survival Rate") +
-  scale_x_discrete(
-    breaks = seq(1970, 2020, by = 10)
-  ) +
-  scale_fill_manual(values = scale_1) +
-  ggsidekick::theme_sleek()
-dev.off()
-
-png(here::here("figs", "ms_figs", "age_box.png"), height = 10, 
-    width = 7.5, res = 300, units = "in")
-age_box <- ggplot() +
-  geom_boxplot(data = raw_data, aes(x = as.factor(year), y = gen_length,
-                                    fill = smolt)) +
-  facet_grid(region_juv ~ smolt) +
-  labs(x = "Ocean Entry Year", y = "Mean Age-At-Maturity") +
-  scale_x_discrete(
-    breaks = seq(1970, 2020, by = 10)
-  ) +
-  scale_fill_manual(values = scale_1) +
-  ggsidekick::theme_sleek()
-dev.off()
 
 
 # PREDICTED FITS ---------------------------------------------------------------
@@ -665,6 +612,36 @@ roll_age_ribbon
 roll_age_ppn_ribbon
 dev.off()
 
+png(here::here("figs", "ms_figs", "surv_roll_pts.png"), height = 7, width = 8, 
+    res = 300, units = "in")
+roll_surv_ribbon
+dev.off()
+
+png(here::here("figs", "ms_figs", "surv_ppn_roll_pts.png"), height = 7, width = 8, 
+    res = 300, units = "in")
+roll_surv_ppn_ribbon
+dev.off()
+
+png(here::here("figs", "ms_figs", "age_roll_pts.png"), height = 7, width = 8, 
+    res = 300, units = "in")
+roll_age_ribbon
+dev.off()
+
+png(here::here("figs", "ms_figs", "age_ppn_roll_pts.png"), height = 7, width = 8, 
+    res = 300, units = "in")
+roll_age_ppn_ribbon
+dev.off()
+
+
+roll_age %>% 
+  group_by(group) %>% 
+  mutate(min_year = min(year),
+         max_year = max(year)) %>% 
+  filter(year %in% c(min_year, max_year)) %>% 
+  arrange(group) %>% 
+  select(-up, -low, -state)
+  glimpse()
+
 # non-rolling version
 # mean_surv_prob <- surv_iters %>% 
 #   group_by(group) %>% 
@@ -1113,6 +1090,54 @@ dev.off()
 # plot_out(gen_two_panel)
 # dev.off()
 
+
+# MEANS AFTER REGIMES ----------------------------------------------------------
+
+surv_regime_years <- dum2 %>% 
+  filter(var == "Juvenile Mortality Rate",
+         trend == "1") %>%
+  mutate(
+    state = case_when(
+      group %in% c("North\nYearling", "Puget\nSubyearling", 
+                   "Puget\nYearling") ~ "stationary",
+      median >= 0.5 ~ "high",
+      median < 0.5 ~ "low"
+    )
+  ) %>% 
+  select(year = time, group, state)
+levels(surv_regime_years$group) <- levels(surv_iters2$group)
+
+age_regime_years <- dum2 %>% 
+  filter(var == "Mean Age",
+         trend == "1") %>%
+  mutate(
+    state = case_when(
+      group %in% c("North\nYearling", "Puget\nYearling") ~ "stationary",
+      median >= 0.5 ~ "high",
+      median < 0.5 ~ "low"
+    )
+  ) %>% 
+  select(year = time, group, state)
+levels(age_regime_years$group) <- levels(age_iters2$group)
+
+
+## point intervals
+reg_est <- left_join(surv_iters2, surv_regime_years, 
+                     by = c("group", "year")) %>%
+  group_by(group, state) %>% 
+  summarize(
+    mean_surv = mean(uncent_real_value),
+    up = quantile(uncent_real_value, probs = 0.95),
+    low = quantile(uncent_real_value, probs = 0.05)
+  )
+reg_est_age <- left_join(age_iters2, age_regime_years, 
+                     by = c("group", "year")) %>%
+  group_by(group, state) %>% 
+  summarize(
+    mean_age = mean(uncent_value),
+    up = quantile(uncent_value, probs = 0.95),
+    low = quantile(uncent_value, probs = 0.05)
+  )
 
 # ESTIMATED LOADINGS -----------------------------------------------------------
 

@@ -115,31 +115,183 @@ dev.off()
 
 
 # fit gams to estimate effects
-age_surv_mod <- mgcv::gam(gen_length ~ s(survival, m = 2, bs = "tp", k = 5) + 
-                            s(survival, m = 1, bs = "tp", k = 5, by = j_group3b) +
+age_surv_mod <- mgcv::gam(gen_length ~ s(logit_surv, m = 2, bs = "tp") + 
+                            s(logit_surv, m = 1, bs = "tp", by = j_group3b) +
                             s(stock, bs = "re"),
                           data = dat)
+# age_surv_mod2 <- lme4::lmer(gen_length ~ logit_surv + (1 | stock), data = dat,
+#                       REML = TRUE)
 
-# wt_surv_mod <- mgcv::gam(logit_surv ~ s(avg_weight, m = 2, bs = "tp") + 
-#                             s(avg_weight, m = 1, bs = "tp", by = j_group3b) +
-#                             s(stock, bs = "re"),
-#                           data = dat#,
-#                           # family = mgcv::betar(link="logit")
-#                          )
 wt_surv_mod <- mgcv::gam(survival ~ s(avg_weight, m = 2, bs = "tp") + 
                            s(avg_weight, m = 1, bs = "tp", by = j_group3b) +
                            s(stock, bs = "re"),
                          data = dat,
                          family = mgcv::betar(link="logit")
 )
+# wt_surv_mod2 <- lme4::lmer(logit_surv ~ avg_weight + (1 | stock), data = dat,
+#                             REML = TRUE)
 
-age_wt_mod <- mgcv::gam(gen_length ~ s(avg_weight, m = 2, bs = "tp", k = 5) + 
-                            s(avg_weight, m = 1, bs = "tp", k = 5, 
+age_wt_mod <- mgcv::gam(age_z ~ s(avg_weight, m = 2, bs = "tp") + 
+                            s(avg_weight, m = 1, bs = "tp", 
                               by = j_group3b) +
                             s(stock, bs = "re"),
                           data = dat#,
                           # family = Gamma(link="log")
                           )
+
+
+
+## time series of residuals
+yr_preds <- expand.grid(
+  year = seq(min(dat$year), max(dat$year), by = 1),
+  j_group3b = unique(dat$j_group3b)
+)
+
+
+# age-survival residuals
+as_dat <- dat %>% 
+  filter(!is.na(gen_length), 
+         !is.na(survival)) %>% 
+  mutate(
+    resids = resid(age_surv_mod),
+  ) %>% 
+  pivot_longer(
+    cols = c(age_z, resids), names_to = "data_type"
+  )
+as_dat$data_type <- factor(as_dat$data_type, 
+                           labels = c("observations", "residuals"))
+
+
+as_obs <-  gam(value ~ s(year, m = 2, bs = "tp") + 
+                             s(year, m = 1, bs = "tp", by = j_group3b), 
+                           data = as_dat %>% filter(data_type == "observations"))
+as_resid <-  gam(value ~ s(year, m = 2, bs = "tp") + 
+                       s(year, m = 1, bs = "tp", by = j_group3b),
+                     data = as_dat %>% filter(data_type == "residuals"))
+
+as_obs_pred <- predict(as_obs, newdata = yr_preds, se.fit = T)
+as_resid_pred <- predict(as_resid, newdata = yr_preds, se.fit = T)
+
+yr_preds$as_obs <- as_obs_pred$fit %>% as.numeric
+yr_preds$as_resid <- as_resid_pred$fit %>% as.numeric
+yr_preds$as_obs_se <- as_obs_pred$se.fit %>% as.numeric
+yr_preds$as_resid_se <- as_resid_pred$se.fit %>% as.numeric
+
+as_preds <- yr_preds %>%
+  select(year, j_group3b) %>% 
+  mutate(
+    as_obs = as_obs_pred$fit %>% as.numeric,
+    as_resid = as_resid_pred$fit %>% as.numeric#,
+    # as_obs_se = as_obs_pred$se.fit %>% as.numeric,
+    # as_resid_se = as_resid_pred$se.fit %>% as.numeric
+  ) %>% 
+  pivot_longer(cols = c(as_obs, as_resid), names_to = "data_type") %>%
+  # pivot_longer(cols = c(as_obs_se, as_resid_se), names_to = "data_type2",
+  # values_to = "se_value") %>%
+  # filter(#year == "1972", j_group3b == "north_streamtype",
+  #        (data_type == "as_obs" & data_type2 == "as_obs_se") |
+  #          (data_type == "as_resid" & data_type2 == "as_resid_se")
+  #        ) %>%
+  # mutate(
+  #   low = value - 1.96 * se_value,
+  #   high = value + 1.96 * se_value
+  # ) %>% 
+  glimpse()
+
+png(here::here("figs", "supp_figs", "age_surv_resids.png"))
+ggplot(as_preds, aes(x = year, y = value)) +
+  geom_jitter(data = as_dat, aes(fill = data_type), shape = 21, alpha = 0.3,
+              width = 0.3) +
+  geom_line(aes(colour = data_type), size = 1.25) +
+  # geom_ribbon(aes(ymin = low, ymax = high, fill = data_type), alpha = 0.3) +
+  scale_color_discrete(guide = "none") +
+  facet_wrap(~j_group3b) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Release Year", y = "Centered Mean Age-At-Maturity")
+dev.off()
+
+
+# weight-survival 
+ws_dat <- dat %>% 
+  filter(!is.na(avg_weight), 
+         !is.na(logit_surv)) %>% 
+  mutate(
+    resids = resid(wt_surv_mod),
+  ) %>% 
+  pivot_longer(
+    cols = c(logit_surv_z, resids), names_to = "data_type"
+  )
+ws_dat$data_type <- factor(ws_dat$data_type, 
+                           labels = c("observations", "residuals"))
+
+
+ws_obs <-  gam(value ~ s(year, m = 2, bs = "tp") + 
+                 s(year, m = 1, bs = "tp", by = j_group3b), 
+               data = ws_dat %>% filter(data_type == "observations"))
+ws_resid <-  gam(value ~ s(year, m = 2, bs = "tp") + 
+                   s(year, m = 1, bs = "tp", by = j_group3b),
+                 data = ws_dat %>% filter(data_type == "residuals"))
+
+ws_obs_pred <- predict(ws_obs, newdata = yr_preds, se.fit = T)
+ws_resid_pred <- predict(ws_resid, newdata = yr_preds, se.fit = T)
+
+yr_preds$ws_obs <- ws_obs_pred$fit %>% as.numeric
+yr_preds$ws_resid <- ws_resid_pred$fit %>% as.numeric
+
+png(here::here("figs", "supp_figs", "surv_weight_resids.png"))
+yr_preds %>% 
+  pivot_longer(cols = c(ws_obs, ws_resid), names_to = "pred_type") %>%
+  ggplot(., aes(x = year, y = value)) +
+  geom_jitter(data = ws_dat, aes(fill = data_type), shape = 21, alpha = 0.3,
+              width = 0.3) +
+  geom_line(aes(colour = pred_type), size = 1.25) +
+  facet_wrap(~j_group3b) +
+  ggsidekick::theme_sleek() +
+  scale_color_discrete(guide = "none") +
+  labs(x = "Release Year", y = "Centered Logit Juvenile Survival")
+dev.off()
+
+
+# age-weight residuals
+aw_dat <- dat %>% 
+  filter(!is.na(avg_weight), 
+         !is.na(gen_length)) %>% 
+  mutate(
+    resids = resid(age_wt_mod),
+  ) %>% 
+  pivot_longer(
+    cols = c(age_z, resids), names_to = "data_type"
+  )
+aw_dat$data_type <- factor(aw_dat$data_type, 
+                           labels = c("observations", "residuals"))
+
+aw_obs <-  gam(value ~ s(year, m = 2, bs = "tp") + 
+                 s(year, m = 1, bs = "tp", by = j_group3b), 
+               data = aw_dat %>% filter(data_type == "observations"))
+aw_resid <-  gam(value ~ s(year, m = 2, bs = "tp") + 
+                   s(year, m = 1, bs = "tp", by = j_group3b),
+                 data = aw_dat %>% filter(data_type == "residuals"))
+
+aw_obs_pred <- predict(aw_obs, newdata = yr_preds, se.fit = T)
+aw_resid_pred <- predict(aw_resid, newdata = yr_preds, se.fit = T)
+
+yr_preds$aw_obs <- aw_obs_pred$fit %>% as.numeric
+yr_preds$aw_resid <- aw_resid_pred$fit %>% as.numeric
+
+png(here::here("figs", "supp_figs", "age_weight_resids.png"))
+yr_preds %>% 
+  pivot_longer(cols = c(aw_obs, aw_resid), names_to = "pred_type") %>%
+  ggplot(., aes(x = year, y = value)) +
+  geom_jitter(data = aw_dat, aes(fill = data_type), shape = 21, alpha = 0.3,
+              width = 0.3) +
+  geom_line(aes(colour = pred_type), size = 1.25) +
+  facet_wrap(~j_group3b) +
+  ggsidekick::theme_sleek() +
+  scale_color_discrete(guide = "none") +
+  labs(x = "Release Year", y = "Centered Mean Age-At-Maturity")
+dev.off()
+
+
 
 # generate predictive dataframes
 # cov_range <- dat %>% 
@@ -212,123 +364,6 @@ age_wt_mod <- mgcv::gam(gen_length ~ s(avg_weight, m = 2, bs = "tp", k = 5) +
 #   geom_line(aes(x = avg_weight, y = fit)) +
 #   # geom_ribbon(aes(x = avg_weight, ymin = surv_lo, ymax = surv_up, alpha = 0.3)) +
 #   facet_wrap(~j_group3b)
-
-
-## time series of residuals
-yr_preds <- expand.grid(
-  year = seq(min(dat$year), max(dat$year), by = 1),
-  j_group3b = unique(dat$j_group3b)
-)
-
-
-# age-survival residuals
-as_dat <- dat %>% 
-  filter(!is.na(gen_length), 
-         !is.na(survival)) %>% 
-  mutate(
-    resids = resid(age_surv_mod),
-  ) %>% 
-  pivot_longer(
-    cols = c(age_z, resids), names_to = "data_type"
-  )
-as_dat$data_type <- factor(as_dat$data_type, 
-                           labels = c("observations", "residuals"))
-
-
-as_obs <-  gam(value ~ s(year, m = 2, bs = "tp", k = 5) + 
-                             s(year, m = 1, bs = "tp", k = 5, by = j_group3b), 
-                           data = as_dat %>% filter(data_type == "observations"))
-as_resid <-  gam(value ~ s(year, m = 2, bs = "tp", k = 5) + 
-                       s(year, m = 1, bs = "tp", k = 5, by = j_group3b),
-                     data = as_dat %>% filter(data_type == "residuals"))
-
-as_obs_pred <- predict(as_obs, newdata = yr_preds, se.fit = T)
-as_resid_pred <- predict(as_resid, newdata = yr_preds, se.fit = T)
-
-yr_preds$as_obs <- as_obs_pred$fit %>% as.numeric
-yr_preds$as_resid <- as_resid_pred$fit %>% as.numeric
-
-yr_preds %>% 
-  pivot_longer(cols = c(as_obs, as_resid), names_to = "data_type") %>%
-  ggplot(., aes(x = year, y = value)) +
-  geom_jitter(data = as_dat, aes(fill = data_type), shape = 21, alpha = 0.3) +
-  geom_line(aes(colour = data_type), size = 1.5) +
-  facet_wrap(~j_group3b) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Release Year", y = "Centered Mean Age-At-Maturity")
-
-
-# weight-survival 
-ws_dat <- dat %>% 
-  filter(!is.na(avg_weight), 
-         !is.na(logit_surv)) %>% 
-  mutate(
-    resids = resid(wt_surv_mod),
-  ) %>% 
-  pivot_longer(
-    cols = c(logit_surv_z, resids), names_to = "data_type"
-  )
-ws_dat$data_type <- factor(ws_dat$data_type, 
-                           labels = c("observations", "residuals"))
-
-
-ws_obs <-  gam(value ~ s(year, m = 2, bs = "tp", k = 5) + 
-                 s(year, m = 1, bs = "tp", k = 5, by = j_group3b), 
-               data = ws_dat %>% filter(data_type == "observations"))
-ws_resid <-  gam(value ~ s(year, m = 2, bs = "tp", k = 5) + 
-                   s(year, m = 1, bs = "tp", k = 5, by = j_group3b),
-                 data = ws_dat %>% filter(data_type == "residuals"))
-
-ws_obs_pred <- predict(ws_obs, newdata = yr_preds, se.fit = T)
-ws_resid_pred <- predict(ws_resid, newdata = yr_preds, se.fit = T)
-
-yr_preds$ws_obs <- ws_obs_pred$fit %>% as.numeric
-yr_preds$ws_resid <- ws_resid_pred$fit %>% as.numeric
-
-yr_preds %>% 
-  pivot_longer(cols = c(ws_obs, ws_resid), names_to = "pred_type") %>%
-  ggplot(., aes(x = year, y = value)) +
-  geom_jitter(data = ws_dat, aes(fill = data_type), shape = 21, alpha = 0.3) +
-  geom_line(aes(colour = pred_type), size = 2) +
-  facet_wrap(~j_group3b) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Release Year", y = "Centered Logit Juvenile Survival")
-
-
-# age-weight residuals
-aw_dat <- dat %>% 
-  filter(!is.na(avg_weight), 
-         !is.na(gen_length)) %>% 
-  mutate(
-    resids = resid(age_wt_mod),
-  ) %>% 
-  pivot_longer(
-    cols = c(age_z, resids), names_to = "data_type"
-  )
-aw_dat$data_type <- factor(aw_dat$data_type, 
-                           labels = c("observations", "residuals"))
-
-aw_obs <-  gam(value ~ s(year, m = 2, bs = "tp", k = 5) + 
-                 s(year, m = 1, bs = "tp", k = 5, by = j_group3b), 
-               data = aw_dat %>% filter(data_type == "observations"))
-aw_resid <-  gam(value ~ s(year, m = 2, bs = "tp", k = 5) + 
-                   s(year, m = 1, bs = "tp", k = 5, by = j_group3b),
-                 data = aw_dat %>% filter(data_type == "residuals"))
-
-aw_obs_pred <- predict(aw_obs, newdata = yr_preds, se.fit = T)
-aw_resid_pred <- predict(aw_resid, newdata = yr_preds, se.fit = T)
-
-yr_preds$age_z <- aw_obs_pred$fit %>% as.numeric
-yr_preds$resids <- aw_resid_pred$fit %>% as.numeric
-
-yr_preds %>% 
-  pivot_longer(cols = c(aw_obs, aw_resid), names_to = "pred_type") %>%
-  ggplot(., aes(x = year, y = value)) +
-  geom_jitter(data = aw_dat, aes(fill = data_type), shape = 21, alpha = 0.3) +
-  geom_line(aes(colour = pred_type), size = 1.5) +
-  facet_wrap(~j_group3b) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Release Year", y = "Centered Mean Age-At-Maturity")
 
 
 

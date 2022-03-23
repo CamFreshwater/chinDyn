@@ -326,7 +326,6 @@ dev.off()
 tri_pal <- c("#08519c", "#a50f15", "grey60")
 names(tri_pal) <- c("above", "below", "average")
 
-
 ## survival
 surv_iters <- pmap(
   list(surv_tbl$group, surv_dfa, surv_tbl$names, surv_tbl$years), 
@@ -413,22 +412,22 @@ roll_surv_ribbon <- ggplot(roll_surv) +
   ggsidekick::theme_sleek()
 
 
-mean_surv_prob <- surv_iters %>%
-  group_by(group) %>%
-  mutate(n_stock = length(unique(stock))) %>%
-  group_by(iter_chain, year, group) %>%
-  summarize(
-    prob_below_0 = sum(value < 0) / n_stock,
-    prob_above_0 = sum(value > 0) / n_stock,
-    .groups = "drop"
-  ) %>%
-  group_by(year, group) %>%
-  summarize(
-    mean_above_0 = mean(prob_above_0),
-    up = quantile(prob_above_0, probs = 0.95),
-    low = quantile(prob_above_0, probs = 0.05)
-  ) %>%
-  ungroup()
+# mean_surv_prob <- surv_iters %>%
+#   group_by(group) %>%
+#   mutate(n_stock = length(unique(stock))) %>%
+#   group_by(iter_chain, year, group) %>%
+#   summarize(
+#     prob_below_0 = sum(value < 0) / n_stock,
+#     prob_above_0 = sum(value > 0) / n_stock,
+#     .groups = "drop"
+#   ) %>%
+#   group_by(year, group) %>%
+#   summarize(
+#     mean_above_0 = mean(prob_above_0),
+#     up = quantile(prob_above_0, probs = 0.95),
+#     low = quantile(prob_above_0, probs = 0.05)
+#   ) %>%
+#   ungroup()
 
 roll_surv_ppn <- surv_iters2 %>% 
   group_by(group) %>%
@@ -449,7 +448,8 @@ roll_surv_ppn <- surv_iters2 %>%
   summarize(
     mean_ppn = mean(roll_ppn),
     up = quantile(roll_ppn, probs = 0.95),
-    low = quantile(roll_ppn, probs = 0.05)
+    low = quantile(roll_ppn, probs = 0.05),
+    .groups = "drop"
   ) %>% 
   left_join(., min_surv_yrs, by = "group") %>% 
   filter(year >= window_yrs) 
@@ -461,17 +461,6 @@ roll_surv_ppn$state <- case_when(
 roll_surv_ppn$state <- factor(roll_surv_ppn$state, 
                               levels = c("above", "below", "average"))
 
-
-roll_surv_ppn_ribbon <- ggplot(dum) +
-  # geom_line(aes(x = year, y = mean_ppn)) +
-  # geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
-  geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
-                      fill = state), shape = 21) +
-  scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
-  labs(y = "Rolling Mean Proportion of Stocks\nWith Above Average Survival") +
-  ggsidekick::theme_sleek()
-  
 
 ## age
 age_iters <- pmap(list(gen_tbl$group, gen_dfa, gen_tbl$names, gen_tbl$years), 
@@ -525,6 +514,7 @@ roll_age <- age_iters2 %>%
     low_cent = quantile(roll_mean_cent, probs = 0.05)
   ) %>% 
   left_join(., min_age_yrs, by = "group") %>% 
+  # remove incomplete years
   filter(year >= window_yrs) 
 
 roll_age$state <- case_when(
@@ -589,9 +579,35 @@ roll_age_ppn$state <- factor(roll_age_ppn$state,
                               levels = c("above", "below", "average"))
 
 
+## combine survival and age proportion of stock estimates to look at last moving
+# window estimate
+roll_ppns <- rbind(roll_surv_ppn %>% mutate(dat = "survival"),
+                   roll_age_ppn %>% mutate(dat = "mean age")) %>% 
+  ungroup() %>% 
+  filter(year == "2016") %>% 
+  mutate(group = factor(group, labels = group_labs))
+
+
+final_ppns <- ggplot(roll_ppns) +
+  geom_pointrange(aes(x = group, y = mean_ppn, ymin = low, ymax = up, 
+                      fill = dat), 
+                  shape = 21, position = position_dodge(0.3)) +
+  scale_fill_brewer(type = "div", palette = 1, name = "Dataset") +
+  geom_hline(yintercept = 0.5, lty = 2) +
+  labs(y = "Proportion of Stocks Above Long-Term Mean") +
+  ggsidekick::theme_sleek() +
+  theme(axis.title.x = element_blank())
+  
+
+roll_surv_ppn_ribbon <- ggplot(roll_surv_ppn) +
+  geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
+                      fill = state), shape = 21) +
+  scale_fill_manual(values = tri_pal) +
+  facet_wrap(~group) +
+  labs(y = "Rolling Mean Proportion of Stocks\nWith Above Average Survival") +
+  ggsidekick::theme_sleek()
+
 roll_age_ppn_ribbon <- ggplot(roll_age_ppn) +
-  # geom_line(aes(x = year, y = mean_ppn)) +
-  # geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
   geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
                       fill = state), shape = 21) +
   scale_fill_manual(values = tri_pal) +
@@ -633,128 +649,10 @@ roll_age_ppn_ribbon
 dev.off()
 
 
-roll_age %>% 
-  group_by(group) %>% 
-  mutate(min_year = min(year),
-         max_year = max(year)) %>% 
-  filter(year %in% c(min_year, max_year)) %>% 
-  arrange(group) %>% 
-  select(-up, -low, -state)
-  glimpse()
-
-# non-rolling version
-# mean_surv_prob <- surv_iters %>% 
-#   group_by(group) %>% 
-#   mutate(n_stock = length(unique(stock))) %>% 
-#   group_by(iter_chain, year, group) %>%
-#   summarize( 
-#     prob_below_0 = sum(value < 0) / n_stock,
-#     prob_above_0 = sum(value > 0) / n_stock,
-#     .groups = "drop"
-#   ) %>% 
-#   group_by(year, group) %>% 
-#   summarize(
-#     mean_above_0 = mean(prob_above_0),
-#     up = quantile(prob_above_0, probs = 0.95),
-#     low = quantile(prob_above_0, probs = 0.05)
-#   ) %>% 
-#   ungroup()
-# 
-# mean_surv_ppn <- ggplot(mean_surv_prob) +
-#   geom_pointrange(aes(x = year, y = mean_above_0, ymin = low, ymax = up)) +
-#   facet_wrap(~group) +
-#   labs(y = "Proportion of Stocks with Above Average Logit Survival") +
-#   ggsidekick::theme_sleek()
-# 
-# mean_surv_trends <- surv_iters2 %>% 
-#   group_by(year, group) %>% 
-#   summarize(
-#     mean_surv = mean(uncent_real_value),
-#     up = quantile(uncent_real_value, probs = 0.95),
-#     low = quantile(uncent_real_value, probs = 0.05),
-#     mean_surv_link = mean(value),
-#     up_link = quantile(value, probs = 0.95),
-#     low_link = quantile(value, probs = 0.05)
-#   ) %>% 
-#   ungroup()
-# 
-# mean_surv_ribbon <- ggplot(mean_surv_trends) +
-#   geom_line(aes(x = year, y = mean_surv)) +
-#   geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
-#   facet_wrap(~group) + 
-#   labs(y = "Mean Survival") +
-#   ggsidekick::theme_sleek()
-# 
-# real_mean_surv_ribbon <- ggplot(mean_surv_trends) +
-#   geom_line(aes(x = year, y = mean_surv_link)) +
-#   geom_ribbon(aes(x = year, ymin = low_link, ymax = up_link), alpha = 0.4) +
-#   facet_wrap(~group) + 
-#   labs(y = "Mean Centered Logit Survival") +
-#   ggsidekick::theme_sleek()
-
-
-# 
-# mean_prob <- age_iters2 %>% 
-#   group_by(group) %>% 
-#   mutate(n_stock = length(unique(stock))) %>% 
-#   group_by(iter_chain, year, group) %>%
-#   summarize( 
-#     prob_below_0 = sum(value < 0) / n_stock,
-#     prob_above_0 = sum(value > 0) / n_stock,
-#     .groups = "drop"
-#   ) %>% 
-#   group_by(year, group) %>% 
-#   summarize(
-#     mean_above_0 = mean(prob_above_0),
-#     up = quantile(prob_above_0, probs = 0.95),
-#     low = quantile(prob_above_0, probs = 0.05)
-#   ) %>% 
-#   ungroup()
-# 
-# mean_age_ppn <- ggplot(mean_prob) +
-#   geom_pointrange(aes(x = year, y = mean_above_0, ymin = low, ymax = up)) +
-#   facet_wrap(~group) +
-#   labs(y = "Proportion of Stocks with Above Average Mean Age-At-Maturity") +
-#   ggsidekick::theme_sleek()
-# 
-# mean_age_trends <- age_iters2 %>% 
-#   group_by(year, group) %>% 
-#   summarize(
-#     mean_age = mean(value),
-#     up = quantile(value, probs = 0.95),
-#     low = quantile(value, probs = 0.05),
-#     mean_age_uncent = mean(uncent_value),
-#     up_uncent = quantile(uncent_value, probs = 0.95),
-#     low_uncent = quantile(uncent_value, probs = 0.05)
-#   ) %>% 
-#   ungroup()
-# 
-# mean_age_ribbon <- ggplot(mean_age_trends) +
-#   geom_line(aes(x = year, y = mean_age)) +
-#   geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
-#   facet_wrap(~group) +
-#   labs(y = "Mean Centered Age-At-Maturity") +
-#   ggsidekick::theme_sleek()
-# 
-# uc_mean_age_ribbon <- ggplot(mean_age_trends) +
-#   geom_line(aes(x = year, y = mean_age_uncent)) +
-#   geom_ribbon(aes(x = year, ymin = low_uncent, ymax = up_uncent), alpha = 0.4) +
-#   facet_wrap(~group) +
-#   labs(y = "Mean Age-At-Maturity") +
-#   ggsidekick::theme_sleek()
-# 
-# 
-# pdf(here::here("figs", "supp_figs", "surv_summary_stats.pdf"))
-# mean_surv_ppn
-# mean_surv_ribbon
-# real_mean_surv_ribbon
-# dev.off()
-# 
-# pdf(here::here("figs", "supp_figs", "age_summary_stats.pdf"))
-# mean_age_ppn
-# mean_age_ribbon
-# uc_mean_age_ribbon
-# dev.off()
+png(here::here("figs", "ms_figs", "final_ppns.png"), height = 4, width = 5.5, 
+    res = 300, units = "in")
+final_ppns
+dev.off()
 
 
 # ESTIMATES OF PARS ------------------------------------------------------------

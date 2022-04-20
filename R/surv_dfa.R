@@ -191,34 +191,21 @@ furrr::future_map2(
   surv_tbl$group,
   .f = function (y, group) {
     fit <- fit_dfa(
-      y = y, num_trends = 1, zscore = FALSE,
+      y = y, num_trends = 2, zscore = FALSE,
       estimate_trend_ar = TRUE,
       iter = 4000, warmup = 2000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
-    f_name <- paste(group, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+    f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "survival_fits", f_name))
-    
-    # fit2 <- fit_dfa(
-    #   y = y, num_trends = 2, zscore = FALSE,
-    #   # estimate_trend_ar = TRUE,
-    #   iter = 4000, warmup = 2000, chains = 4, thin = 1,
-    #   control = list(adapt_delta = 0.97, max_treedepth = 20)
-    # )
-    # f_name2 <- paste(group, "two-trend", "bayesdfa_c.RDS", sep = "_")
-    # saveRDS(fit2, here::here("data", "survival_fits", f_name2))
   },
   .progress = TRUE,
   .options = furrr::furrr_options(seed = TRUE)
 )
 
 # read outputs
-# dfa_fits <- map(surv_tbl$group, function(y) {
-#   f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
-#   readRDS(here::here("data", "survival_fits", f_name))
-# })
 dfa_fits <- map(surv_tbl$group, function(y) {
-  f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
   readRDS(here::here("data", "survival_fits", f_name))
 })
 
@@ -263,7 +250,7 @@ trace_list <- pmap(
 )
 
 pdf(
-  here::here("figs", "supp_figs", "surv_trace_plots_ar_onetrend.pdf")
+  here::here("figs", "supp_figs", "surv_trace_plots_ar.pdf")
   )
 trace_list
 dev.off()
@@ -290,6 +277,5 @@ surv_tbl$regime_trend2 <- map(hmm_list_m, function(x) x[[2]]$best_model)
 
 
 #export
-# saveRDS(surv_tbl, here::here("data", "survival_fits", "surv_tbl.RDS"))
-saveRDS(surv_tbl, here::here("data", "survival_fits", "surv_tbl_onetrend.RDS"))
+saveRDS(surv_tbl, here::here("data", "survival_fits", "surv_tbl.RDS"))
 

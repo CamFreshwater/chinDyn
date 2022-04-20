@@ -213,7 +213,6 @@ gen_tbl$years <- map(gen_tbl$gen_mat, function (x) {
 })
 
 
-
 #fit 
 furrr::future_map2(
   gen_tbl$gen_mat,
@@ -221,20 +220,20 @@ furrr::future_map2(
   .f = function (y, group) {
     
     # convergence issues when estimating phi for this stock group
-    # if (group == "puget_oceantype") {
-    #   est_ar <- FALSE
-    # } else {
+    if (group == "puget_oceantype") {
+      est_ar <- FALSE
+    } else {
       est_ar <- TRUE
-    # }
+    }
     
     fit <- fit_dfa(
-      y = y, num_trends = 1, zscore = FALSE,
+      y = y, num_trends = 2, zscore = FALSE,
       estimate_trend_ar = est_ar, 
       iter = 4000, warmup = 2000, chains = 4, thin = 1,
       control = list(adapt_delta = 0.99, max_treedepth = 20)
     )
     
-    f_name <- paste(group, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_")
+    f_name <- paste(group, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_")
     saveRDS(fit, here::here("data", "generation_fits", f_name))
   },
   .progress = TRUE,
@@ -244,7 +243,7 @@ furrr::future_map2(
 
 # read outputs
 dfa_fits <- map(gen_tbl$group, function(y) {
-  f_name <- paste(y, "one-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
+  f_name <- paste(y, "two-trend", "ar", "bayesdfa_c.RDS", sep = "_") 
   readRDS(here::here("data", "generation_fits", f_name))
 })
 
@@ -287,7 +286,7 @@ trace_list <- pmap(
   }
 )
 
-pdf(here::here("figs", "hidden", "dfa", "mean_age", "trace_plots_ar_onetrend.pdf"))
+pdf(here::here("figs", "hidden", "dfa", "mean_age", "trace_plots_ar.pdf"))
 trace_list
 dev.off()
 

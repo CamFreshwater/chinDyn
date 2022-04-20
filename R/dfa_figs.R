@@ -94,18 +94,6 @@ x_axes <- c(F, F, F, F, T)
 surv_pred_list <- pmap(list(surv_dfa, surv_names$names, surv_tbl$years), 
                   fitted_preds,
                   descend_order = FALSE, year1_last_mean = 2011)
-# reorder to match group_labs
-# surv_pred_list <- surv_pred_list1[c(1, 4, 2, 3, 5)]
-
-
-# check what last mean is relative to long-term and sd
-# map(surv_pred_list, .f = function (x) {
-#   x %>%
-#     dplyr::select(ID, last_mean, prob) %>%
-#     distinct() %>%
-#     arrange(last_mean)
-# }) %>%
-#   bind_rows()
 
 
 # scale colors based on observed range over entire dataset
@@ -299,27 +287,6 @@ cowplot::plot_grid(uncent_gen_fit_panel)
 dev.off()
 
 
-# CALCULATE FINAL FIVE YEAR MEANS ----------------------------------------------
-
-# generation length means in last five years
-# gen_prob <- pmap(list(gen_dfa, gen_tbl$names, gen_tbl$years),
-#                  final_prob, year1_last_mean = 2011, year2_last_mean = 2016) %>% 
-#   bind_rows() %>% 
-#   mutate(
-#     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
-#   )
-# sum(gen_prob$thresh) / nrow(gen_prob)
-# 
-# surv_prob <- pmap(list(surv_dfa, surv_tbl$names, surv_tbl$years),
-#                   final_prob, year1_last_mean = 2011, 
-#                   year2_last_mean = 2016) %>% 
-#   bind_rows() %>% 
-#   mutate(
-#     thresh = ifelse(prob_below_0 > 0.90, 1, 0)
-#   )
-# sum(surv_prob$thresh) / nrow(surv_prob)
-
-
 # CALCULATE SUMMARY STATISTICS -------------------------------------------------
 
 # palette for following figs
@@ -387,47 +354,31 @@ roll_surv$state <- case_when(
   roll_surv$up_link < 0 ~ "below",
   TRUE ~ "average"
 )
-roll_surv$state <- factor(roll_surv$state, levels = c("above", "below", "average"))
-
+roll_surv$state <- factor(roll_surv$state, 
+                          levels = c("above", "below", "average"))
+roll_surv$group2 <- factor(
+  roll_surv$group, 
+  labels = c("North Yearling", "SoG Subyearling", "Puget Subyearling",
+             "Puget Yearling", "South Subyearling")
+)
  
 roll_surv_link_ribbon <- ggplot(roll_surv) +
-  # geom_line(aes(x = year, y = mean_surv_link)) +
-  # geom_ribbon(aes(x = year, ymin = low_link, ymax = up_link), alpha = 0.4) +
   geom_pointrange(aes(x = year, y = mean_surv_link, ymin = low_link, 
                       ymax = up_link, fill = state),
                   shape = 21) +
-  scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
+  scale_fill_manual(values = tri_pal, name = "") +
+  facet_wrap(~group2) +
   labs(y = "Rolling Mean Logit Survival") +
   ggsidekick::theme_sleek()
 roll_surv_ribbon <- ggplot(roll_surv) +
-  # geom_line(aes(x = year, y = mean_surv)) +
-  # geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
   geom_pointrange(aes(x = year, y = mean_surv, ymin = low, ymax = up, 
                       fill = state),
                   shape = 21) +
-  scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
+  scale_fill_manual(values = tri_pal, name = "") +
+  facet_wrap(~group2) +
   labs(y = "Rolling Mean Survival") +
   ggsidekick::theme_sleek()
 
-
-# mean_surv_prob <- surv_iters %>%
-#   group_by(group) %>%
-#   mutate(n_stock = length(unique(stock))) %>%
-#   group_by(iter_chain, year, group) %>%
-#   summarize(
-#     prob_below_0 = sum(value < 0) / n_stock,
-#     prob_above_0 = sum(value > 0) / n_stock,
-#     .groups = "drop"
-#   ) %>%
-#   group_by(year, group) %>%
-#   summarize(
-#     mean_above_0 = mean(prob_above_0),
-#     up = quantile(prob_above_0, probs = 0.95),
-#     low = quantile(prob_above_0, probs = 0.05)
-#   ) %>%
-#   ungroup()
 
 roll_surv_ppn <- surv_iters2 %>% 
   group_by(group) %>%
@@ -523,28 +474,29 @@ roll_age$state <- case_when(
   TRUE ~ "average"
 )
 roll_age$state <- factor(roll_age$state, levels = c("above", "below", "average"))
-
+roll_age$group2 <- factor(
+  roll_age$group, 
+  labels = c("North Yearling", "SoG Subyearling", "Puget Subyearling",
+             "Puget Yearling", "South Subyearling")
+)
 
 roll_age_cent_ribbon <- ggplot(roll_age) +
-  # geom_line(aes(x = year, y = mean_age_cent)) +
-  # geom_ribbon(aes(x = year, ymin = low_cent, ymax = up_cent), alpha = 0.4) +
   geom_pointrange(aes(x = year, y = mean_age_cent, ymin = low_cent, 
                       ymax = up_cent, fill = state),
                   shape = 21) +
   scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
+  facet_wrap(~group2) +
   labs(y = "Rolling Mean Centered Age") +
   ggsidekick::theme_sleek()
 roll_age_ribbon <- ggplot(roll_age) +
-  # geom_line(aes(x = year, y = mean_age)) +
-  # geom_ribbon(aes(x = year, ymin = low, ymax = up), alpha = 0.4) +
   geom_pointrange(aes(x = year, y = mean_age, ymin = low, 
                       ymax = up, fill = state),
                   shape = 21) +
-  scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
+  scale_fill_manual(values = tri_pal, name = "") +
+  facet_wrap(~group2) +
   labs(y = "Rolling Mean Age") +
   ggsidekick::theme_sleek()
+
 
 roll_age_ppn <- age_iters2 %>% 
   group_by(group) %>%
@@ -592,60 +544,50 @@ final_ppns <- ggplot(roll_ppns) +
   geom_pointrange(aes(x = group, y = mean_ppn, ymin = low, ymax = up, 
                       fill = dat), 
                   shape = 21, position = position_dodge(0.3)) +
-  scale_fill_brewer(type = "div", palette = 1, name = "Dataset") +
+  scale_fill_brewer(type = "div", palette = 1, name = "") +
   geom_hline(yintercept = 0.5, lty = 2) +
   labs(y = "Proportion of Stocks Above Long-Term Mean") +
   ggsidekick::theme_sleek() +
   theme(axis.title.x = element_blank())
   
 
-roll_surv_ppn_ribbon <- ggplot(roll_surv_ppn) +
-  geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
-                      fill = state), shape = 21) +
-  scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
-  labs(y = "Rolling Mean Proportion of Stocks\nWith Above Average Survival") +
-  ggsidekick::theme_sleek()
+# roll_surv_ppn_ribbon <- ggplot(roll_surv_ppn) +
+#   geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
+#                       fill = state), shape = 21) +
+#   scale_fill_manual(values = tri_pal) +
+#   facet_wrap(~group) +
+#   labs(y = "Rolling Mean Proportion of Stocks\nWith Above Average Survival") +
+#   ggsidekick::theme_sleek()
+# 
+# roll_age_ppn_ribbon <- ggplot(roll_age_ppn) +
+#   geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
+#                       fill = state), shape = 21) +
+#   scale_fill_manual(values = tri_pal) +
+#   facet_wrap(~group) +
+#   labs(y = "Rolling Mean Proportion of Stocks\nWith Above Average Mean Age") +
+#   ggsidekick::theme_sleek()
 
-roll_age_ppn_ribbon <- ggplot(roll_age_ppn) +
-  geom_pointrange(aes(x = year, y = mean_ppn, ymin = low, ymax = up, 
-                      fill = state), shape = 21) +
-  scale_fill_manual(values = tri_pal) +
-  facet_wrap(~group) +
-  labs(y = "Rolling Mean Proportion of Stocks\nWith Above Average Mean Age") +
-  ggsidekick::theme_sleek()
 
+# pdf(here::here("figs", "supp_figs", "roll_window_surv_summary_stats_pts.pdf"))
+# roll_surv_link_ribbon
+# roll_surv_ribbon
+# roll_surv_ppn_ribbon
+# dev.off()
+# 
+# pdf(here::here("figs", "supp_figs", "roll_window_age_summary_stats_pts.pdf"))
+# roll_age_cent_ribbon
+# roll_age_ribbon
+# roll_age_ppn_ribbon
+# dev.off()
 
-pdf(here::here("figs", "supp_figs", "roll_window_surv_summary_stats_pts.pdf"))
-roll_surv_link_ribbon
-roll_surv_ribbon
-roll_surv_ppn_ribbon
-dev.off()
-
-pdf(here::here("figs", "supp_figs", "roll_window_age_summary_stats_pts.pdf"))
-roll_age_cent_ribbon
-roll_age_ribbon
-roll_age_ppn_ribbon
-dev.off()
-
-png(here::here("figs", "ms_figs", "surv_roll_pts.png"), height = 7, width = 8, 
+png(here::here("figs", "ms_figs", "surv_roll_pts.png"), height = 5, width = 7, 
     res = 300, units = "in")
 roll_surv_ribbon
 dev.off()
 
-png(here::here("figs", "ms_figs", "surv_ppn_roll_pts.png"), height = 7, width = 8, 
-    res = 300, units = "in")
-roll_surv_ppn_ribbon
-dev.off()
-
-png(here::here("figs", "ms_figs", "age_roll_pts.png"), height = 7, width = 8, 
+png(here::here("figs", "ms_figs", "age_roll_pts.png"), height = 5, width = 7, 
     res = 300, units = "in")
 roll_age_ribbon
-dev.off()
-
-png(here::here("figs", "ms_figs", "age_ppn_roll_pts.png"), height = 7, width = 8, 
-    res = 300, units = "in")
-roll_age_ppn_ribbon
 dev.off()
 
 
@@ -794,12 +736,6 @@ regimes <- rbind(surv_regimes, gen_regimes) %>%
                              "SoG\nSubyearling", "Puget\nSubyearling", 
                              "Puget\nYearling","South\nSubyearling")) 
 
-# 
-# trend_1_pal <- c("#E08214", "#8073AC" )
-# trend_2_pal <- c("#FDB863", "#B2ABD2")
-# names(trend_1_pal) <- names(trend_2_pal) <- unique(trends$life_history)
-
-
 dum1 <- trends %>% 
   mutate(trend = as.numeric(trend),
          life_history = as.factor(life_history),
@@ -822,7 +758,10 @@ dum2 <- regimes %>%
 dum3 <- rbind(dum1, dum2) %>% 
   mutate(
     facet_var = paste(trend, data, sep = "_") %>% 
-      factor(., levels = c("1_trend", "1_regime", "2_trend", "2_regime")),
+      factor(., 
+             levels = c("1_trend", "1_regime", "2_trend", "2_regime"),
+             labels = c("Trend One", "Mean State One", "Trend Two", 
+                        "Mean State Two")),
     color_var = paste(trend, life_history, sep = "_") %>% 
       factor(., 
              levels = c("1_yearling", "1_subyearling", "2_yearling",
@@ -864,7 +803,7 @@ gen_trend_regime <- ggplot(
   scale_x_continuous(limits = c(1972, 2018), expand = c(0, 0)) +
   facet_grid(facet_var~group, scales = "free_y") +
   ggsidekick::theme_sleek() + 
-  labs(y = "Mean Age") +
+  labs(y = "Mean Age-At-Maturity") +
   theme(
     legend.position = "none",
     strip.background = element_blank(),
@@ -883,110 +822,6 @@ png(here::here("figs", "ms_figs", "age_trend_regime.png"),
     width = 8.5, height = 6, res = 300, units = "in")
 gen_trend_regime
 dev.off()
-
-
-# ORIGINAL SUBMISSION
-# # first age trend
-# gen_t_one <- trends %>% 
-#   filter(trend == "Trend 1", 
-#          var == "Mean Age") %>% 
-#   plot_one_trend()
-# gen_r_one <- regimes %>% 
-#   filter(trend == "One", 
-#          State == "State 1",
-#          var == "Mean Age") %>% 
-#   plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
-# gen_one_panel <- cowplot::plot_grid(gen_t_one, gen_r_one, ncol = 2)
-# 
-# # second age trend
-# gen_t_two <- trends %>% 
-#   filter(trend == "Trend 2", 
-#          var == "Mean Age") %>% 
-#   plot_one_trend()
-# gen_r_two <- regimes %>% 
-#   filter(trend == "Two", 
-#          State == "State 1",
-#          var == "Mean Age") %>% 
-#   plot_one_regime(y_lab = "Probability of Older Age-At-Maturity Regime")
-# gen_two_panel <- cowplot::plot_grid(gen_t_two, gen_r_two, ncol = 2)
-# 
-# #output plots
-# plot_out <- function(x) {
-#   cowplot::plot_grid(
-#     cowplot::get_legend(leg_plot),
-#     x,
-#     ncol=1, rel_heights=c(.075, .925)
-#   )
-# }
-
-
-
-# FIRST ATTEMPT ALTERNATE
-# dummy version just for legend
-# leg_plot <- trends %>% 
-#   filter(trend == "Trend 1", 
-#          var == "Juvenile Mortality Rate") %>% 
-#   plot_one_trend() +
-#   theme(legend.position = "top") +
-#   scale_colour_manual(values = trend_1_pal) +
-#   scale_fill_manual(values = trend_1_pal)
-# 
-#   
-# # first survival trend
-# surv_t_one <- trends %>% 
-#   filter(trend == "Trend 1", 
-#          var == "Juvenile Mortality Rate") %>% 
-#   plot_one_trend() +
-#   scale_fill_manual(values = trend_1_pal) +
-#   scale_colour_manual(values = trend_1_pal)
-# surv_r_one <- regimes %>% 
-#   filter(trend == "One", 
-#          State == "State 2",
-#          var == "Juvenile Mortality Rate") %>% 
-#   plot_one_regime(y_lab = "Probability of High Survival Regime") +
-#   scale_fill_manual(values = trend_1_pal) +
-#   scale_colour_manual(values = trend_1_pal)
-# # surv_one_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, ncol = 2)
-# 
-# # second survival trend
-# surv_t_two <- trends %>% 
-#   filter(trend == "Trend 2", 
-#          var == "Juvenile Mortality Rate") %>% 
-#   plot_one_trend() +
-#   scale_fill_manual(values = trend_2_pal) +
-#   scale_colour_manual(values = trend_2_pal)
-# surv_r_two <- regimes %>% 
-#   filter(trend == "Two", 
-#          State == "State 2",
-#          var == "Juvenile Mortality Rate") %>% 
-#   plot_one_regime(y_lab = "Probability of High Survival Regime") + 
-#   scale_fill_manual(values = trend_2_pal) +
-#   scale_colour_manual(values = trend_2_pal)
-# # surv_two_panel <- cowplot::plot_grid(surv_t_two, surv_r_two, ncol = 2)
-# 
-# surv_panel <- cowplot::plot_grid(surv_t_one, surv_r_one, 
-#                                  surv_t_two, surv_r_two, nrow = 4)
-
-
-# png(here::here("figs", "ms_figs", "trend_regime_surv1.png"), 
-#     height = 8.5, width = 6, res = 300, units = "in")
-# plot_out(surv_one_panel)
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "trend_regime_surv2.png"), 
-#     height = 8.5, width = 6, res = 300, units = "in")
-# plot_out(surv_two_panel)
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "trend_regime_gen1.png"), 
-#     height = 8.5, width = 6, res = 300, units = "in")
-# plot_out(gen_one_panel)
-# dev.off()
-# 
-# png(here::here("figs", "ms_figs", "trend_regime_gen2.png"), 
-#     height = 8.5, width = 6, res = 300, units = "in")
-# plot_out(gen_two_panel)
-# dev.off()
 
 
 # MEANS AFTER REGIMES ----------------------------------------------------------
@@ -1036,6 +871,7 @@ reg_est_age <- left_join(age_iters2, age_regime_years,
     up = quantile(uncent_value, probs = 0.95),
     low = quantile(uncent_value, probs = 0.05)
   )
+
 
 # ESTIMATED LOADINGS -----------------------------------------------------------
 

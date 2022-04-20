@@ -119,8 +119,6 @@ age_surv_mod <- mgcv::gam(gen_length ~ s(logit_surv, m = 2, bs = "tp") +
                             s(logit_surv, m = 1, bs = "tp", by = j_group3b) +
                             s(stock, bs = "re"),
                           data = dat)
-# age_surv_mod2 <- lme4::lmer(gen_length ~ logit_surv + (1 | stock), data = dat,
-#                       REML = TRUE)
 
 wt_surv_mod <- mgcv::gam(survival ~ s(avg_weight, m = 2, bs = "tp") + 
                            s(avg_weight, m = 1, bs = "tp", by = j_group3b) +
@@ -128,16 +126,12 @@ wt_surv_mod <- mgcv::gam(survival ~ s(avg_weight, m = 2, bs = "tp") +
                          data = dat,
                          family = mgcv::betar(link="logit")
 )
-# wt_surv_mod2 <- lme4::lmer(logit_surv ~ avg_weight + (1 | stock), data = dat,
-#                             REML = TRUE)
 
 age_wt_mod <- mgcv::gam(age_z ~ s(avg_weight, m = 2, bs = "tp") + 
                             s(avg_weight, m = 1, bs = "tp", 
                               by = j_group3b) +
                             s(stock, bs = "re"),
-                          data = dat#,
-                          # family = Gamma(link="log")
-                          )
+                          data = dat)
 
 
 
@@ -181,23 +175,10 @@ as_preds <- yr_preds %>%
   select(year, j_group3b) %>% 
   mutate(
     as_obs = as_obs_pred$fit %>% as.numeric,
-    as_resid = as_resid_pred$fit %>% as.numeric#,
-    # as_obs_se = as_obs_pred$se.fit %>% as.numeric,
-    # as_resid_se = as_resid_pred$se.fit %>% as.numeric
+    as_resid = as_resid_pred$fit %>% as.numeric
   ) %>% 
-  pivot_longer(cols = c(as_obs, as_resid), names_to = "data_type") %>%
-  # pivot_longer(cols = c(as_obs_se, as_resid_se), names_to = "data_type2",
-  # values_to = "se_value") %>%
-  # filter(#year == "1972", j_group3b == "north_streamtype",
-  #        (data_type == "as_obs" & data_type2 == "as_obs_se") |
-  #          (data_type == "as_resid" & data_type2 == "as_resid_se")
-  #        ) %>%
-  # mutate(
-  #   low = value - 1.96 * se_value,
-  #   high = value + 1.96 * se_value
-  # ) %>% 
-  glimpse()
-
+  pivot_longer(cols = c(as_obs, as_resid), names_to = "data_type")
+  
 png(here::here("figs", "supp_figs", "age_surv_resids.png"))
 ggplot(as_preds, aes(x = year, y = value)) +
   geom_jitter(data = as_dat, aes(fill = data_type), shape = 21, alpha = 0.3,
@@ -292,88 +273,3 @@ yr_preds %>%
 dev.off()
 
 
-
-# generate predictive dataframes
-# cov_range <- dat %>% 
-#   pivot_longer(cols = c(avg_weight, survival),
-#                names_to = "cov") %>% 
-#   group_by(j_group3b, cov) %>% 
-#   mutate(min_val = min(value, na.rm = T),
-#          max_val = max(value, na.rm = T)) %>%
-#   select(j_group3b, cov, min_val, max_val) %>%
-#   distinct() %>% 
-#   ungroup() %>% 
-#   as_tibble() %>% 
-#   mutate(
-#     new_data = purrr::pmap(list(cov, min_val, max_val), 
-#                            function (cov, x, y) {
-#       cov = seq(from = x, to = y, length = 100)
-#     })
-#   ) 
-# 
-# surv_pred <- cov_range %>% 
-#   filter(cov == "survival") %>% 
-#   unnest(cols = c(new_data)) %>%
-#   select(smolt, j_group3b, 
-#          survival = new_data) %>% 
-#   mutate(stock = unique(dat$stock)[3]) 
-# 
-# as_preds <- predict(age_surv_mod, newdata = surv_pred, se.fit = T,
-#                     exclude = "s(stock)")
-# # as_preds <- predict.lm(age_surv_lm_f, newdata = surv_pred, se.fit = T) 
-# 
-# surv_pred$fit <- as.numeric(as_preds$fit)
-# surv_pred$se_fit <- as.numeric(as_preds$se.fit)
-# 
-# ggplot(surv_pred) +
-#   geom_line(aes(x = survival, y = fit)) +
-#   facet_wrap(~j_group3b)
-# 
-# 
-# wt_pred <- cov_range %>% 
-#   filter(cov == "avg_weight") %>% 
-#   unnest(cols = c(new_data)) %>%
-#   select(j_group3b, avg_weight = new_data) %>% 
-#   mutate(stock = unique(dat$stock)[3]) 
-# 
-# sw_preds <- predict(wt_surv_mod2, newdata = wt_pred, se.fit = T,
-#                     exclude = "s(stock)", type = "link")
-# 
-# wt_pred2 <- wt_pred %>% 
-#   mutate(
-#     fit = as.numeric(sw_preds$fit),
-#     se_fit = as.numeric(as_preds$se.fit),
-#     surv = plogis(fit),
-#     surv_lo = plogis(fit + (qnorm(0.025) * se_fit)),
-#     surv_up = plogis(fit + (qnorm(0.975) * se_fit))
-#   )
-# 
-# ggplot(wt_pred2) +
-#   geom_line(aes(x = avg_weight, y = surv)) +
-#   geom_ribbon(aes(x = avg_weight, ymin = surv_lo, ymax = surv_up, alpha = 0.3)) +
-#   facet_wrap(~j_group3b)
-# 
-# 
-# aw_preds <- predict(age_wt_mod, newdata = wt_pred, se.fit = T,
-#                     exclude = "s(stock)")
-# 
-# wt_pred$fit <- as.numeric(aw_preds$fit)
-# wt_pred$se_fit <- as.numeric(aw_preds$se.fit)
-# 
-# ggplot(wt_pred) +
-#   geom_line(aes(x = avg_weight, y = fit)) +
-#   # geom_ribbon(aes(x = avg_weight, ymin = surv_lo, ymax = surv_up, alpha = 0.3)) +
-#   facet_wrap(~j_group3b)
-
-
-
-## SYNCHRONY -------------------------------------------------------------------
-
-dat %>% 
-  filter(!is.na(survival)) %>% 
-  group_by(j_group3b, year) %>% 
-  summarize(n_stocks = length(unique(stock)), .groups = "drop") %>% 
-  ungroup() %>% 
-  ggplot(.) +
-  geom_line(aes(x = year, y = n_stocks, colour = j_group3b))
-  glimpse()

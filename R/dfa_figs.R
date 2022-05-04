@@ -597,6 +597,21 @@ final_ppns
 dev.off()
 
 
+# slightly tweaked versions for presentations 
+png(here::here("figs", "ms_figs", "surv_roll_pts_wide.png"), 
+    height = 2, width = 8.5, res = 300, units = "in")
+roll_surv_ribbon +
+  facet_wrap(~group2, nrow = 1)
+dev.off()
+
+png(here::here("figs", "ms_figs", "age_roll_pts_wide.png"), 
+    height = 2, width = 8.5, res = 300, units = "in")
+roll_age_ribbon +
+  facet_wrap(~group2, nrow = 1)
+dev.off()
+
+
+
 # ESTIMATES OF PARS ------------------------------------------------------------
 
 # pull pars

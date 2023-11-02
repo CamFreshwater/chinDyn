@@ -610,6 +610,13 @@ roll_age_ribbon +
   facet_wrap(~group2, nrow = 1)
 dev.off()
 
+# export age data for BC
+write.csv(
+  roll_age %>%
+    select(-c(mean_age_cent:window_yrs)) %>% 
+    arrange(group, year),
+  here::here("data", "generation_fits", "five_yr_mean_age_model_preds.csv"),
+  row.names = FALSE)
 
 
 # ESTIMATES OF PARS ------------------------------------------------------------

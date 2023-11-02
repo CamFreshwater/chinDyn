@@ -85,3 +85,39 @@ png(here::here("figs", "ms_figs", "stock_locs.png"),
 cowplot::ggdraw(oey_map) +
   cowplot::draw_plot(inset_map, x = 0.09, y = 0.01, width = 0.35, height = 0.35)
 dev.off()
+
+
+## SECONDARY MAPS FOR PRES -----------------------------------------------------
+
+
+w_can <- map_data("worldHires", region = c("usa", "canada")) %>%
+  filter(long < -110) %>%
+  fortify(.)
+
+juv_map <- ggplot() +
+  geom_polygon(data = w_can, mapping = aes(x = long, y = lat, group = group), 
+               color = "black", fill = "darkgrey") + 
+  labs(x = "", y = "") +
+  ggsidekick::theme_sleek() +
+  theme(strip.background = element_rect(colour="white", fill="white"),
+        legend.position = "top") +
+  coord_fixed(xlim = c(-128, -122), ylim = c(46, 50), ratio = 1.3) 
+
+adult_map <- ggplot() +
+  geom_polygon(data = w_can, mapping = aes(x = long, y = lat, group = group), 
+               color = "black", fill = "darkgrey") + 
+  labs(x = "", y = "") +
+  ggsidekick::theme_sleek() +
+  theme(strip.background = element_rect(colour="white", fill="white"),
+        legend.position = "top") +
+  coord_fixed(xlim = c(-160, -122), ylim = c(44, 62), ratio = 1.3) 
+
+png(here::here("figs", "supp_figs", "juv_map.png"), 
+    height = 3.2, width = 4, units = "in", res = 200)
+juv_map
+dev.off()
+
+png(here::here("figs", "supp_figs", "adult_map.png"), 
+    height = 3.2, width = 4, units = "in", res = 200)
+adult_map
+dev.off()
